@@ -1,8 +1,14 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 
-const dbPath = process.env.DATABASE_URL || path.join(__dirname, '../../nari.db');
-const db = new sqlite3.Database(dbPath);
+const configuredPath = process.env.DATABASE_URL;
+const dbPath = configuredPath
+  ? path.resolve(process.cwd(), configuredPath)
+  : path.join(__dirname, '../../nari.db');
+const db = new sqlite3.Database(
+  dbPath,
+  sqlite3.OPEN_READWRITE | sqlite3.OPEN_CREATE,
+);
 
 const initDb = () => {
   return new Promise((resolve, reject) => {

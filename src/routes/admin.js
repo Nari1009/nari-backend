@@ -21,38 +21,43 @@ router.get('/products/:id', async (req, res) => {
 });
 
 router.patch('/products/:id', async (req, res) => {
-  const { id } = req.params;
-  const { name, brand, price, cost, stock, category, status, description } = req.body;
+  try {
+    const { id } = req.params;
+    const { name, brand, price, cost, stock, category, status, description } = req.body;
 
-  const product = await get('SELECT * FROM products WHERE id = ?', [id]);
-  if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
+    const product = await get('SELECT * FROM products WHERE id = ?', [id]);
+    if (!product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    const updates = [];
+    const values = [];
+
+    if (name !== undefined) { updates.push('name = ?'); values.push(name); }
+    if (brand !== undefined) { updates.push('brand = ?'); values.push(brand); }
+    if (price !== undefined) { updates.push('price = ?'); values.push(price); }
+    if (cost !== undefined) { updates.push('cost = ?'); values.push(cost); }
+    if (stock !== undefined) { updates.push('stock = ?'); values.push(Math.max(0, stock)); }
+    if (category !== undefined) { updates.push('category = ?'); values.push(category); }
+    if (status !== undefined) { updates.push('status = ?'); values.push(status); }
+    if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+
+    if (updates.length === 0) {
+      return res.status(400).json({ error: 'No fields to update' });
+    }
+
+    updates.push('updatedAt = CURRENT_TIMESTAMP');
+    values.push(id);
+
+    const sql = `UPDATE products SET ${updates.join(', ')} WHERE id = ?`;
+    await run(sql, values);
+
+    const updated = await get('SELECT * FROM products WHERE id = ?', [id]);
+    res.json(updated);
+  } catch (error) {
+    console.error('Failed to update product:', error);
+    res.status(500).json({ error: 'No se pudo actualizar el producto.' });
   }
-
-  const updates = [];
-  const values = [];
-
-  if (name !== undefined) { updates.push('name = ?'); values.push(name); }
-  if (brand !== undefined) { updates.push('brand = ?'); values.push(brand); }
-  if (price !== undefined) { updates.push('price = ?'); values.push(price); }
-  if (cost !== undefined) { updates.push('cost = ?'); values.push(cost); }
-  if (stock !== undefined) { updates.push('stock = ?'); values.push(Math.max(0, stock)); }
-  if (category !== undefined) { updates.push('category = ?'); values.push(category); }
-  if (status !== undefined) { updates.push('status = ?'); values.push(status); }
-  if (description !== undefined) { updates.push('description = ?'); values.push(description); }
-
-  if (updates.length === 0) {
-    return res.status(400).json({ error: 'No fields to update' });
-  }
-
-  updates.push('updatedAt = CURRENT_TIMESTAMP');
-  values.push(id);
-
-  const sql = `UPDATE products SET ${updates.join(', ')} WHERE id = ?`;
-  await run(sql, values);
-
-  const updated = await get('SELECT * FROM products WHERE id = ?', [id]);
-  res.json(updated);
 });
 
 router.patch('/products/:id/stock', async (req, res) => {
