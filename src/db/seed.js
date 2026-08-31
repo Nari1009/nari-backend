@@ -68,10 +68,10 @@ const updateCatalogMetadata = async () => {
   let updated = 0; let skipped = 0;
   for (const [brand, nameParts, category, skinTypes, concerns, ingredients] of catalogMetadata) {
     const normalizedBrand = normalizeText(brand);
-    const product = products.find((candidate) => normalizeText(candidate.brand) === normalizedBrand && nameParts.every((part) => normalizeText(candidate.name).includes(normalizeText(part))));
-    if (!product) { skipped += 1; continue; }
-    await run('UPDATE products SET category = ?, skinTypes = ?, concerns = ?, ingredients = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [category, JSON.stringify(skinTypes.split('/').map((item) => item.trim())), JSON.stringify(concerns.split('/').map((item) => item.trim())), JSON.stringify(ingredients.split('+').map((item) => item.trim())), product.id]);
-    updated += 1;
+    const matchedProducts = products.filter((candidate) => normalizeText(candidate.brand) === normalizedBrand && nameParts.every((part) => normalizeText(candidate.name).includes(normalizeText(part))));
+    if (!matchedProducts.length) { skipped += 1; continue; }
+    for (const product of matchedProducts) await run('UPDATE products SET category = ?, skinTypes = ?, concerns = ?, ingredients = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [category, JSON.stringify(skinTypes.split('/').map((item) => item.trim())), JSON.stringify(concerns.split('/').map((item) => item.trim())), JSON.stringify(ingredients.split('+').map((item) => item.trim())), product.id]);
+    updated += matchedProducts.length;
   }
   console.log(`✓ Metadata de catálogo actualizada (${updated} productos; ${skipped} filas no encontradas y omitidas)`);
 };
