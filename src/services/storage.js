@@ -3,7 +3,9 @@ const crypto = require('crypto');
 const bucket = 'product-images';
 
 const supabaseConfig = () => ({
-  url: String(process.env.SUPABASE_URL || '').replace(/\/$/, ''),
+  // Accept the base Project URL as well as the Data API URL copied from
+  // Supabase Integrations (which may end in /rest/v1).
+  url: String(process.env.SUPABASE_URL || '').replace(/\/$/, '').replace(/\/(?:rest|auth|storage)\/v1$/i, ''),
   key: String(process.env.SUPABASE_SERVICE_ROLE_KEY || ''),
 });
 
