@@ -1,6 +1,43 @@
 const { run, all, initDb, ensureOrderShippingColumns, ensureCatalogOptions } = require('./init');
 const { ensureAdminUser } = require('../services/adminAuth');
 
+const purchasedProducts = [
+  ['H880983506045', 'TOCOBO', 'Tocobo Cica Cooling Sun Stick SPF50+ PA++++', 3, 60350, 'Harumi'],
+  ['H8809447255071', 'Dr. Althea', 'Dr. Althea Pure Grinding Cleansing Balm', 4, 84490, 'Harumi'],
+  ['NH4485324519', 'Medicube', 'Medicube PDRN Pink Peptide Serum', 2, 95850, 'Harumi'],
+  ['H8809657114731', 'Round Lab', 'Round Lab 1025 Dokdo Toner', 4, 63190, 'Harumi'],
+  ['H8809782551814', 'Round Lab', 'Round Lab Birch Juice Moisturizing Sunscreen', 4, 74550, 'Harumi'],
+  ['H8809732911583', 'Mixsoon', 'Mixsoon Centella Asiatica Toner (150ml)', 2, 53250, 'Harumi'],
+  ['H8809576261141', 'SKIN1004', 'Skin1004 Madagascar Centella Toning Toner', 2, 64680, 'Harumi'],
+  ['H8809576261646', 'SKIN1004', 'Skin1004 Madagascar Centella Poremizing Light Gel Cream', 2, 65340, 'Harumi'],
+  ['H8809576261417', 'SKIN1004', 'Skin1004 Madagascar Centella Tone Brightening Capsule Ampoule (30ml)', 5, 38940, 'Harumi'],
+  ['H8809640733550', 'Anua', 'Anua Peach 70 Niacin Serum', 3, 84490, 'Harumi'],
+  ['H8809640734427', 'Anua', 'Anua Heartleaf Quercetinol Pore Deep Cleansing Foam', 5, 63190, 'Harumi'],
+  ['H8809640731433', 'Anua', 'Anua Heartleaf 77 Soothing Toner (250ml)', 5, 84490, 'Harumi'],
+  ['H8809576261110', 'SKIN1004', 'Skin1004 Madagascar Centella Light Cleansing Oil', 5, 65340, 'Harumi'],
+  ['H8809732911880', 'Mixsoon', 'Mixsoon Bean Essence', 3, 74550, 'Harumi'],
+  [null, 'SKIN1004', 'SKIN1004 Hyalu-Cica Water-Fit Sun Serum SPF50+ PA++++ 50ml', 6, 63700, 'SOMI'],
+  [null, 'SKIN1004', 'SKIN1004 Madagascar Centella Ampoule Foam', 6, 57400, 'SOMI'],
+  [null, 'SKIN1004', 'SKIN1004 Probio-Cica Enrich Cream', 4, 80100, 'SOMI'],
+  [null, 'Dr. Althea', 'Dr. Althea 345 Relief Cream', 4, 88900, 'SOMI'],
+  [null, 'Ksecret', 'Ksecret SEOUL 1988 Serum: Retinal Liposome 2% + Black Ginseng', 4, 66400, 'SOMI'],
+  [null, 'Ksecret', 'Ksecret SEOUL 1988 Eye Cream: Retinal Liposome 4% + Fermented Bean', 4, 67400, 'SOMI'],
+];
+
+const importPurchasedProducts = async () => {
+  for (const [index, [sku, brand, name, stock, cost, supplier]] of purchasedProducts.entries()) {
+    const existing = sku ? await all('SELECT id FROM products WHERE sku = ?', [sku]) : await all('SELECT id FROM products WHERE name = ? AND supplier = ?', [name, supplier]);
+    if (existing.length) continue;
+    const reference = sku || `${String(supplier).toLowerCase()}-${index + 1}`;
+    const id = `purchase-${reference.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const slug = `${brand}-${name}-${reference}`.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    await run(`INSERT INTO products (id, brand, name, slug, category, description, sku, price, cost, stock, minimumStock, status, supplier, images)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [id, brand, name, slug, '', '', sku || null, null, cost, stock, 3, 'inactive', supplier, '[]']);
+    await run('INSERT INTO inventory_movements (id, productId, quantity, type, description, stockBefore, stockAfter, reason, reference) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [`purchase-${id}`, id, stock, 'initial', `Ingreso de compra - ${supplier}`, 0, stock, 'Compra', sku]);
+  }
+  console.log(`✓ Productos comprados revisados (${purchasedProducts.length} registros de Harumi y SOMI)`);
+};
+
 const seedProducts = async () => {
   const products = [
     {
@@ -255,6 +292,7 @@ const seedProducts = async () => {
     }
     console.log('✓ Productos iniciales cargados (10 productos)');
   }
+  await importPurchasedProducts();
   await ensureCatalogOptions();
   await ensureAdminUser();
 };
