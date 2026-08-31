@@ -13,7 +13,7 @@ router.post('/login', async (req, res, next) => {
     const email = normalizeAdminEmail(req.body?.email);
     const password = String(req.body?.password || '');
     if (!validEmail(email) || !password) return res.status(400).json({ error: 'Escribe un correo y una contraseña válidos.' });
-    const admin = await get('SELECT * FROM admin_users WHERE email = ? AND isActive = 1', [email]);
+    const admin = await get('SELECT *, passwordHash AS "passwordHash" FROM admin_users WHERE email = ? AND isActive = 1', [email]);
     if (!admin || !verifyPassword(password, admin.passwordHash)) return res.status(401).json({ error: 'Correo o contraseña incorrectos.' });
     await run('UPDATE admin_users SET lastLoginAt = CURRENT_TIMESTAMP WHERE id = ?', [admin.id]);
     await createAdminSession(admin.id, res);
@@ -37,7 +37,7 @@ router.patch('/password', requireAdmin, async (req, res, next) => {
     const currentPassword = String(req.body?.currentPassword || '');
     const newPassword = String(req.body?.newPassword || '');
     if (!strongPassword(newPassword)) return res.status(400).json({ error: 'La nueva contraseña debe tener mínimo 12 caracteres, mayúscula, minúscula, número y símbolo.' });
-    const admin = await get('SELECT passwordHash FROM admin_users WHERE id = ? AND isActive = 1', [req.admin.id]);
+    const admin = await get('SELECT passwordHash AS "passwordHash" FROM admin_users WHERE id = ? AND isActive = 1', [req.admin.id]);
     if (!admin || !verifyPassword(currentPassword, admin.passwordHash)) return res.status(400).json({ error: 'La contraseña actual es incorrecta.' });
     await run('UPDATE admin_users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [passwordHash(newPassword), req.admin.id]);
     await run('DELETE FROM admin_sessions WHERE adminUserId = ?', [req.admin.id]);

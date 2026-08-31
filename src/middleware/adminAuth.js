@@ -9,7 +9,7 @@ const requireAdmin = async (req, res, next) => {
   try {
     const raw = cookieValue(req.headers.cookie, ADMIN_SESSION_COOKIE);
     if (!raw) return res.status(401).json({ error: 'Sesión de administrador requerida.' });
-    const session = await get(`SELECT s.id, s.adminUserId, s.expiresAt, a.name, a.email, a.role, a.isActive
+    const session = await get(`SELECT s.id, s.adminUserId AS "adminUserId", s.expiresAt AS "expiresAt", a.name, a.email, a.role, a.isActive AS "isActive"
       FROM admin_sessions s JOIN admin_users a ON a.id = s.adminUserId
       WHERE s.id = ?`, [hashToken(raw)]);
     if (!session || !session.isActive || new Date(session.expiresAt).getTime() <= Date.now()) {
