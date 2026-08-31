@@ -1,5 +1,6 @@
 const { run, all, initDb, ensureOrderShippingColumns, ensureCatalogOptions } = require('./init');
 const { ensureAdminUser } = require('../services/adminAuth');
+const productDetails = require('./productDetails');
 
 const purchasedProducts = [
   ['H880983506045', 'TOCOBO', 'Tocobo Cica Cooling Sun Stick SPF50+ PA++++', 3, 60350, 'Harumi'],
@@ -74,6 +75,35 @@ const updateCatalogMetadata = async () => {
     updated += matchedProducts.length;
   }
   console.log(`✓ Metadata de catálogo actualizada (${updated} productos; ${skipped} filas no encontradas y omitidas)`);
+};
+
+const updateProductDetails = async () => {
+  const products = await all('SELECT id, brand, name, sku FROM products');
+  const stripSource = (value) => String(value || '').replace(/\s+(?:Anua US|Anua Global|Ulta Beauty|DR\.ALTHEA|What's In My Jar|Walmart\.ca|MEDICUBE US|mixsoon|Round Lab|Sephora UK|SKIN1004|Self Care Skin|incidecoder\.com)$/i, '').trim();
+  let updated = 0; let skipped = 0;
+  for (const detail of productDetails) {
+    let matches = products.filter((product) => product.sku && product.sku === detail.sku);
+    if (!matches.length) {
+      const target = normalizeText(detail.name).replace(/\b\d+\s?(?:ml|g)\b/g, '');
+      const tokens = target.split(' ').filter((token) => token.length > 2);
+      matches = products.filter((product) => {
+        if (normalizeText(product.brand) !== normalizeText(detail.brand)) return false;
+        const candidate = normalizeText(product.name);
+        const overlap = tokens.filter((token) => candidate.includes(token)).length;
+        return overlap >= Math.min(4, tokens.length);
+      });
+    }
+    if (matches.length !== 1) { skipped += 1; continue; }
+    const product = matches[0];
+    await run(`UPDATE products SET brand = ?, sku = ?, category = ?, concerns = ?, skinTypes = ?, description = ?, audience = ?, skinBenefits = ?, howToUse = ?, precautions = ?, fullIngredients = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
+      detail.brand, detail.sku, detail.category,
+      JSON.stringify(detail.concerns.split('·').map((item) => item.trim()).filter(Boolean)),
+      JSON.stringify([detail.skinTypes]), stripSource(detail.description), detail.audience,
+      detail.skinBenefits, JSON.stringify(detail.howToUse ? [detail.howToUse] : []), detail.precautions, stripSource(detail.fullIngredients), product.id
+    ]);
+    updated += 1;
+  }
+  console.log(`✓ Fichas de productos actualizadas (${updated} productos; ${skipped} filas no encontradas y omitidas)`);
 };
 
 const seedProducts = async () => {
@@ -332,6 +362,7 @@ const seedProducts = async () => {
   }
   await importPurchasedProducts();
   await updateCatalogMetadata();
+  await updateProductDetails();
   await ensureCatalogOptions();
   await ensureAdminUser();
 };
