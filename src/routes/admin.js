@@ -7,6 +7,7 @@ const { hashToken } = require('../services/auth');
 const { sendReviewLinkEmail } = require('../services/email');
 const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
+const { uploadProductImage } = require('../services/storage');
 const router = express.Router();
 const serializeList = (value) => {
   if (Array.isArray(value)) return JSON.stringify(value);
@@ -51,6 +52,24 @@ router.get('/products/:id', async (req, res) => {
   }
 
   res.json(product);
+});
+
+router.post('/products/:id/images', async (req, res, next) => {
+  try {
+    const product = await get('SELECT id, name, images FROM products WHERE id = ?', [req.params.id]);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (!req.body?.dataUrl) return res.status(400).json({ error: 'Selecciona una imagen.' });
+    const image = await uploadProductImage({ productId: product.id, dataUrl: req.body.dataUrl, alt: req.body.alt || product.name });
+    let images = product.images;
+    if (typeof images === 'string') {
+      try { images = JSON.parse(images); } catch { images = []; }
+    }
+    if (!Array.isArray(images)) images = [];
+    const cleanImages = images.filter((item) => item && typeof item === 'object' && typeof item.url === 'string' && !item.url.startsWith('data:'));
+    cleanImages.push({ url: image.url, alt: image.alt });
+    await run('UPDATE products SET images = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(cleanImages), product.id]);
+    res.status(201).json({ image, images: cleanImages });
+  } catch (error) { next(error); }
 });
 
 router.get('/catalog-options', async (req, res, next) => {

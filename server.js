@@ -20,7 +20,7 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(bodyParser.json({ limit: '10mb' }));
+app.use(bodyParser.json({ limit: '12mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 
 const productsRouter = require('./src/routes/products');
