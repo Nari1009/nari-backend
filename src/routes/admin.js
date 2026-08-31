@@ -72,6 +72,39 @@ router.post('/products/:id/images', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.post('/products/migrate-images', async (req, res, next) => {
+  try {
+    const products = await all('SELECT id, name, images FROM products ORDER BY name');
+    const migrated = []; const skipped = []; const failed = [];
+    for (const product of products) {
+      let images = product.images;
+      if (typeof images === 'string') {
+        try { images = JSON.parse(images); } catch { images = []; }
+      }
+      if (!Array.isArray(images) || !images.some((item) => typeof item === 'string' && item.startsWith('data:') || item?.url?.startsWith('data:'))) {
+        skipped.push(product.name);
+        continue;
+      }
+      const nextImages = [];
+      try {
+        for (const item of images) {
+          const dataUrl = typeof item === 'string' ? item : item?.url;
+          if (!String(dataUrl || '').startsWith('data:')) {
+            if (item && typeof item === 'object' && item.url) nextImages.push(item);
+            continue;
+          }
+          nextImages.push(await uploadProductImage({ productId: product.id, dataUrl, alt: item?.alt || product.name }));
+        }
+        await run('UPDATE products SET images = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(nextImages), product.id]);
+        migrated.push(product.name);
+      } catch (error) {
+        failed.push({ product: product.name, error: error.message });
+      }
+    }
+    res.json({ migrated, skipped, failed });
+  } catch (error) { next(error); }
+});
+
 router.get('/catalog-options', async (req, res, next) => {
   try {
     res.json(await all('SELECT id, type, name FROM catalog_options ORDER BY type, name COLLATE NOCASE'));
