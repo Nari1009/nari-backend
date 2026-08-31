@@ -43,9 +43,10 @@ const ensureBucket = async () => {
       file_size_limit: 8 * 1024 * 1024,
     }),
   });
-  if (!response.ok && response.status !== 409) {
+  if (!response.ok) {
     const detail = await response.text();
-    throw new Error(`No se pudo preparar Supabase Storage (${response.status}): ${detail.slice(0, 180)}`);
+    const bucketAlreadyExists = response.status === 409 || /BucketAlreadyExists|already exists/i.test(detail);
+    if (!bucketAlreadyExists) throw new Error(`No se pudo preparar Supabase Storage (${response.status}): ${detail.slice(0, 180)}`);
   }
 };
 
