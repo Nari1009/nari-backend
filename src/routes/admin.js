@@ -1,9 +1,42 @@
 const express = require('express');
 const { all, get, run } = require('../db/init');
-const { adminAuth } = require('../middleware/auth');
+const { requireAdmin } = require('../middleware/adminAuth');
+const { getContent, saveContent } = require('../db/content');
+const crypto = require('crypto');
+const { hashToken } = require('../services/auth');
+const { sendReviewLinkEmail } = require('../services/email');
+const { getReportData } = require('../services/reportData');
+const { makeWorkbook } = require('../services/xlsxReports');
 const router = express.Router();
+const serializeList = (value) => {
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (typeof value !== 'string' || !value.trim()) return '[]';
+  let parsed = value;
+  for (let attempt = 0; attempt < 4 && typeof parsed === 'string'; attempt += 1) {
+    try { parsed = JSON.parse(parsed); } catch { break; }
+  }
+  return JSON.stringify(Array.isArray(parsed) ? parsed : value.split('\n').map((item) => item.trim()).filter(Boolean));
+};
+const listColumns = new Set(['skinTypes', 'concerns', 'ingredients', 'featuredIngredients', 'benefits', 'howToUse', 'images']);
+const validSaleStatuses = ['Pagado', 'Preparando', 'Enviado', 'Entregado'];
+const saleStatusSql = `(${validSaleStatuses.map(() => '?').join(',')})`;
+const dashboardDate = (value, fallback) => {
+  const parsed = value ? new Date(value) : fallback;
+  return Number.isNaN(parsed.getTime()) ? fallback.toISOString() : parsed.toISOString();
+};
 
-router.use(adminAuth);
+router.use(requireAdmin);
+
+router.get('/content/:page', async (req, res) => {
+  const content = await getContent(req.params.page);
+  if (!content) return res.status(404).json({ error: 'Content not found' });
+  res.json({ page: req.params.page, content });
+});
+
+router.put('/content/:page', async (req, res) => {
+  if (!req.body || typeof req.body.content !== 'object' || Array.isArray(req.body.content)) return res.status(400).json({ error: 'Content must be a JSON object' });
+  res.json({ page: req.params.page, content: await saveContent(req.params.page, req.body.content) });
+});
 
 router.get('/products', async (req, res) => {
   const products = await all('SELECT * FROM products ORDER BY isBestSeller DESC, name ASC');
@@ -20,15 +53,217 @@ router.get('/products/:id', async (req, res) => {
   res.json(product);
 });
 
+router.get('/catalog-options', async (req, res, next) => {
+  try {
+    res.json(await all('SELECT id, type, name FROM catalog_options ORDER BY type, name COLLATE NOCASE'));
+  } catch (error) { next(error); }
+});
+
+router.post('/catalog-options', async (req, res, next) => {
+  try {
+    const type = String(req.body?.type || '').trim();
+    const name = String(req.body?.name || '').trim().replace(/\s+/g, ' ');
+    if (!['brand', 'category'].includes(type) || !name || name.length > 120) return res.status(400).json({ error: 'Tipo o nombre de opción inválido.' });
+    const id = `${type}-${crypto.randomBytes(12).toString('hex')}`;
+    await run('INSERT OR IGNORE INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [id, type, name]);
+    res.status(201).json(await get('SELECT id, type, name FROM catalog_options WHERE type = ? AND name = ? COLLATE NOCASE', [type, name]));
+  } catch (error) { next(error); }
+});
+
+router.delete('/catalog-options/:id', async (req, res, next) => {
+  try {
+    const result = await run('DELETE FROM catalog_options WHERE id = ?', [req.params.id]);
+    if (!result.changes) return res.status(404).json({ error: 'Opción no encontrada.' });
+    res.status(204).end();
+  } catch (error) { next(error); }
+});
+
+const rememberCatalogOption = async (type, value) => {
+  const name = String(value || '').trim().replace(/\s+/g, ' ');
+  if (name) await run('INSERT OR IGNORE INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${crypto.randomBytes(12).toString('hex')}`, type, name]);
+};
+
+router.get('/reports.xlsx', async (req, res, next) => {
+  try {
+    const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - 30);
+    const from = dashboardDate(req.query.from, start); const to = dashboardDate(req.query.to, end); const visibleEndDate = new Date(to); visibleEndDate.setDate(visibleEndDate.getDate() - 1); const visibleTo = visibleEndDate.toISOString(); const lowStockThreshold = Math.max(0, Number(req.query.lowStockThreshold || 3));
+    const report = String(req.query.report || 'complete'); const data = await getReportData({ from, to, lowStockThreshold }); const workbook = makeWorkbook(data, { from, to: visibleTo, lowStockThreshold });
+    const included = { orders: ['Resumen', 'Pedidos'], products: ['Resumen', 'Productos vendidos'], profit: ['Resumen', 'Rentabilidad pedidos', 'Rentabilidad productos'], inventory: ['Resumen', 'Inventario', 'Movimientos inventario'], customers: ['Resumen', 'Clientes', 'Resumen clientes'], purchases: ['Resumen', 'Compras', 'Proveedores'], shipping: ['Resumen', 'Envíos'], discounts: ['Resumen', 'Descuentos'], referrals: ['Resumen', 'Referidos'] }[report];
+    if (included) workbook.worksheets.filter((sheet) => !included.includes(sheet.name)).forEach((sheet) => workbook.removeWorksheet(sheet.id));
+    const suffix = report === 'complete' ? 'Reporte_Completo' : ({ orders: 'Ventas', products: 'Productos', profit: 'Rentabilidad', inventory: 'Inventario', customers: 'Clientes', purchases: 'Compras', shipping: 'Envios', discounts: 'Descuentos', referrals: 'Referidos' }[report] || 'Reporte');
+    const filename = `NARI_${suffix}_${from.slice(0, 10)}_a_${visibleTo.slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', `attachment; filename="${filename}"`); await workbook.xlsx.write(res); res.end();
+  } catch (error) { next(error); }
+});
+
+router.get('/dashboard', async (req, res, next) => {
+  try {
+    const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - 30);
+    const from = dashboardDate(req.query.from, start); const to = dashboardDate(req.query.to, end);
+    const previousFrom = dashboardDate(req.query.previousFrom, new Date(new Date(from).getTime() - (new Date(to).getTime() - new Date(from).getTime())));
+    const previousTo = dashboardDate(req.query.previousTo, new Date(from));
+    const lowStockThreshold = Math.max(0, Number.isFinite(Number(req.query.lowStockThreshold)) ? Number(req.query.lowStockThreshold) : 3);
+    const period = [from, to]; const previousPeriod = [previousFrom, previousTo];
+    const periodWhere = `o.status IN ${saleStatusSql} AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`;
+    const orderParams = [...validSaleStatuses, ...period]; const previousParams = [...validSaleStatuses, ...previousPeriod];
+    const [current, previous, chart, inventory, top, recent, customers, financial, previousCosts] = await Promise.all([
+      get(`SELECT COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS sales FROM orders o WHERE ${periodWhere}`, orderParams),
+      get(`SELECT COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS sales FROM orders o WHERE ${periodWhere}`, previousParams),
+      all(`SELECT date(o.createdAt) AS label, COALESCE(SUM(o.total), 0) AS sales, COUNT(*) AS orders FROM orders o WHERE ${periodWhere} GROUP BY date(o.createdAt) ORDER BY label`, orderParams),
+      all(`SELECT id, name, brand, stock, minimumStock, status FROM products WHERE stock = 0 OR (stock > 0 AND stock <= COALESCE(minimumStock, ?)) ORDER BY stock ASC, name ASC`, [lowStockThreshold]),
+      all(`SELECT oi.productId, oi.productName, SUM(oi.quantity) AS units, SUM(oi.quantity * oi.unitPrice) AS sales, SUM(oi.quantity * (oi.unitPrice - COALESCE(oi.unitCost, p.cost, 0))) AS profit FROM order_items oi JOIN orders o ON o.id = oi.orderId LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere} GROUP BY oi.productId, oi.productName ORDER BY units DESC LIMIT 5`, orderParams),
+      all(`SELECT o.id, o.createdAt AS date, o.status, o.total, c.firstName, c.lastName, c.email FROM orders o LEFT JOIN customers c ON c.id = o.customerId OR c.authUserId = o.userId ORDER BY o.createdAt DESC LIMIT 5`),
+      get(`SELECT (SELECT COUNT(*) FROM customers) AS total, (SELECT COUNT(*) FROM customers WHERE authUserId IS NULL) AS guestCustomers, (SELECT COUNT(*) FROM abandoned_carts WHERE convertedAt IS NULL) AS abandonedCarts, (SELECT COUNT(*) FROM customers WHERE datetime(createdAt) >= datetime(?) AND datetime(createdAt) < datetime(?)) AS newCustomers, (SELECT COUNT(*) FROM (SELECT COALESCE(o.customerId, o.userId) AS customerKey FROM orders o WHERE ${periodWhere} GROUP BY customerKey HAVING COUNT(*) > 1)) AS recurrentCustomers`, [...period, ...orderParams]),
+      get(`SELECT
+        (SELECT COALESCE(SUM(o.subtotal), 0) FROM orders o WHERE ${periodWhere}) AS grossSales,
+        (SELECT COALESCE(SUM(o.discountTotal), 0) FROM orders o WHERE ${periodWhere}) AS discounts,
+        (SELECT COALESCE(SUM(o.paymentFee), 0) FROM orders o WHERE ${periodWhere}) AS paymentFees,
+        (SELECT COALESCE(SUM(o.shippingCost), 0) FROM orders o WHERE ${periodWhere}) AS shippingCosts,
+        (SELECT COALESCE(SUM(o.refundedTotal), 0) FROM orders o WHERE ${periodWhere}) AS refunds,
+        (SELECT COALESCE(SUM(oi.quantity * COALESCE(oi.unitCost, p.cost, 0)), 0) FROM orders o JOIN order_items oi ON oi.orderId = o.id LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere}) AS productCost`, [...orderParams, ...orderParams, ...orderParams, ...orderParams, ...orderParams, ...orderParams]),
+      get(`SELECT COALESCE(SUM(oi.quantity * COALESCE(oi.unitCost, p.cost, 0)), 0) AS productCost FROM orders o JOIN order_items oi ON oi.orderId = o.id LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere}`, previousParams),
+    ]);
+    const attention = { outOfStock: inventory.filter((product) => product.stock === 0).length, lowStock: inventory.filter((product) => product.stock > 0).length, pendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pagado' AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`, period).then((row) => row.count), oldPendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pagado' AND datetime(o.createdAt) < datetime('now', '-1 day')`, []).then((row) => row.count), paymentIssues: 0 };
+    const totalWithOrders = await get(`SELECT COUNT(*) AS count FROM (SELECT COALESCE(o.customerId, o.userId) AS customerKey FROM orders o WHERE ${periodWhere} GROUP BY customerKey)`, orderParams);
+    const margin = Number(current.sales || 0) - Number(financial.productCost || 0) - Number(financial.paymentFees || 0) - Number(financial.shippingCosts || 0) - Number(financial.refunds || 0);
+    const previousMargin = Number(previous.sales || 0) - Number(previousCosts.productCost || 0);
+    res.json({ period: { from, to, previousFrom, previousTo }, current: { sales: Number(current.sales || 0), orders: Number(current.orders || 0), averageOrder: current.orders ? Number(current.sales) / Number(current.orders) : 0, grossProfit: margin }, previous: { sales: Number(previous.sales || 0), orders: Number(previous.orders || 0), averageOrder: previous.orders ? Number(previous.sales) / Number(previous.orders) : 0, grossProfit: previousMargin }, chart, attention, recentOrders: recent.map((order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible' })), inventory: { totalUnits: (await get('SELECT COALESCE(SUM(stock), 0) AS total FROM products')).total, activeProducts: (await get("SELECT COUNT(*) AS total FROM products WHERE status = 'active'")).total, products: inventory }, topProducts: top, financial: { ...financial, margin, costsAvailable: Number(financial.productCost || 0) > 0 || Number(current.orders || 0) === 0 }, customers: { ...customers, customersWithOrders: Number(totalWithOrders.count || 0), repurchaseRate: totalWithOrders.count ? Number(customers.recurrentCustomers || 0) / Number(totalWithOrders.count) : 0 } });
+  } catch (error) { next(error); }
+});
+
+router.get('/inventory/movements', async (req, res) => {
+  const movements = await all(`
+    SELECT inventory_movements.*, products.name AS productName
+    FROM inventory_movements
+    LEFT JOIN products ON products.id = inventory_movements.productId
+    ORDER BY inventory_movements.createdAt DESC
+  `);
+  res.json(movements);
+});
+
+router.get('/customers', async (req, res) => {
+  const customers = await all('SELECT id, authUserId, email, firstName, lastName, phone, firstPurchaseAt, lastPurchaseAt, orderCount, totalPurchased, latestAddress, city, department, country, status, notes, createdAt, updatedAt FROM customers ORDER BY createdAt DESC');
+  res.json(customers.map((customer) => ({ ...customer, orders: [] })));
+});
+
+router.get('/customers/:id', async (req, res) => {
+  const customer = await get('SELECT id, authUserId, email, firstName, lastName, phone, firstPurchaseAt, lastPurchaseAt, orderCount, totalPurchased, latestAddress, city, department, country, status, notes, createdAt, updatedAt FROM customers WHERE id = ?', [req.params.id]);
+  if (!customer) return res.status(404).json({ error: 'Customer not found' });
+  res.json({ ...customer, orders: [] });
+});
+
+router.get('/orders', async (req, res) => {
+  const orders = await all(`SELECT orders.id, orders.createdAt AS date, orders.status, orders.total, orders.shippingProvider, orders.trackingNumber, customers.id AS customerId, customers.firstName, customers.lastName, customers.email
+    FROM orders LEFT JOIN customers ON customers.id = orders.customerId OR customers.authUserId = orders.userId ORDER BY orders.createdAt DESC`);
+  const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', products: await all('SELECT productName, quantity, unitPrice FROM order_items WHERE orderId = ? ORDER BY id', [order.id]) })));
+  res.json(result);
+});
+
+router.get('/orders/:id', async (req, res) => {
+  const order = await get(`SELECT orders.id, orders.createdAt AS date, orders.status, orders.total, orders.shippingAddress, orders.shippingProvider, orders.trackingNumber, customers.id AS customerId, customers.firstName, customers.lastName, customers.email, customers.phone
+    FROM orders LEFT JOIN customers ON customers.id = orders.customerId OR customers.authUserId = orders.userId WHERE orders.id = ?`, [req.params.id]);
+  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const products = await all('SELECT productId, productName, quantity, unitPrice FROM order_items WHERE orderId = ? ORDER BY id', [order.id]);
+  let shippingAddress = {};
+  try { shippingAddress = JSON.parse(order.shippingAddress); } catch { /* mantiene dirección vacía si un registro antiguo está incompleto */ }
+  delete order.shippingAddress;
+  res.json({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', shippingAddress, products });
+});
+
+router.patch('/orders/:id/shipping', async (req, res) => {
+  const shippingProvider = String(req.body?.shippingProvider || '').trim();
+  const trackingNumber = String(req.body?.trackingNumber || '').trim();
+  if (shippingProvider.length > 120 || trackingNumber.length > 160) return res.status(400).json({ error: 'Los datos de envío superan el límite permitido.' });
+  const result = await run('UPDATE orders SET shippingProvider = ?, trackingNumber = ? WHERE id = ?', [shippingProvider || null, trackingNumber || null, req.params.id]);
+  if (!result.changes) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  res.json({ id: req.params.id, shippingProvider: shippingProvider || null, trackingNumber: trackingNumber || null });
+});
+
+router.post('/orders/:id/review-link', async (req, res) => {
+  const order = await get(`SELECT orders.id, orders.status, orders.userId, customers.firstName, customers.email
+    FROM orders LEFT JOIN customers ON customers.authUserId = orders.userId WHERE orders.id = ?`, [req.params.id]);
+  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (order.status !== 'Entregado') return res.status(400).json({ error: 'El enlace solo puede enviarse cuando el pedido esté entregado.' });
+  if (!order.email) return res.status(400).json({ error: 'El pedido no tiene un correo de cliente.' });
+  const products = await all('SELECT productName FROM order_items WHERE orderId = ? ORDER BY id', [order.id]);
+  const rawToken = crypto.randomBytes(32).toString('base64url');
+  const tokenHash = hashToken(rawToken);
+  const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+  await run('DELETE FROM review_links WHERE orderId = ?', [order.id]);
+  await run('INSERT INTO review_links (id, orderId, userId, tokenHash, expiresAt) VALUES (?, ?, ?, ?, ?)', [`review-link-${crypto.randomBytes(12).toString('hex')}`, order.id, order.userId, tokenHash, expiresAt]);
+  const appUrl = String(process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  try {
+    await sendReviewLinkEmail({ to: order.email, firstName: order.firstName, reviewUrl: `${appUrl}/review?token=${encodeURIComponent(rawToken)}`, productNames: products.map((product) => product.productName) });
+  } catch (error) {
+    await run('DELETE FROM review_links WHERE tokenHash = ?', [tokenHash]);
+    console.error('Review link email could not be sent:', error.message);
+    return res.status(503).json({ error: 'No pudimos enviar el enlace de valoración.' });
+  }
+  res.json({ message: 'Enlace de valoración enviado correctamente.', expiresAt });
+});
+
+router.patch('/orders/:id/status', async (req, res) => {
+  const status = String(req.body?.status || '');
+  const allowed = ['Pendiente', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
+  if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado logístico inválido.' });
+  const result = await run('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
+  if (!result.changes) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const order = await get('SELECT id, createdAt AS date, status, total FROM orders WHERE id = ?', [req.params.id]);
+  res.json(order);
+});
+
+router.patch('/customers/:id/notes', async (req, res) => {
+  if (typeof req.body?.notes !== 'string') return res.status(400).json({ error: 'Notes must be text.' });
+  const result = await run('UPDATE customers SET notes = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [req.body.notes.slice(0, 5000), req.params.id]);
+  if (!result.changes) return res.status(404).json({ error: 'Customer not found' });
+  const customer = await get('SELECT id, authUserId, email, firstName, lastName, phone, firstPurchaseAt, lastPurchaseAt, orderCount, totalPurchased, latestAddress, city, department, country, status, notes, createdAt, updatedAt FROM customers WHERE id = ?', [req.params.id]);
+  res.json({ ...customer, orders: [] });
+});
+
+router.patch('/customers/:id/phone', async (req, res) => {
+  const phone = String(req.body?.phone || '').trim();
+  if (!/^[0-9+()\s-]{7,24}$/.test(phone)) return res.status(400).json({ error: 'Ingresa un número de celular válido.' });
+  const customer = await get('SELECT * FROM customers WHERE id = ?', [req.params.id]);
+  if (!customer) return res.status(404).json({ error: 'Customer not found' });
+  await run('BEGIN TRANSACTION');
+  try {
+    await run('UPDATE customers SET phone = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [phone, req.params.id]);
+    if (customer.authUserId) await run('UPDATE auth_users SET phone = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [phone, customer.authUserId]);
+    await run('COMMIT');
+  } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
+  const updated = await get('SELECT id, authUserId, email, firstName, lastName, phone, firstPurchaseAt, lastPurchaseAt, orderCount, totalPurchased, latestAddress, city, department, country, status, notes, createdAt, updatedAt FROM customers WHERE id = ?', [req.params.id]);
+  res.json({ ...updated, orders: [] });
+});
+
+router.delete('/customers/:id', async (req, res) => {
+  const customer = await get('SELECT id, authUserId FROM customers WHERE id = ?', [req.params.id]);
+  if (!customer) return res.status(404).json({ error: 'Customer not found' });
+  await run('BEGIN TRANSACTION');
+  try {
+    if (customer.authUserId) {
+      await run('DELETE FROM auth_sessions WHERE userId = ?', [customer.authUserId]);
+      await run('DELETE FROM auth_users WHERE id = ?', [customer.authUserId]);
+    }
+    await run('DELETE FROM customers WHERE id = ?', [req.params.id]);
+    await run('COMMIT');
+  } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
+  res.status(204).end();
+});
+
 router.patch('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, brand, price, cost, stock, category, status, description } = req.body;
+    const { name, brand, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images } = req.body;
 
     const product = await get('SELECT * FROM products WHERE id = ?', [id]);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
     }
+
+    if (stock !== undefined && (!Number.isInteger(stock) || stock < 0)) {
+      return res.status(400).json({ error: 'Stock must be a non-negative integer' });
+    }
+    if (minimumStock !== undefined && (!Number.isInteger(minimumStock) || minimumStock < 0)) return res.status(400).json({ error: 'El stock mínimo debe ser un entero no negativo.' });
 
     const updates = [];
     const values = [];
@@ -38,9 +273,13 @@ router.patch('/products/:id', async (req, res) => {
     if (price !== undefined) { updates.push('price = ?'); values.push(price); }
     if (cost !== undefined) { updates.push('cost = ?'); values.push(cost); }
     if (stock !== undefined) { updates.push('stock = ?'); values.push(Math.max(0, stock)); }
+    if (minimumStock !== undefined) { updates.push('minimumStock = ?'); values.push(minimumStock); }
     if (category !== undefined) { updates.push('category = ?'); values.push(category); }
     if (status !== undefined) { updates.push('status = ?'); values.push(status); }
     if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+    for (const [column, value] of Object.entries({ sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images })) {
+      if (value !== undefined) { updates.push(`${column} = ?`); values.push(listColumns.has(column) ? serializeList(value) : value); }
+    }
 
     if (updates.length === 0) {
       return res.status(400).json({ error: 'No fields to update' });
@@ -50,7 +289,23 @@ router.patch('/products/:id', async (req, res) => {
     values.push(id);
 
     const sql = `UPDATE products SET ${updates.join(', ')} WHERE id = ?`;
-    await run(sql, values);
+    const stockChanged = stock !== undefined && stock !== product.stock;
+    await run('BEGIN TRANSACTION');
+    try {
+      await rememberCatalogOption('brand', brand);
+      await rememberCatalogOption('category', category);
+      await run(sql, values);
+      if (stockChanged) {
+        await run(
+          'INSERT INTO inventory_movements (id, productId, quantity, type, description, stockBefore, stockAfter, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [`m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, id, stock - product.stock, 'adjustment', 'Ajuste desde edición de producto', product.stock, stock, 'Ajuste manual']
+        );
+      }
+      await run('COMMIT');
+    } catch (transactionError) {
+      await run('ROLLBACK').catch(() => undefined);
+      throw transactionError;
+    }
 
     const updated = await get('SELECT * FROM products WHERE id = ?', [id]);
     res.json(updated);
@@ -73,15 +328,33 @@ router.patch('/products/:id/stock', async (req, res) => {
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  const newStock = Math.max(0, stock);
-  await run('UPDATE products SET stock = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [newStock, id]);
+  if (!Number.isInteger(stock) || stock < 0) {
+    return res.status(400).json({ error: 'Stock must be a non-negative integer' });
+  }
 
-  const updated = await get('SELECT * FROM products WHERE id = ?', [id]);
-  res.json(updated);
+  const newStock = stock;
+  const quantity = newStock - product.stock;
+  try {
+    await run('BEGIN TRANSACTION');
+    await run('UPDATE products SET stock = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [newStock, id]);
+    if (quantity !== 0) {
+      await run(
+        'INSERT INTO inventory_movements (id, productId, quantity, type, description, stockBefore, stockAfter, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [`m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, id, quantity, 'adjustment', 'Ajuste manual', product.stock, newStock, 'Ajuste manual']
+      );
+    }
+    await run('COMMIT');
+    const updated = await get('SELECT * FROM products WHERE id = ?', [id]);
+    res.json(updated);
+  } catch (error) {
+    await run('ROLLBACK').catch(() => undefined);
+    console.error('Failed to update stock:', error);
+    res.status(500).json({ error: 'No se pudo actualizar el inventario.' });
+  }
 });
 
 router.post('/products', async (req, res) => {
-  const { id, brand, name, price, cost, stock, category, status = 'active', description } = req.body;
+  const { id, brand, name, price, cost, stock, minimumStock = 3, category, status = 'active', description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images } = req.body;
 
   if (!id || !brand || !name || price === undefined || !category) {
     return res.status(400).json({ error: 'Missing required fields: id, brand, name, price, category' });
@@ -100,10 +373,20 @@ router.post('/products', async (req, res) => {
   }
 
   await run(
-    `INSERT INTO products (id, brand, name, slug, price, cost, stock, category, status, description, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    [id, brand, name, slug, price, cost || 0, stock || 0, category, status, description || '']
+    `INSERT INTO products (id, brand, name, slug, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [id, brand, name, slug, price, cost || 0, stock || 0, Number.isInteger(minimumStock) && minimumStock >= 0 ? minimumStock : 3, category, status, description || '', sku || '', compareAtPrice ?? null, serializeList(skinTypes), serializeList(concerns), serializeList(ingredients), audience || '', skinBenefits || '', serializeList(featuredIngredients), fullIngredients || '', productInfo || '', shippingReturns || '', serializeList(benefits), serializeList(howToUse), precautions || '', serializeList(images)]
   );
+
+  await rememberCatalogOption('brand', brand);
+  await rememberCatalogOption('category', category);
+
+  if (Number.isInteger(stock) && stock > 0) {
+    await run(
+      'INSERT INTO inventory_movements (id, productId, quantity, type, description, stockBefore, stockAfter, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [`m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, id, stock, 'initial', 'Inventario inicial', 0, stock, 'Entrada inicial']
+    );
+  }
 
   const created = await get('SELECT * FROM products WHERE id = ?', [id]);
   res.status(201).json(created);
@@ -117,8 +400,22 @@ router.delete('/products/:id', async (req, res) => {
     return res.status(404).json({ error: 'Product not found' });
   }
 
-  await run('DELETE FROM products WHERE id = ?', [id]);
-  res.json({ message: 'Product deleted' });
+  try {
+    await run('BEGIN TRANSACTION');
+    if (product.stock > 0) {
+      await run(
+        'INSERT INTO inventory_movements (id, productId, quantity, type, description, stockBefore, stockAfter, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [`m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, id, -product.stock, 'adjustment', `Salida por eliminación: ${product.name}`, product.stock, 0, 'Producto eliminado']
+      );
+    }
+    await run('DELETE FROM products WHERE id = ?', [id]);
+    await run('COMMIT');
+    res.json({ message: 'Product deleted' });
+  } catch (error) {
+    await run('ROLLBACK').catch(() => undefined);
+    console.error('Failed to delete product:', error);
+    res.status(500).json({ error: 'No se pudo eliminar el producto.' });
+  }
 });
 
 module.exports = router;

@@ -1,4 +1,5 @@
-const { run, all, initDb } = require('./init');
+const { run, all, initDb, ensureOrderShippingColumns, ensureCatalogOptions } = require('./init');
+const { ensureAdminUser } = require('../services/adminAuth');
 
 const seedProducts = async () => {
   const products = [
@@ -235,6 +236,7 @@ const seedProducts = async () => {
   ];
 
   await initDb();
+  await ensureOrderShippingColumns();
 
   const existing = await all('SELECT COUNT(*) as count FROM products');
   if (existing[0].count === 0) {
@@ -253,6 +255,8 @@ const seedProducts = async () => {
     }
     console.log('✓ Productos iniciales cargados (10 productos)');
   }
+  await ensureCatalogOptions();
+  await ensureAdminUser();
 };
 
 if (require.main === module) {
