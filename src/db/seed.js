@@ -84,16 +84,16 @@ const updateProductDetails = async () => {
   for (const detail of productDetails) {
     let matches = products.filter((product) => product.sku && product.sku === detail.sku);
     if (!matches.length) {
-      const target = normalizeText(detail.name).replace(/\b\d+\s?(?:ml|g)\b/g, '');
-      const tokens = target.split(' ').filter((token) => token.length > 2);
-      matches = products.filter((product) => {
-        if (normalizeText(product.brand) !== normalizeText(detail.brand)) return false;
-        const candidate = normalizeText(product.name);
-        const overlap = tokens.filter((token) => candidate.includes(token)).length;
-        return overlap >= Math.min(4, tokens.length);
-      });
+      const cleanName = (value) => normalizeText(value).replace(/\b\d+\s?(?:ml|g)\b/g, '').replace(/\b(?:spf\d+|pa)\b/g, '');
+      const target = cleanName(detail.name);
+      const tokens = target.split(' ').filter((token) => token.length > 2 && token !== normalizeText(detail.brand));
+      const scored = products.filter((product) => normalizeText(product.brand) === normalizeText(detail.brand)).map((product) => ({
+        product,
+        score: tokens.filter((token) => cleanName(product.name).includes(token)).length,
+      })).sort((a, b) => b.score - a.score);
+      if (scored[0]?.score >= 2 && scored[0].score > (scored[1]?.score || 0)) matches = [scored[0].product];
     }
-    if (matches.length !== 1) { skipped += 1; continue; }
+    if (matches.length !== 1) { skipped += 1; console.warn(`⚠ Ficha omitida por coincidencia no única: ${detail.name}`); continue; }
     const product = matches[0];
     await run(`UPDATE products SET brand = ?, sku = ?, category = ?, concerns = ?, skinTypes = ?, description = ?, audience = ?, skinBenefits = ?, howToUse = ?, precautions = ?, fullIngredients = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
       detail.brand, detail.sku, detail.category,
