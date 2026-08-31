@@ -6,9 +6,19 @@ if (!/^postgres(ql)?:\/\//i.test(connectionString)) {
 }
 
 const pool = new Pool({ connectionString, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined, max: 10 });
-const run = (sql, params = []) => pool.query(sql.replace(/\?/g, (_, offset, text) => `$${(text.slice(0, offset).match(/\?/g) || []).length + 1}`), params).then((result) => ({ changes: result.rowCount, lastID: result.rows[0]?.id }));
-const get = (sql, params = []) => pool.query(sql.replace(/\?/g, (_, offset, text) => `$${(text.slice(0, offset).match(/\?/g) || []).length + 1}`), params).then((result) => result.rows[0]);
-const all = (sql, params = []) => pool.query(sql.replace(/\?/g, (_, offset, text) => `$${(text.slice(0, offset).match(/\?/g) || []).length + 1}`), params).then((result) => result.rows);
+const translate = (sql) => {
+  let translated = String(sql)
+    .replace(/\bdatetime\('now',\s*'-1 day'\)/gi, `(CURRENT_TIMESTAMP - INTERVAL '1 day')`)
+    .replace(/\bdatetime\('now',\s*'-3 days'\)/gi, `(CURRENT_TIMESTAMP - INTERVAL '3 days')`)
+    .replace(/\bdatetime\(([^)]+)\)/gi, '$1')
+    .replace(/\bCOLLATE\s+NOCASE\b/gi, '')
+    .replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
+  if (/INSERT\s+INTO/i.test(translated) && !/ON\s+CONFLICT/i.test(translated)) translated += ' ON CONFLICT DO NOTHING';
+  return translated.replace(/\?/g, (_, offset, text) => `$${(text.slice(0, offset).match(/\?/g) || []).length + 1}`);
+};
+const run = (sql, params = []) => pool.query(translate(sql), params).then((result) => ({ changes: result.rowCount, lastID: result.rows[0]?.id }));
+const get = (sql, params = []) => pool.query(translate(sql), params).then((result) => result.rows[0]);
+const all = (sql, params = []) => pool.query(translate(sql), params).then((result) => result.rows);
 
 const initDb = async () => {
   const statements = [
