@@ -38,6 +38,44 @@ const importPurchasedProducts = async () => {
   console.log(`✓ Productos comprados revisados (${purchasedProducts.length} registros de Harumi y SOMI)`);
 };
 
+const catalogMetadata = [
+  ['SKIN1004', ['hyalu-cica', 'water-fit sun serum'], 'Protector solar', 'Normal / mixta / deshidratada', 'Seca / sensible', 'Centella asiática + ácido hialurónico + niacinamida'],
+  ['SKIN1004', ['light cleansing oil'], 'Aceite limpiador', 'Normal / mixta / grasa', 'Seca / sensible', 'Centella asiática + mezcla de aceites/emolientes'],
+  ['SKIN1004', ['ampoule foam'], 'Limpiador acuoso', 'Normal / mixta', 'Sensible / grasa', 'Centella asiática + agentes limpiadores'],
+  ['Anua', ['heartleaf 77', 'soothing toner'], 'Tónico calmante', 'Mixta / grasa / sensible', 'Acne-prone / normal', 'Heartleaf 77%'],
+  ['SKIN1004', ['tone brightening', 'capsule ampoule'], 'Ampoule iluminadora', 'Manchas / tono desigual', 'Normal / mixta / post-acné', 'Niacinamida + ácido tranexámico + centella'],
+  ['Dr. Althea', ['345 relief cream'], 'Hidratante', 'Mixta / sensible / acne-prone', 'Normal / deshidratada', 'Niacinamida + pantenol + centella y complejo calmante'],
+  ['Anua', ['quercetinol', 'pore deep cleansing foam'], 'Limpiador acuoso', 'Grasa / mixta / poros', 'Acne-prone', 'Heartleaf + Quercetinol™ + BHA'],
+  ['Mixsoon', ['bean essence'], 'Esencia', 'Textura / deshidratación', 'Normal / seca / mixta', 'Fermentos de soja + ingredientes humectantes'],
+  ['Round Lab', ['birch juice', 'moisturizing sunscreen'], 'Protector solar', 'Normal / seca / deshidratada', 'Mixta / sensible', 'Savia de abedul + humectantes'],
+  ['Anua', ['peach 70', 'niacin serum'], 'Sérum iluminador', 'Manchas / luminosidad / tono desigual', 'Normal / mixta', 'Niacinamida + Peach Complex'],
+  ['Round Lab', ['1025 dokdo toner'], 'Tónico', 'Normal / sensible / deshidratada', 'Mixta / seca', 'Agua de mar profundo + pantenol + humectantes'],
+  ['SKIN1004', ['probio-cica', 'enrich cream'], 'Hidratante', 'Seca / sensible / barrera alterada', 'Normal / deshidratada', 'Centella fermentada + ceramidas + complejo Probio-Cica'],
+  ['Mixsoon', ['glacier water', 'hyaluronic acid serum'], 'Sérum hidratante', 'Deshidratada / seca', 'Normal / mixta', 'Ácido hialurónico'],
+  ['Medicube', ['pdrn pink', 'peptide serum'], 'Sérum', 'Antiedad / elasticidad / glow', 'Normal / seca', 'PDRN + péptidos'],
+  ['SKIN1004', ['poremizing fresh ampoule'], 'Ampoule / poros', 'Grasa / mixta / poros', 'Normal / textura', 'Centella asiática + complejo Poremizing'],
+  ['Dr. Althea', ['pure grinding', 'cleansing balm'], 'Bálsamo limpiador', 'Normal / seca / sensible', 'Mixta', 'Aceites/emolientes + ingredientes calmantes'],
+  ['Ksecret', ['seoul 1988', 'retinal liposome 2', 'black ginseng'], 'Sérum antiedad', 'Antiedad / líneas / textura', 'Manchas / piel madura', 'Retinal liposomal + ginseng negro'],
+  ['Ksecret', ['seoul 1988', 'eye cream', 'retinal liposome 4', 'fermented bean'], 'Contorno de ojos', 'Líneas del contorno / antiedad', 'Textura / firmeza', 'Retinal liposomal + soja fermentada'],
+  ['SKIN1004', ['poremizing light gel cream'], 'Hidratante gel', 'Grasa / mixta', 'Normal / acne-prone', 'Centella asiática + complejo Poremizing + humectantes'],
+  ['SKIN1004', ['toning toner'], 'Tónico', 'Mixta / textura', 'Grasa / normal', 'Centella + PHA'],
+  ['Mixsoon', ['centella asiatica', 'toner'], 'Tónico calmante', 'Sensible / calmante', 'Normal / mixta', 'Centella asiática'],
+];
+
+const normalizeText = (value) => String(value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+const updateCatalogMetadata = async () => {
+  const products = await all('SELECT id, brand, name FROM products');
+  let updated = 0; let skipped = 0;
+  for (const [brand, nameParts, category, skinTypes, concerns, ingredients] of catalogMetadata) {
+    const normalizedBrand = normalizeText(brand);
+    const product = products.find((candidate) => normalizeText(candidate.brand) === normalizedBrand && nameParts.every((part) => normalizeText(candidate.name).includes(normalizeText(part))));
+    if (!product) { skipped += 1; continue; }
+    await run('UPDATE products SET category = ?, skinTypes = ?, concerns = ?, ingredients = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [category, JSON.stringify(skinTypes.split('/').map((item) => item.trim())), JSON.stringify(concerns.split('/').map((item) => item.trim())), JSON.stringify(ingredients.split('+').map((item) => item.trim())), product.id]);
+    updated += 1;
+  }
+  console.log(`✓ Metadata de catálogo actualizada (${updated} productos; ${skipped} filas no encontradas y omitidas)`);
+};
+
 const seedProducts = async () => {
   const products = [
     {
@@ -293,6 +331,7 @@ const seedProducts = async () => {
     console.log('✓ Productos iniciales cargados (10 productos)');
   }
   await importPurchasedProducts();
+  await updateCatalogMetadata();
   await ensureCatalogOptions();
   await ensureAdminUser();
 };
