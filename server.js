@@ -55,7 +55,7 @@ const startServer = async () => {
     app.listen(port, () => {
       console.log(`\n🎉 NARI Backend running on http://localhost:${port}`);
       console.log(`📊 API: http://localhost:${port}/api/products`);
-      console.log(`🔑 Admin: http://localhost:${port}/api/admin/products (DEV ONLY - no auth needed in development)`);
+      console.log(`🔑 Admin: http://localhost:${port}/api/admin/products (protected by admin session)`);
       console.log(`💚 Health: http://localhost:${port}/health\n`);
     });
   } catch (error) {
