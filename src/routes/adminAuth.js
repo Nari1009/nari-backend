@@ -27,7 +27,7 @@ router.post('/logout', async (req, res, next) => {
   try {
     const raw = cookieValue(req.headers.cookie, ADMIN_SESSION_COOKIE);
     if (raw) await run('DELETE FROM admin_sessions WHERE id = ?', [hashToken(raw)]);
-    res.clearCookie(ADMIN_SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+    res.clearCookie(ADMIN_SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' });
     res.status(204).end();
   } catch (error) { next(error); }
 });
@@ -41,7 +41,7 @@ router.patch('/password', requireAdmin, async (req, res, next) => {
     if (!admin || !verifyPassword(currentPassword, admin.passwordHash)) return res.status(400).json({ error: 'La contraseña actual es incorrecta.' });
     await run('UPDATE admin_users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [passwordHash(newPassword), req.admin.id]);
     await run('DELETE FROM admin_sessions WHERE adminUserId = ?', [req.admin.id]);
-    res.clearCookie(ADMIN_SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+    res.clearCookie(ADMIN_SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' });
     res.json({ message: 'Contraseña actualizada. Debes iniciar sesión nuevamente.' });
   } catch (error) { next(error); }
 });

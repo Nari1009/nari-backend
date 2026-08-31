@@ -63,7 +63,7 @@ const createAdminSession = async (adminId, res) => {
   const maxAge = ADMIN_SESSION_HOURS * 60 * 60 * 1000;
   const expiresAt = new Date(Date.now() + maxAge).toISOString();
   await run('INSERT INTO admin_sessions (id, adminUserId, expiresAt) VALUES (?, ?, ?)', [hashToken(raw), adminId, expiresAt]);
-  res.cookie(ADMIN_SESSION_COOKIE, raw, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge, path: '/' });
+  res.cookie(ADMIN_SESSION_COOKIE, raw, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', maxAge, path: '/' });
 };
 
 module.exports = { ADMIN_SESSION_COOKIE, normalizeAdminEmail, passwordHash, verifyPassword, publicAdmin, ensureAdminSchema, ensureAdminUser, createAdminSession, hashToken, all, get, run };

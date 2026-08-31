@@ -22,7 +22,7 @@ const createSession = async (run, userId, res) => {
   const raw = crypto.randomBytes(32).toString('base64url');
   const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
   await run('INSERT INTO auth_sessions (id, userId, expiresAt) VALUES (?, ?, ?)', [hashToken(raw), userId, expires]);
-  res.cookie(SESSION_COOKIE, raw, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', maxAge: SESSION_DAYS * 86400000, path: '/' });
+  res.cookie(SESSION_COOKIE, raw, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', maxAge: SESSION_DAYS * 86400000, path: '/' });
 };
 
 module.exports = { SESSION_COOKIE, hashToken, normalizeEmail, passwordHash, verifyPassword, publicUser, createSession };

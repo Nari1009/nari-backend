@@ -69,7 +69,7 @@ router.post('/logout', async (req, res, next) => {
   try {
     const raw = cookieValue(req.headers.cookie, SESSION_COOKIE);
     if (raw) await run('DELETE FROM auth_sessions WHERE id = ?', [hashToken(raw)]);
-    res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+    res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' });
     res.status(204).end();
   } catch (error) { next(error); }
 });
@@ -105,7 +105,7 @@ router.patch('/password', requireUser, async (req, res, next) => {
     } catch (emailError) {
       console.error('Password change notification could not be sent:', emailError.message);
     }
-    res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/' });
+    res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' });
     res.json({ message: 'Contraseña actualizada. Por seguridad, debes iniciar sesión nuevamente.' });
   } catch (error) { next(error); }
 });
