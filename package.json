@@ -6,6 +6,10 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
+    "seed:dev": "node src/db/seed.js dev",
+    "seed:catalog": "node src/db/seed.js catalog",
+    "seed:product-details": "node src/db/seed.js product-details",
+    "normalize:skin-types": "node src/db/seed.js normalize-skin-types",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

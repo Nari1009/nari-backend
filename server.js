@@ -2,8 +2,9 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { initDb, seedProducts } = require('./src/db/seed');
+const { initDb, ensureOrderShippingColumns } = require('./src/db/init');
 const { ensureContent } = require('./src/db/content');
+const { ensureAdminUser } = require('./src/services/adminAuth');
 
 const app = express();
 const port = process.env.PORT || 3001;
@@ -48,7 +49,9 @@ app.get('/health', (req, res) => {
 
 const startServer = async () => {
   try {
-    await seedProducts();
+    await initDb();
+    await ensureOrderShippingColumns();
+    await ensureAdminUser();
     await ensureContent();
     await processAbandonedCarts();
     setInterval(() => { processAbandonedCarts().catch((error) => console.error('Abandoned cart processor failed:', error.message)); }, 15 * 60 * 1000);

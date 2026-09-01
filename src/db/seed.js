@@ -2,6 +2,12 @@ const { run, all, initDb, ensureOrderShippingColumns, ensureCatalogOptions } = r
 const { ensureAdminUser } = require('../services/adminAuth');
 const productDetails = require('./productDetails');
 
+const assertManualSeedAllowed = (operation) => {
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_PRODUCTION_SEED !== 'true') {
+    throw new Error(`Seeding bloqueado en producción (${operation}). Usa ALLOW_PRODUCTION_SEED=true solo para una operación explícita.`);
+  }
+};
+
 const purchasedProducts = [
   ['H880983506045', 'TOCOBO', 'Tocobo Cica Cooling Sun Stick SPF50+ PA++++', 3, 60350, 'Harumi'],
   ['H8809447255071', 'Dr. Althea', 'Dr. Althea Pure Grinding Cleansing Balm', 4, 84490, 'Harumi'],
@@ -131,6 +137,7 @@ const normalizeExistingSkinTypes = async () => {
 };
 
 const seedProducts = async () => {
+  assertManualSeedAllowed('seedProducts');
   const products = [
     {
       id: 'p-001',
@@ -385,18 +392,34 @@ const seedProducts = async () => {
     console.log('✓ Productos iniciales cargados (10 productos)');
   }
   await importPurchasedProducts();
-  await updateCatalogMetadata();
-  // Product details were imported previously. Do not overwrite manual admin edits on restart.
-  await normalizeExistingSkinTypes();
   await ensureCatalogOptions();
   await ensureAdminUser();
 };
 
 if (require.main === module) {
-  seedProducts().then(() => process.exit(0)).catch(err => {
+  const operation = process.argv[2] || 'dev';
+  const runOperation = async () => {
+    if (operation === 'dev') return seedProducts();
+    await initDb();
+    await ensureOrderShippingColumns();
+    if (operation === 'catalog') {
+      assertManualSeedAllowed('updateCatalogMetadata');
+      return updateCatalogMetadata();
+    }
+    if (operation === 'product-details') {
+      assertManualSeedAllowed('updateProductDetails');
+      return updateProductDetails();
+    }
+    if (operation === 'normalize-skin-types') {
+      assertManualSeedAllowed('normalizeExistingSkinTypes');
+      return normalizeExistingSkinTypes();
+    }
+    throw new Error(`Operación desconocida: ${operation}. Usa dev, catalog, product-details o normalize-skin-types.`);
+  };
+  runOperation().then(() => process.exit(0)).catch(err => {
     console.error(err);
     process.exit(1);
   });
 }
 
-module.exports = { seedProducts };
+module.exports = { seedProducts, importPurchasedProducts, updateCatalogMetadata, updateProductDetails, normalizeExistingSkinTypes };

@@ -73,9 +73,9 @@ const ensureCatalogOptions = async () => {
   for (const [type, column] of fields) {
     if (type === 'skinType') {
       const canonicalSkinTypes = ['Todas', 'Grasa', 'Seca', 'Mixta', 'Sensible', 'Acnéica', 'Normal', 'Madura', 'Deshidratada'];
-      await run('DELETE FROM catalog_options WHERE type = ?', [type]);
       for (const name of canonicalSkinTypes) {
-        await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${require('crypto').randomBytes(12).toString('hex')}`, type, name]);
+        const existing = await get('SELECT id FROM catalog_options WHERE type = ? AND lower(name) = lower(?)', [type, name]);
+        if (!existing) await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${require('crypto').randomBytes(12).toString('hex')}`, type, name]);
       }
       continue;
     }
