@@ -36,9 +36,20 @@ const initDb = async () => {
     `CREATE TABLE IF NOT EXISTS review_links (id TEXT PRIMARY KEY, orderId TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, userId TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, tokenHash TEXT NOT NULL UNIQUE, expiresAt TIMESTAMPTZ NOT NULL, sentAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS reviews (id TEXT PRIMARY KEY, orderId TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE, userId TEXT NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, productId TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE, rating INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5), comment TEXT NOT NULL DEFAULT '', createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(orderId, userId, productId))`,
     `CREATE TABLE IF NOT EXISTS site_content (page TEXT PRIMARY KEY, content TEXT NOT NULL, updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)`,
-    `CREATE TABLE IF NOT EXISTS catalog_options (id TEXT PRIMARY KEY, type TEXT NOT NULL CHECK (type IN ('brand', 'category')), name TEXT NOT NULL, createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(type, name))`,
+    `CREATE TABLE IF NOT EXISTS catalog_options (id TEXT PRIMARY KEY, type TEXT NOT NULL CHECK (type IN ('brand', 'category', 'skinType', 'concern', 'ingredient')), name TEXT NOT NULL, createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, UNIQUE(type, name))`,
   ];
   for (const statement of statements) await pool.query(statement);
+  await pool.query('ALTER TABLE catalog_options DROP CONSTRAINT IF EXISTS catalog_options_type_check');
+  await pool.query(`DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'catalog_options_type_check'
+        AND conrelid = 'catalog_options'::regclass
+    ) THEN
+      ALTER TABLE catalog_options ADD CONSTRAINT catalog_options_type_check
+        CHECK (type IN ('brand', 'category', 'skinType', 'concern', 'ingredient'));
+    END IF;
+  END $$`);
   await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS supplier TEXT');
   await pool.query('ALTER TABLE products ALTER COLUMN price DROP NOT NULL');
 };
@@ -52,10 +63,32 @@ const ensureOrderShippingColumns = async () => {
 };
 
 const ensureCatalogOptions = async () => {
-  for (const type of ['brand', 'category']) {
-    const column = type === 'brand' ? 'brand' : 'category';
-    const rows = await all(`SELECT DISTINCT ${column} AS name FROM products WHERE trim(${column}) <> ''`);
-    for (const row of rows) await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?) ON CONFLICT DO NOTHING', [`${type}-${require('crypto').randomBytes(12).toString('hex')}`, type, row.name]);
+  const fields = [
+    ['brand', 'brand'],
+    ['category', 'category'],
+    ['skinType', 'skinTypes'],
+    ['concern', 'concerns'],
+    ['ingredient', 'ingredients'],
+  ];
+  for (const [type, column] of fields) {
+    const rows = await all(`SELECT ${column} AS value FROM products WHERE ${column} IS NOT NULL AND trim(${column}) <> ''`);
+    const unique = new Map();
+    for (const row of rows) {
+      let values = row.value;
+      if (type === 'brand' || type === 'category') values = [values];
+      else {
+        try { values = JSON.parse(values); } catch { values = String(values).split(/\r?\n/); }
+      }
+      if (!Array.isArray(values)) values = [values];
+      for (const value of values) {
+        const name = String(value || '').trim().replace(/\s+/g, ' ');
+        if (name && !unique.has(name.toLowerCase())) unique.set(name.toLowerCase(), name);
+      }
+    }
+    for (const name of unique.values()) {
+      const existing = await get('SELECT id FROM catalog_options WHERE type = ? AND lower(name) = lower(?)', [type, name]);
+      if (!existing) await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${require('crypto').randomBytes(12).toString('hex')}`, type, name]);
+    }
   }
 };
 

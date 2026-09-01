@@ -115,7 +115,7 @@ router.post('/catalog-options', async (req, res, next) => {
   try {
     const type = String(req.body?.type || '').trim();
     const name = String(req.body?.name || '').trim().replace(/\s+/g, ' ');
-    if (!['brand', 'category'].includes(type) || !name || name.length > 120) return res.status(400).json({ error: 'Tipo o nombre de opción inválido.' });
+    if (!['brand', 'category', 'skinType', 'concern', 'ingredient'].includes(type) || !name || name.length > 120) return res.status(400).json({ error: 'Tipo o nombre de opción inválido.' });
     const id = `${type}-${crypto.randomBytes(12).toString('hex')}`;
     await run('INSERT OR IGNORE INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [id, type, name]);
     res.status(201).json(await get('SELECT id, type, name FROM catalog_options WHERE type = ? AND name = ? COLLATE NOCASE', [type, name]));
@@ -131,8 +131,20 @@ router.delete('/catalog-options/:id', async (req, res, next) => {
 });
 
 const rememberCatalogOption = async (type, value) => {
-  const name = String(value || '').trim().replace(/\s+/g, ' ');
-  if (name) await run('INSERT OR IGNORE INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${crypto.randomBytes(12).toString('hex')}`, type, name]);
+  let values = value;
+  if (!Array.isArray(values) && typeof values === 'string') {
+    try { values = JSON.parse(values); } catch { values = values.split(/\r?\n/); }
+  }
+  if (!Array.isArray(values)) values = [values];
+  const seen = new Set();
+  for (const item of values) {
+    const name = String(item || '').trim().replace(/\s+/g, ' ');
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) continue;
+    seen.add(key);
+    const existing = await get('SELECT id FROM catalog_options WHERE type = ? AND lower(name) = lower(?)', [type, name]);
+    if (!existing) await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${crypto.randomBytes(12).toString('hex')}`, type, name]);
+  }
 };
 
 router.get('/reports.xlsx', async (req, res, next) => {
@@ -346,6 +358,9 @@ router.patch('/products/:id', async (req, res) => {
     try {
       await rememberCatalogOption('brand', brand);
       await rememberCatalogOption('category', category);
+      await rememberCatalogOption('skinType', skinTypes);
+      await rememberCatalogOption('concern', concerns);
+      await rememberCatalogOption('ingredient', ingredients);
       await run(sql, values);
       if (stockChanged) {
         await run(
@@ -432,6 +447,9 @@ router.post('/products', async (req, res) => {
 
   await rememberCatalogOption('brand', brand);
   await rememberCatalogOption('category', category);
+  await rememberCatalogOption('skinType', skinTypes);
+  await rememberCatalogOption('concern', concerns);
+  await rememberCatalogOption('ingredient', ingredients);
 
   if (Number.isInteger(stock) && stock > 0) {
     await run(
