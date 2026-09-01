@@ -22,6 +22,17 @@ router.get('/content/:page', async (req, res) => {
   res.json(content);
 });
 
+router.get('/catalog-options', async (req, res) => {
+  const rows = await all('SELECT type, name FROM catalog_options ORDER BY type, name');
+  const options = { skinTypes: [], concerns: [], ingredients: [] };
+  for (const row of rows) {
+    if (row.type === 'skinType') options.skinTypes.push(row.name);
+    if (row.type === 'concern') options.concerns.push(row.name);
+    if (row.type === 'ingredient') options.ingredients.push(row.name);
+  }
+  res.json(options);
+});
+
 router.get('/', async (req, res) => {
   const { search, category } = req.query;
 
