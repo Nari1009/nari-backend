@@ -71,6 +71,14 @@ const ensureCatalogOptions = async () => {
     ['ingredient', 'ingredients'],
   ];
   for (const [type, column] of fields) {
+    if (type === 'skinType') {
+      const canonicalSkinTypes = ['Grasa', 'Seca', 'Mixta', 'Sensible', 'Acnéica', 'Normal', 'Madura', 'Deshidratada'];
+      await run('DELETE FROM catalog_options WHERE type = ?', [type]);
+      for (const name of canonicalSkinTypes) {
+        await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${require('crypto').randomBytes(12).toString('hex')}`, type, name]);
+      }
+      continue;
+    }
     const rows = await all(`SELECT ${column} AS value FROM products WHERE ${column} IS NOT NULL AND trim(${column}) <> ''`);
     const unique = new Map();
     for (const row of rows) {
