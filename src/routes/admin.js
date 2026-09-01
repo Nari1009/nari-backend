@@ -123,11 +123,34 @@ router.post('/catalog-options', async (req, res, next) => {
 });
 
 router.delete('/catalog-options/:id', async (req, res, next) => {
+  const option = await get('SELECT id, type, name FROM catalog_options WHERE id = ?', [req.params.id]);
+  if (!option) return res.status(404).json({ error: 'Opción no encontrada.' });
+  const listColumnsByType = { skinType: 'skinTypes', concern: 'concerns', ingredient: 'ingredients' };
+  const column = listColumnsByType[option.type];
   try {
-    const result = await run('DELETE FROM catalog_options WHERE id = ?', [req.params.id]);
-    if (!result.changes) return res.status(404).json({ error: 'Opción no encontrada.' });
+    await run('BEGIN TRANSACTION');
+    if (column) {
+      const products = await all(`SELECT id, ${column} AS value FROM products`);
+      for (const product of products) {
+        let values = product.value;
+        if (typeof values === 'string') {
+          try { values = JSON.parse(values); } catch { values = values.split(/\r?\n/); }
+        }
+        if (!Array.isArray(values)) values = values ? [values] : [];
+        const normalized = values.flatMap((value) => String(value || '').split(/\r?\n/).map((item) => item.trim()).filter(Boolean));
+        const remaining = normalized.filter((value) => value.toLowerCase() !== option.name.toLowerCase());
+        if (remaining.length !== normalized.length) {
+          await run(`UPDATE products SET ${column} = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [JSON.stringify(remaining), product.id]);
+        }
+      }
+    }
+    await run('DELETE FROM catalog_options WHERE id = ?', [option.id]);
+    await run('COMMIT');
     res.status(204).end();
-  } catch (error) { next(error); }
+  } catch (error) {
+    await run('ROLLBACK').catch(() => undefined);
+    next(error);
+  }
 });
 
 const rememberCatalogOption = async (type, value) => {
