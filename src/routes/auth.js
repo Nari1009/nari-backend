@@ -157,6 +157,19 @@ router.get('/orders', requireUser, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.get('/orders/:id', requireUser, async (req, res, next) => {
+  try {
+    const order = await get(`SELECT id, createdAt AS date, status, total, subtotal, shippingTotal, discountTotal, shippingAddress
+      FROM orders WHERE id = ? AND userId = ?`, [req.params.id, req.user.id]);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    const products = await all('SELECT productId, productName, quantity, unitPrice FROM order_items WHERE orderId = ? ORDER BY id', [order.id]);
+    let shippingAddress = {};
+    try { shippingAddress = JSON.parse(order.shippingAddress); } catch { /* dirección histórica incompleta */ }
+    delete order.shippingAddress;
+    res.json({ ...order, shippingAddress, products });
+  } catch (error) { next(error); }
+});
+
 router.post('/orders', requireUser, async (req, res, next) => {
   try {
     res.status(201).json(await createOrder({ payload: req.body || {}, userId: req.user.id }));

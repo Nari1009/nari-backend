@@ -242,7 +242,7 @@ router.get('/customers/:id', async (req, res) => {
 });
 
 router.get('/orders', async (req, res) => {
-  const orders = await all(`SELECT orders.id, orders.createdAt AS date, orders.status, orders.total, orders.shippingProvider, orders.trackingNumber, customers.id AS customerId, customers.firstName, customers.lastName, customers.email
+  const orders = await all(`SELECT orders.id, orders.createdAt AS date, orders.status, orders.total, orders.subtotal, orders.shippingTotal, orders.discountTotal, orders.shippingProvider, orders.trackingNumber, customers.id AS customerId, customers.firstName, customers.lastName, customers.email
     FROM orders LEFT JOIN customers ON customers.id = orders.customerId OR customers.authUserId = orders.userId ORDER BY orders.createdAt DESC`);
   const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', products: await all('SELECT productName, quantity, unitPrice FROM order_items WHERE orderId = ? ORDER BY id', [order.id]) })));
   res.json(result);
