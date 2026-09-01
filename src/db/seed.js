@@ -106,6 +106,30 @@ const updateProductDetails = async () => {
   console.log(`✓ Fichas de productos actualizadas (${updated} productos; ${skipped} filas no encontradas y omitidas)`);
 };
 
+const normalizeExistingSkinTypes = async () => {
+  const allowed = ['Todas', 'Grasa', 'Seca', 'Mixta', 'Sensible', 'Acnéica', 'Normal', 'Madura', 'Deshidratada'];
+  const products = await all('SELECT id, skinTypes FROM products');
+  for (const product of products) {
+    let values = product.skinTypes;
+    if (typeof values === 'string') {
+      try { values = JSON.parse(values); } catch { values = values.split(/\r?\n/); }
+    }
+    if (!Array.isArray(values)) values = values ? [values] : [];
+    const normalized = [];
+    for (const value of values) {
+      const text = String(value || '').trim();
+      if (!text) continue;
+      for (const type of allowed) {
+        const pattern = type === 'Acnéica' ? /acn[eé]ica/i : new RegExp(`\\b${type}\\b`, 'i');
+        if (pattern.test(text) && !normalized.includes(type)) normalized.push(type);
+      }
+    }
+    if (JSON.stringify(normalized) !== JSON.stringify(values)) {
+      await run('UPDATE products SET skinTypes = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [JSON.stringify(normalized), product.id]);
+    }
+  }
+};
+
 const seedProducts = async () => {
   const products = [
     {
@@ -362,7 +386,8 @@ const seedProducts = async () => {
   }
   await importPurchasedProducts();
   await updateCatalogMetadata();
-  await updateProductDetails();
+  // Product details were imported previously. Do not overwrite manual admin edits on restart.
+  await normalizeExistingSkinTypes();
   await ensureCatalogOptions();
   await ensureAdminUser();
 };
