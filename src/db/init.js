@@ -81,8 +81,10 @@ const ensureCatalogOptions = async () => {
       }
       if (!Array.isArray(values)) values = [values];
       for (const value of values) {
-        const name = String(value || '').trim().replace(/\s+/g, ' ');
-        if (name && !unique.has(name.toLowerCase())) unique.set(name.toLowerCase(), name);
+        for (const line of String(value || '').split(/\r?\n/)) {
+          const name = line.trim().replace(/\s+/g, ' ');
+          if (name && !unique.has(name.toLowerCase())) unique.set(name.toLowerCase(), name);
+        }
       }
     }
     for (const name of unique.values()) {

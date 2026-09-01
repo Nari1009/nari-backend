@@ -138,12 +138,14 @@ const rememberCatalogOption = async (type, value) => {
   if (!Array.isArray(values)) values = [values];
   const seen = new Set();
   for (const item of values) {
-    const name = String(item || '').trim().replace(/\s+/g, ' ');
-    const key = name.toLowerCase();
-    if (!name || seen.has(key)) continue;
-    seen.add(key);
-    const existing = await get('SELECT id FROM catalog_options WHERE type = ? AND lower(name) = lower(?)', [type, name]);
-    if (!existing) await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${crypto.randomBytes(12).toString('hex')}`, type, name]);
+    for (const line of String(item || '').split(/\r?\n/)) {
+      const name = line.trim().replace(/\s+/g, ' ');
+      const key = name.toLowerCase();
+      if (!name || seen.has(key)) continue;
+      seen.add(key);
+      const existing = await get('SELECT id FROM catalog_options WHERE type = ? AND lower(name) = lower(?)', [type, name]);
+      if (!existing) await run('INSERT INTO catalog_options (id, type, name) VALUES (?, ?, ?)', [`${type}-${crypto.randomBytes(12).toString('hex')}`, type, name]);
+    }
   }
 };
 
