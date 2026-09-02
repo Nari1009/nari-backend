@@ -25,7 +25,7 @@ router.post('/register', async (req, res, next) => {
     const email = normalizeEmail(input.email);
     if (await get('SELECT id FROM auth_users WHERE email = ?', [email])) return res.status(409).json({ error: 'No fue posible crear la cuenta con esos datos.' });
     const normalizedPhone = normalizePhone(input.phone);
-    const matchingCustomer = await get('SELECT id, authUserId FROM customers WHERE email = ? OR phoneNormalized = ?', [email, normalizedPhone]);
+    const matchingCustomer = await get('SELECT id, authuserid AS "authUserId" FROM customers WHERE lower(trim(email)) = ?', [email]);
     if (matchingCustomer?.authUserId) return res.status(409).json({ error: 'Ya existe una cuenta con esos datos.' });
     const id = `auth-${cryptoRandomId()}`;
     const customerId = `customer-${cryptoRandomId()}`;
@@ -35,7 +35,7 @@ router.post('/register', async (req, res, next) => {
       await run('INSERT INTO auth_users (id, email, passwordHash, firstName, lastName, phone) VALUES (?, ?, ?, ?, ?, ?)', [id, email, passwordHash(input.password), user.firstName, user.lastName, user.phone]);
       const existingCustomer = matchingCustomer;
       if (existingCustomer) {
-        await run('UPDATE customers SET authUserId = ?, email = ?, firstName = ?, lastName = ?, phone = ?, phoneNormalized = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [id, email, user.firstName, user.lastName, user.phone, normalizedPhone, existingCustomer.id]);
+        await run(`UPDATE customers SET authUserId = ?, email = ?, firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [id, email, user.firstName, user.lastName, user.phone, normalizedPhone, existingCustomer.id]);
       } else {
         await run('INSERT INTO customers (id, authUserId, email, firstName, lastName, phone, phoneNormalized) VALUES (?, ?, ?, ?, ?, ?, ?)', [customerId, id, email, user.firstName, user.lastName, user.phone, normalizePhone(user.phone)]);
       }
@@ -151,7 +151,9 @@ router.delete('/addresses/:id', requireUser, async (req, res, next) => { try { c
 
 router.get('/orders', requireUser, async (req, res, next) => {
   try {
-    const orders = await all('SELECT id, createdat AS date, status, total FROM orders WHERE userid = ? ORDER BY createdat DESC', [req.user.id]);
+    const customer = await get('SELECT id FROM customers WHERE authuserid = ?', [req.user.id]);
+    if (!customer) return res.json([]);
+    const orders = await all('SELECT id, createdat AS date, status, total, customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot" FROM orders WHERE customerid = ? ORDER BY createdat DESC', [customer.id]);
     const result = await Promise.all(orders.map(async (order) => ({ ...order, products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
     res.json(result);
   } catch (error) { next(error); }
@@ -159,8 +161,10 @@ router.get('/orders', requireUser, async (req, res, next) => {
 
 router.get('/orders/:id', requireUser, async (req, res, next) => {
   try {
-    const order = await get(`SELECT id, createdat AS date, status, total, subtotal, shippingtotal AS "shippingTotal", discounttotal AS "discountTotal", shippingaddress AS "shippingAddress"
-      FROM orders WHERE id = ? AND userid = ?`, [req.params.id, req.user.id]);
+    const customer = await get('SELECT id FROM customers WHERE authuserid = ?', [req.user.id]);
+    if (!customer) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    const order = await get(`SELECT id, createdat AS date, status, total, subtotal, shippingtotal AS "shippingTotal", discounttotal AS "discountTotal", shippingaddress AS "shippingAddress", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot"
+      FROM orders WHERE id = ? AND customerid = ?`, [req.params.id, customer.id]);
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
     const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
     let shippingAddress = {};
