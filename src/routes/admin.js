@@ -210,7 +210,7 @@ router.get('/dashboard', async (req, res, next) => {
         (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} AND NOT EXISTS (SELECT 1 FROM orders older WHERE older.customerId = o.customerId AND older.status IN ${saleStatusSql} AND datetime(older.createdAt) < datetime(o.createdAt)) GROUP BY o.customerId) AS customer_new) AS "newCustomers",
         (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId HAVING COUNT(*) > 1) AS customer_recurrent) AS "recurrentCustomers",
         (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId) AS customer_with_orders) AS "customersWithOrders"
-      `, [...orderParams, ...validSaleStatuses, ...period, ...orderParams, ...orderParams]),
+      `, [...orderParams, ...validSaleStatuses, ...orderParams, ...orderParams]),
       get(`SELECT
         (SELECT COALESCE(SUM(o.subtotal), 0) FROM orders o WHERE ${periodWhere}) AS grossSales,
         (SELECT COALESCE(SUM(o.discountTotal), 0) FROM orders o WHERE ${periodWhere}) AS discounts,
