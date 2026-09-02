@@ -326,19 +326,28 @@ router.patch('/customers/:id/phone', async (req, res) => {
   res.json({ ...updated, orders: [] });
 });
 
-router.delete('/customers/:id', async (req, res) => {
-  const customer = await get('SELECT id, authUserId FROM customers WHERE id = ?', [req.params.id]);
-  if (!customer) return res.status(404).json({ error: 'Customer not found' });
-  await run('BEGIN TRANSACTION');
+router.patch('/customers/:id/status', async (req, res, next) => {
+  const status = String(req.body?.status || '').trim().toLowerCase();
+  if (status !== 'inactive') return res.status(400).json({ error: 'Solo se permite desactivar la cuenta.' });
   try {
-    if (customer.authUserId) {
-      await run('DELETE FROM auth_sessions WHERE userId = ?', [customer.authUserId]);
-      await run('DELETE FROM auth_users WHERE id = ?', [customer.authUserId]);
-    }
-    await run('DELETE FROM customers WHERE id = ?', [req.params.id]);
-    await run('COMMIT');
-  } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
-  res.status(204).end();
+    const customer = await get('SELECT id, authuserid AS "authUserId", status FROM customers WHERE id = ?', [req.params.id]);
+    if (!customer) return res.status(404).json({ error: 'Customer not found' });
+    await run('BEGIN TRANSACTION');
+    try {
+      await run('UPDATE customers SET status = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', ['inactive', customer.id]);
+      if (customer.authUserId) {
+        await run('UPDATE auth_users SET isActive = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [0, customer.authUserId]);
+        await run('DELETE FROM auth_sessions WHERE userId = ?', [customer.authUserId]);
+      }
+      await run('COMMIT');
+    } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
+    const updated = await get('SELECT id, authuserid AS "authUserId", email, firstname AS "firstName", lastname AS "lastName", phone, firstpurchaseat AS "firstPurchaseAt", lastpurchaseat AS "lastPurchaseAt", ordercount AS "orderCount", totalpurchased AS "totalPurchased", latestaddress AS "latestAddress", city, department, country, status, notes, createdat AS "createdAt", updatedat AS "updatedAt" FROM customers WHERE id = ?', [customer.id]);
+    res.json({ ...updated, orders: [] });
+  } catch (error) { next(error); }
+});
+
+router.delete('/customers/:id', async (req, res) => {
+  return res.status(410).json({ error: 'La eliminación permanente de clientes está deshabilitada. Usa la desactivación de cuenta.' });
 });
 
 router.patch('/products/:id', async (req, res) => {

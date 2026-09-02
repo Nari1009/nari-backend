@@ -23,7 +23,11 @@ router.post('/register', async (req, res, next) => {
     const validation = validateRegistration(input);
     if (validation) return res.status(400).json({ error: validation });
     const email = normalizeEmail(input.email);
-    if (await get('SELECT id FROM auth_users WHERE email = ?', [email])) return res.status(409).json({ error: 'No fue posible crear la cuenta con esos datos.' });
+    const existingAuthUser = await get('SELECT id, isactive AS "isActive" FROM auth_users WHERE email = ?', [email]);
+    if (existingAuthUser) {
+      if (Number(existingAuthUser.isActive) === 0) return res.status(409).json({ code: 'ACCOUNT_INACTIVE', error: 'Esta cuenta está desactivada. Contacta con soporte para recuperar el acceso.' });
+      return res.status(409).json({ error: 'No fue posible crear la cuenta con esos datos.' });
+    }
     const normalizedPhone = normalizePhone(input.phone);
     const matchingCustomer = await get('SELECT id, authuserid AS "authUserId" FROM customers WHERE lower(trim(email)) = ?', [email]);
     if (matchingCustomer?.authUserId) return res.status(409).json({ error: 'Ya existe una cuenta con esos datos.' });
