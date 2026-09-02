@@ -88,7 +88,7 @@ async function createOrder({ payload, userId = null }) {
       ]);
     }
     await run('UPDATE customers SET firstPurchaseAt = COALESCE(firstPurchaseAt, ?), lastPurchaseAt = ?, orderCount = orderCount + 1, totalPurchased = totalPurchased + ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [now, now, total, customerId]);
-    await run('UPDATE abandoned_carts SET convertedAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE email = ? AND convertedAt IS NULL', [now, email]);
+    await run("UPDATE abandoned_carts SET convertedAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE email = ? AND (convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '')", [now, email]);
     await run('COMMIT');
   } catch (error) {
     await run('ROLLBACK').catch(() => undefined);
