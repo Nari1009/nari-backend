@@ -36,20 +36,30 @@ async function createOrder({ payload, userId = null }) {
   }
   const now = new Date().toISOString();
   const address = payload.shippingAddress;
-  const matchingCustomers = await all('SELECT id, authUserId, email FROM customers WHERE email = ? OR phoneNormalized = ?', [email, phoneNormalized]);
-  const emailCustomer = matchingCustomers.find((item) => item.email === email);
-  const phoneCustomer = matchingCustomers.find((item) => item.phoneNormalized === phoneNormalized);
-  // El correo tiene prioridad: si ya existe, el pedido se vincula a ese cliente
-  // y el celular se actualiza con el dato más reciente del checkout.
-  // El celular solo identifica al cliente cuando el correo aún no existe.
-  let customerRow = emailCustomer || phoneCustomer;
+  const authenticatedCustomer = userId
+    ? await get('SELECT id, authuserid AS "authUserId", email FROM customers WHERE authuserid = ?', [userId])
+    : null;
+  const emailCustomer = await get('SELECT id, authuserid AS "authUserId", email FROM customers WHERE lower(trim(email)) = ?', [email]);
+  if (authenticatedCustomer && emailCustomer && authenticatedCustomer.id !== emailCustomer.id) {
+    const error = new Error('La cuenta autenticada y el correo del checkout pertenecen a clientes distintos.');
+    error.status = 409;
+    throw error;
+  }
+  if (userId && emailCustomer?.authUserId && emailCustomer.authUserId !== userId) {
+    const error = new Error('El correo del checkout ya está vinculado a otra cuenta.');
+    error.status = 409;
+    throw error;
+  }
+  // La identidad comercial se resuelve únicamente por correo normalizado.
+  // El teléfono se conserva como contacto, pero nunca selecciona un Customer.
+  const customerRow = authenticatedCustomer || emailCustomer;
   const customerId = customerRow?.id || `customer-${randomId()}`;
 
   await run('BEGIN TRANSACTION');
   try {
     if (customerRow) {
-      await run(`UPDATE customers SET firstName = ?, lastName = ?, phone = ?, phoneNormalized = ?, latestAddress = ?, city = ?, department = ?, country = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
-        String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
+      await run(`UPDATE customers SET authUserId = COALESCE(authUserId, ?), firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), latestAddress = COALESCE(NULLIF(?, ''), latestAddress), city = COALESCE(NULLIF(?, ''), city), department = COALESCE(NULLIF(?, ''), department), country = COALESCE(NULLIF(?, ''), country), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
+        userId, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
         address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia', customerId,
       ]);
     } else {
@@ -58,8 +68,13 @@ async function createOrder({ payload, userId = null }) {
         address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia',
       ]);
     }
-    await run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-      id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), now,
+    const snapshotCustomer = await get('SELECT email, firstname AS "firstName", lastname AS "lastName", phone FROM customers WHERE id = ?', [customerId]);
+    const emailSnapshot = normalizeEmail(snapshotCustomer?.email || email) || null;
+    const firstNameSnapshot = String(snapshotCustomer?.firstName || '').trim() || null;
+    const lastNameSnapshot = String(snapshotCustomer?.lastName || '').trim() || null;
+    const phoneSnapshot = String(snapshotCustomer?.phone || '').trim() || null;
+    await run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+      id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, now,
     ]);
     for (const [index, product] of products.entries()) {
       const quantity = items[index].quantity;
