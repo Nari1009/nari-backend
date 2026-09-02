@@ -205,11 +205,11 @@ router.get('/dashboard', async (req, res, next) => {
       all(`SELECT o.id, o.createdAt AS date, o.status, o.total, COALESCE(o.customerFirstNameSnapshot, c.firstName) AS firstName, COALESCE(o.customerLastNameSnapshot, c.lastName) AS lastName, COALESCE(o.customerEmailSnapshot, c.email) AS email FROM orders o LEFT JOIN customers c ON c.id = o.customerId OR c.authUserId = o.userId ORDER BY o.createdAt DESC LIMIT 5`),
       get(`SELECT
         (SELECT COUNT(*) FROM customers) AS total,
-        (SELECT COUNT(*) FROM customers WHERE NULLIF(trim(CAST(authUserId AS TEXT)), '') IS NULL) AS guestCustomers,
-        (SELECT COUNT(*) FROM abandoned_carts WHERE convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '') AS abandonedCarts,
-        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} AND NOT EXISTS (SELECT 1 FROM orders older WHERE older.customerId = o.customerId AND older.status IN ${saleStatusSql} AND datetime(older.createdAt) < datetime(o.createdAt)) GROUP BY o.customerId)) AS newCustomers,
-        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId HAVING COUNT(*) > 1)) AS recurrentCustomers,
-        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId)) AS customersWithOrders
+        (SELECT COUNT(*) FROM customers WHERE NULLIF(trim(CAST(authUserId AS TEXT)), '') IS NULL) AS "guestCustomers",
+        (SELECT COUNT(*) FROM abandoned_carts WHERE convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '') AS "abandonedCarts",
+        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} AND NOT EXISTS (SELECT 1 FROM orders older WHERE older.customerId = o.customerId AND older.status IN ${saleStatusSql} AND datetime(older.createdAt) < datetime(o.createdAt)) GROUP BY o.customerId)) AS "newCustomers",
+        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId HAVING COUNT(*) > 1)) AS "recurrentCustomers",
+        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId)) AS "customersWithOrders"
       `, [...orderParams, ...validSaleStatuses, ...period, ...orderParams, ...orderParams]),
       get(`SELECT
         (SELECT COALESCE(SUM(o.subtotal), 0) FROM orders o WHERE ${periodWhere}) AS grossSales,
