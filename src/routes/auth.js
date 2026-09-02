@@ -151,20 +151,20 @@ router.delete('/addresses/:id', requireUser, async (req, res, next) => { try { c
 
 router.get('/orders', requireUser, async (req, res, next) => {
   try {
-    const orders = await all('SELECT id, createdAt AS date, status, total FROM orders WHERE userId = ? ORDER BY createdAt DESC', [req.user.id]);
-    const result = await Promise.all(orders.map(async (order) => ({ ...order, products: (await all('SELECT productName FROM order_items WHERE orderId = ? ORDER BY id', [order.id])).map(item => item.productName) })));
+    const orders = await all('SELECT id, createdat AS date, status, total FROM orders WHERE userid = ? ORDER BY createdat DESC', [req.user.id]);
+    const result = await Promise.all(orders.map(async (order) => ({ ...order, products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
     res.json(result);
   } catch (error) { next(error); }
 });
 
 router.get('/orders/:id', requireUser, async (req, res, next) => {
   try {
-    const order = await get(`SELECT id, createdAt AS date, status, total, subtotal, shippingTotal, discountTotal, shippingAddress
-      FROM orders WHERE id = ? AND userId = ?`, [req.params.id, req.user.id]);
+    const order = await get(`SELECT id, createdat AS date, status, total, subtotal, shippingtotal AS "shippingTotal", discounttotal AS "discountTotal", shippingaddress AS "shippingAddress"
+      FROM orders WHERE id = ? AND userid = ?`, [req.params.id, req.user.id]);
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
-    const products = await all('SELECT productId, productName, quantity, unitPrice FROM order_items WHERE orderId = ? ORDER BY id', [order.id]);
+    const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
     let shippingAddress = {};
-    try { shippingAddress = JSON.parse(order.shippingAddress); } catch { /* dirección histórica incompleta */ }
+    try { shippingAddress = typeof order.shippingAddress === 'string' ? JSON.parse(order.shippingAddress) : order.shippingAddress || {}; } catch { /* dirección histórica incompleta */ }
     delete order.shippingAddress;
     res.json({ ...order, shippingAddress, products });
   } catch (error) { next(error); }
