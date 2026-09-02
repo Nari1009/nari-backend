@@ -2,7 +2,7 @@ const { all, run } = require('../db/init');
 const { sendAbandonedCartEmail } = require('./email');
 
 const processAbandonedCarts = async () => {
-  const carts = await all(`SELECT * FROM abandoned_carts WHERE convertedAt IS NULL AND ((reminder1SentAt IS NULL AND datetime(lastActivityAt) <= datetime('now', '-1 day')) OR (reminder1SentAt IS NOT NULL AND reminder2SentAt IS NULL AND datetime(lastActivityAt) <= datetime('now', '-3 days'))) ORDER BY lastActivityAt ASC LIMIT 100`);
+  const carts = await all(`SELECT * FROM abandoned_carts WHERE (convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '') AND ((reminder1SentAt IS NULL AND datetime(lastActivityAt) <= datetime('now', '-1 day')) OR (reminder1SentAt IS NOT NULL AND reminder2SentAt IS NULL AND datetime(lastActivityAt) <= datetime('now', '-3 days'))) ORDER BY lastActivityAt ASC LIMIT 100`);
   for (const cart of carts) {
     let items;
     try { items = JSON.parse(cart.items); } catch { continue; }
