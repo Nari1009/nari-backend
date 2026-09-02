@@ -58,13 +58,15 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   const product = await get(
-    'SELECT * FROM products WHERE id = ? AND status = ?',
-    [req.params.id, 'active']
+    'SELECT * FROM products WHERE id = ?',
+    [req.params.id]
   );
 
   if (!product) {
-    return res.status(404).json({ error: 'Product not found' });
+    return res.status(404).json({ error: 'Product not found', code: 'PRODUCT_NOT_FOUND' });
   }
+
+  if (product.status !== 'active') return res.status(410).json({ error: 'Este producto ya no está disponible.', code: 'PRODUCT_INACTIVE', status: product.status });
 
   res.json((await withRatingDistribution([product]))[0]);
 });
