@@ -19,7 +19,8 @@ const serializeList = (value) => {
   return JSON.stringify(Array.isArray(parsed) ? parsed : value.split('\n').map((item) => item.trim()).filter(Boolean));
 };
 const listColumns = new Set(['skinTypes', 'concerns', 'ingredients', 'featuredIngredients', 'benefits', 'howToUse', 'images']);
-const validSaleStatuses = ['Pagado', 'Preparando', 'Enviado', 'Entregado'];
+// DEV/mock: una orden no cancelada representa una venta registrada; el pago real queda pendiente de paymentStatus.
+const validSaleStatuses = ['Pendiente', 'Preparando', 'Enviado', 'Entregado'];
 const saleStatusSql = `(${validSaleStatuses.map(() => '?').join(',')})`;
 const dashboardDate = (value, fallback) => {
   const parsed = value ? new Date(value) : fallback;
@@ -201,7 +202,7 @@ router.get('/dashboard', async (req, res, next) => {
       all(`SELECT date(o.createdAt) AS label, COALESCE(SUM(o.total), 0) AS sales, COUNT(*) AS orders FROM orders o WHERE ${periodWhere} GROUP BY date(o.createdAt) ORDER BY label`, orderParams),
       all(`SELECT id, name, brand, stock, minimumStock, status FROM products WHERE stock = 0 OR (stock > 0 AND stock <= COALESCE(minimumStock, ?)) ORDER BY stock ASC, name ASC`, [lowStockThreshold]),
       all(`SELECT oi.productId, oi.productName, SUM(oi.quantity) AS units, SUM(oi.quantity * oi.unitPrice) AS sales, SUM(oi.quantity * (oi.unitPrice - COALESCE(oi.unitCost, p.cost, 0))) AS profit FROM order_items oi JOIN orders o ON o.id = oi.orderId LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere} GROUP BY oi.productId, oi.productName ORDER BY units DESC LIMIT 5`, orderParams),
-      all(`SELECT o.id, o.createdAt AS date, o.status, o.total, c.firstName, c.lastName, c.email FROM orders o LEFT JOIN customers c ON c.id = o.customerId OR c.authUserId = o.userId ORDER BY o.createdAt DESC LIMIT 5`),
+      all(`SELECT o.id, o.createdAt AS date, o.status, o.total, COALESCE(o.customerFirstNameSnapshot, c.firstName) AS firstName, COALESCE(o.customerLastNameSnapshot, c.lastName) AS lastName, COALESCE(o.customerEmailSnapshot, c.email) AS email FROM orders o LEFT JOIN customers c ON c.id = o.customerId OR c.authUserId = o.userId ORDER BY o.createdAt DESC LIMIT 5`),
       get(`SELECT (SELECT COUNT(*) FROM customers) AS total, (SELECT COUNT(*) FROM customers WHERE authUserId IS NULL) AS guestCustomers, (SELECT COUNT(*) FROM abandoned_carts WHERE convertedAt IS NULL) AS abandonedCarts, (SELECT COUNT(*) FROM customers WHERE datetime(createdAt) >= datetime(?) AND datetime(createdAt) < datetime(?)) AS newCustomers, (SELECT COUNT(*) FROM (SELECT COALESCE(o.customerId, o.userId) AS customerKey FROM orders o WHERE ${periodWhere} GROUP BY customerKey HAVING COUNT(*) > 1)) AS recurrentCustomers`, [...period, ...orderParams]),
       get(`SELECT
         (SELECT COALESCE(SUM(o.subtotal), 0) FROM orders o WHERE ${periodWhere}) AS grossSales,
@@ -212,7 +213,7 @@ router.get('/dashboard', async (req, res, next) => {
         (SELECT COALESCE(SUM(oi.quantity * COALESCE(oi.unitCost, p.cost, 0)), 0) FROM orders o JOIN order_items oi ON oi.orderId = o.id LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere}) AS productCost`, [...orderParams, ...orderParams, ...orderParams, ...orderParams, ...orderParams, ...orderParams]),
       get(`SELECT COALESCE(SUM(oi.quantity * COALESCE(oi.unitCost, p.cost, 0)), 0) AS productCost FROM orders o JOIN order_items oi ON oi.orderId = o.id LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere}`, previousParams),
     ]);
-    const attention = { outOfStock: inventory.filter((product) => product.stock === 0).length, lowStock: inventory.filter((product) => product.stock > 0).length, pendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pagado' AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`, period).then((row) => row.count), oldPendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pagado' AND datetime(o.createdAt) < datetime('now', '-1 day')`, []).then((row) => row.count), paymentIssues: 0 };
+    const attention = { outOfStock: inventory.filter((product) => product.stock === 0).length, lowStock: inventory.filter((product) => product.stock > 0).length, pendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pendiente' AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`, period).then((row) => row.count), oldPendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pendiente' AND datetime(o.createdAt) < datetime('now', '-1 day')`, []).then((row) => row.count), paymentIssues: 0 };
     const totalWithOrders = await get(`SELECT COUNT(*) AS count FROM (SELECT COALESCE(o.customerId, o.userId) AS customerKey FROM orders o WHERE ${periodWhere} GROUP BY customerKey)`, orderParams);
     const margin = Number(current.sales || 0) - Number(financial.productCost || 0) - Number(financial.paymentFees || 0) - Number(financial.shippingCosts || 0) - Number(financial.refunds || 0);
     const previousMargin = Number(previous.sales || 0) - Number(previousCosts.productCost || 0);
@@ -235,23 +236,40 @@ router.get('/customers', async (req, res) => {
   res.json(customers.map((customer) => ({ ...customer, orders: [] })));
 });
 
+router.get('/abandoned-carts', async (req, res, next) => {
+  try {
+    const carts = await all(`SELECT a.id, a.email, a.items, a.lastactivityat AS "lastActivityAt", a.createdat AS "createdAt", a.updatedat AS "updatedAt", a.convertedat AS "convertedAt", c.firstname AS "firstName", c.lastname AS "lastName", c.phone FROM abandoned_carts a LEFT JOIN customers c ON lower(trim(c.email)) = lower(trim(a.email)) ORDER BY a.updatedat DESC LIMIT 100`);
+    res.json(carts.map((cart) => { let items = []; try { items = JSON.parse(cart.items); } catch { /* registro corrupto: se muestra sin items */ } return { ...cart, status: cart.convertedAt ? 'converted' : 'active', items: Array.isArray(items) ? items : [] }; }));
+  } catch (error) { next(error); }
+});
+
+router.get('/abandoned-carts/:id', async (req, res, next) => {
+  try {
+    const cart = await get(`SELECT a.id, a.email, a.items, a.lastactivityat AS "lastActivityAt", a.createdat AS "createdAt", a.updatedat AS "updatedAt", a.convertedat AS "convertedAt", c.firstname AS "firstName", c.lastname AS "lastName", c.phone FROM abandoned_carts a LEFT JOIN customers c ON lower(trim(c.email)) = lower(trim(a.email)) WHERE a.id = ?`, [req.params.id]);
+    if (!cart) return res.status(404).json({ error: 'Carrito no encontrado.' });
+    let items = []; try { items = JSON.parse(cart.items); } catch { /* registro corrupto: se muestra sin items */ }
+    res.json({ ...cart, status: cart.convertedAt ? 'converted' : 'active', items: Array.isArray(items) ? items : [] });
+  } catch (error) { next(error); }
+});
+
 router.get('/customers/:id', async (req, res) => {
   const customer = await get('SELECT id, authUserId, email, firstName, lastName, phone, firstPurchaseAt, lastPurchaseAt, orderCount, totalPurchased, latestAddress, city, department, country, status, notes, createdAt, updatedAt FROM customers WHERE id = ?', [req.params.id]);
   if (!customer) return res.status(404).json({ error: 'Customer not found' });
   const orders = await all(`SELECT id, createdat AS date, total, status, customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot"
     FROM orders WHERE customerid = ? ORDER BY createdat DESC`, [customer.id]);
-  res.json({ ...customer, orders });
+  const purchaseDates = orders.map((order) => order.date).filter(Boolean);
+  res.json({ ...customer, firstPurchaseAt: purchaseDates[purchaseDates.length - 1] || null, lastPurchaseAt: purchaseDates[0] || null, orders });
 });
 
 router.get('/orders', async (req, res) => {
-  const orders = await all(`SELECT orders.id, orders.createdat AS date, orders.status, orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", customers.firstname AS "firstName", customers.lastname AS "lastName", customers.email
+  const orders = await all(`SELECT orders.id, orders.createdat AS date, orders.status, orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid ORDER BY orders.createdat DESC`);
   const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
   res.json(result);
 });
 
 router.get('/orders/:id', async (req, res) => {
-  const order = await get(`SELECT orders.id, orders.createdat AS date, orders.status, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", customers.firstname AS "firstName", customers.lastname AS "lastName", customers.email, customers.phone
+  const order = await get(`SELECT orders.id, orders.createdat AS date, orders.status, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid WHERE orders.id = ?`, [req.params.id]);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
