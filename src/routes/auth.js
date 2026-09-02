@@ -55,7 +55,7 @@ router.post('/login', async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || '');
-    const user = await get('SELECT * FROM auth_users WHERE email = ? AND isActive = 1', [email]);
+    const user = await get('SELECT id, email, firstname AS "firstName", lastname AS "lastName", phone, passwordhash AS "passwordHash", isactive AS "isActive" FROM auth_users WHERE email = ? AND isactive = 1', [email]);
     if (!user) return res.status(401).json({ error: 'El correo no está registrado.' });
     if (!verifyPassword(password, user.passwordHash)) return res.status(401).json({ error: 'La contraseña es incorrecta.' });
     await run('UPDATE auth_users SET lastLoginAt = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
