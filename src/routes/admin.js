@@ -242,19 +242,19 @@ router.get('/customers/:id', async (req, res) => {
 });
 
 router.get('/orders', async (req, res) => {
-  const orders = await all(`SELECT orders.id, orders.createdAt AS date, orders.status, orders.total, orders.subtotal, orders.shippingTotal, orders.discountTotal, orders.shippingProvider, orders.trackingNumber, customers.id AS customerId, customers.firstName, customers.lastName, customers.email
-    FROM orders LEFT JOIN customers ON customers.id = orders.customerId OR customers.authUserId = orders.userId ORDER BY orders.createdAt DESC`);
-  const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', products: await all('SELECT productName, quantity, unitPrice FROM order_items WHERE orderId = ? ORDER BY id', [order.id]) })));
+  const orders = await all(`SELECT orders.id, orders.createdat AS date, orders.status, orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", customers.id AS "customerId", customers.firstname AS "firstName", customers.lastname AS "lastName", customers.email
+    FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid ORDER BY orders.createdat DESC`);
+  const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
   res.json(result);
 });
 
 router.get('/orders/:id', async (req, res) => {
-  const order = await get(`SELECT orders.id, orders.createdAt AS date, orders.status, orders.total, orders.shippingAddress, orders.shippingProvider, orders.trackingNumber, customers.id AS customerId, customers.firstName, customers.lastName, customers.email, customers.phone
-    FROM orders LEFT JOIN customers ON customers.id = orders.customerId OR customers.authUserId = orders.userId WHERE orders.id = ?`, [req.params.id]);
+  const order = await get(`SELECT orders.id, orders.createdat AS date, orders.status, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", customers.id AS "customerId", customers.firstname AS "firstName", customers.lastname AS "lastName", customers.email, customers.phone
+    FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid WHERE orders.id = ?`, [req.params.id]);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  const products = await all('SELECT productId, productName, quantity, unitPrice FROM order_items WHERE orderId = ? ORDER BY id', [order.id]);
+  const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
   let shippingAddress = {};
-  try { shippingAddress = JSON.parse(order.shippingAddress); } catch { /* mantiene dirección vacía si un registro antiguo está incompleto */ }
+  try { shippingAddress = typeof order.shippingAddress === 'string' ? JSON.parse(order.shippingAddress) : order.shippingAddress || {}; } catch { /* mantiene dirección vacía si un registro antiguo está incompleto */ }
   delete order.shippingAddress;
   res.json({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', shippingAddress, products });
 });
