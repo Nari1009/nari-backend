@@ -47,6 +47,13 @@ const sendPasswordResetEmail = ({ to, firstName, resetUrl }) => sendEmail({
   textBody: `Hola ${firstName || ''},\n\nCambia tu contraseña de NARI usando este enlace:\n${resetUrl}\n\nEl enlace vence en 30 minutos y solo puede usarse una vez.`,
 });
 
+const sendEmailVerification = ({ to, firstName, verifyUrl }) => sendEmail({
+  to,
+  subject: 'Confirma tu correo en NARI',
+  htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>Confirma tu correo para habilitar tu cuenta NARI.</p><p><a href="${escapeHtml(verifyUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Confirmar mi correo</a></p><p>Este enlace vence en 24 horas y solo puede usarse una vez.</p><p>Si no creaste esta cuenta, ignora este correo.</p></div>`,
+  textBody: `Hola ${firstName || ''},\n\nConfirma tu correo para habilitar tu cuenta NARI:\n${verifyUrl}\n\nEste enlace vence en 24 horas y solo puede usarse una vez. Si no creaste esta cuenta, ignora este correo.`,
+});
+
 const sendWelcomeEmail = ({ to, firstName }) => sendEmail({
   to,
   subject: 'Bienvenido a NARI',
@@ -75,4 +82,4 @@ const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber 
   textBody: `Hola ${firstName || ''},\n\n${reminderNumber === 1 ? 'Vimos que dejaste productos en tu carrito.' : 'Este es el último recordatorio de tu carrito.'}\n\n${items.map((item) => `- ${item.name} · ${item.quantity} unidad(es)`).join('\n')}\n\nContinúa tu compra aquí:\n${cartUrl}`,
 });
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
+module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
