@@ -156,9 +156,10 @@ router.patch('/password', requireUser, async (req, res, next) => {
     const newPassword = String(req.body?.newPassword || '');
     if (!currentPassword || !strongPassword(newPassword)) return res.status(400).json({ error: 'La nueva contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y símbolo.' });
     if (currentPassword === newPassword) return res.status(400).json({ error: 'La nueva contraseña debe ser diferente.' });
-    const user = await get('SELECT passwordHash FROM auth_users WHERE id = ? AND isActive = 1', [req.user.id]);
+    const user = await get('SELECT passwordhash AS "passwordHash" FROM auth_users WHERE id = ? AND isactive = 1', [req.user.id]);
     if (!user || !verifyPassword(currentPassword, user.passwordHash)) return res.status(400).json({ error: 'La contraseña actual es incorrecta.' });
-    await run('UPDATE auth_users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [passwordHash(newPassword), req.user.id]);
+    const passwordUpdate = await run('UPDATE auth_users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [passwordHash(newPassword), req.user.id]);
+    if (passwordUpdate.changes !== 1) return res.status(500).json({ error: 'No pudimos actualizar la contraseña.' });
     await run('DELETE FROM auth_sessions WHERE userId = ?', [req.user.id]);
     try {
       await sendPasswordChangedEmail({ to: req.user.email, firstName: req.user.firstName });
