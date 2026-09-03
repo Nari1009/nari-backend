@@ -265,7 +265,6 @@ router.post('/forgot-password', async (req, res, next) => {
         await sendPasswordResetEmail({ to: user.email, firstName: user.firstName, resetUrl });
       } catch (emailError) {
         console.error('Password reset email could not be sent:', emailError.message);
-        return res.status(503).json({ error: 'El servicio de correo aún no está listo. Intenta nuevamente más tarde.' });
       }
     }
     res.json({ message: resetMessage });
@@ -296,6 +295,14 @@ router.post('/reset-password', async (req, res, next) => {
       await run('DELETE FROM auth_sessions WHERE userId = ?', [reset.userId]);
       await run('COMMIT');
     } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
+    const user = await get('SELECT email, firstName FROM auth_users WHERE id = ?', [reset.userId]);
+    if (user) {
+      try {
+        await sendPasswordChangedEmail({ to: user.email, firstName: user.firstName });
+      } catch (emailError) {
+        console.error('Password reset notification could not be sent:', emailError.message);
+      }
+    }
     res.json({ message: 'Contraseña actualizada. Ya puedes iniciar sesión.' });
   } catch (error) { next(error); }
 });
