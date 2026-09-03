@@ -209,7 +209,7 @@ router.post('/forgot-password', async (req, res, next) => {
         await sendPasswordResetEmail({ to: user.email, firstName: user.firstName, resetUrl });
       } catch (emailError) {
         console.error('Password reset email could not be sent:', emailError.message);
-        return res.status(503).json({ error: 'El servicio de correo aún no está listo. Verifica la aprobación del servidor en Postmark.' });
+        return res.status(503).json({ error: 'El servicio de correo aún no está listo. Intenta nuevamente más tarde.' });
       }
     }
     res.json({ message: resetMessage });
