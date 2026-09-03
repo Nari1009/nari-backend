@@ -286,16 +286,18 @@ router.post('/reset-password', async (req, res, next) => {
     const token = String(req.body?.token || '');
     const password = String(req.body?.password || '');
     if (!token || !strongPassword(password)) return res.status(400).json({ error: 'La contraseña debe tener mínimo 8 caracteres, mayúscula, minúscula, número y símbolo.' });
-    const reset = await get('SELECT id, userId FROM password_reset_tokens WHERE tokenHash = ? AND usedAt IS NULL AND expiresAt > ?', [hashToken(token), new Date().toISOString()]);
+    const reset = await get('SELECT id, userid AS "userId" FROM password_reset_tokens WHERE tokenHash = ? AND usedAt IS NULL AND expiresAt > ?', [hashToken(token), new Date().toISOString()]);
     if (!reset) return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
     await run('BEGIN TRANSACTION');
     try {
-      await run('UPDATE auth_users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [passwordHash(password), reset.userId]);
-      await run('UPDATE password_reset_tokens SET usedAt = CURRENT_TIMESTAMP WHERE id = ?', [reset.id]);
+      const passwordUpdate = await run('UPDATE auth_users SET passwordHash = ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [passwordHash(password), reset.userId]);
+      if (passwordUpdate.changes !== 1) throw new Error('Password reset user was not updated.');
+      const tokenUpdate = await run('UPDATE password_reset_tokens SET usedAt = CURRENT_TIMESTAMP WHERE id = ? AND usedAt IS NULL', [reset.id]);
+      if (tokenUpdate.changes !== 1) throw new Error('Password reset token was not consumed.');
       await run('DELETE FROM auth_sessions WHERE userId = ?', [reset.userId]);
       await run('COMMIT');
     } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
-    const user = await get('SELECT email, firstName FROM auth_users WHERE id = ?', [reset.userId]);
+    const user = await get('SELECT email, firstname AS "firstName" FROM auth_users WHERE id = ?', [reset.userId]);
     if (user) {
       try {
         await sendPasswordChangedEmail({ to: user.email, firstName: user.firstName });
