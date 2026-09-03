@@ -84,6 +84,7 @@ router.post('/resend-verification', async (req, res, next) => {
     const email = normalizeEmail(req.body?.email);
     if (!validEmail(email)) return res.json({ message: verificationMessage });
     const user = await get('SELECT id, email, firstname AS "firstName", emailverifiedat AS "emailVerifiedAt" FROM auth_users WHERE email = ? AND isactive = 1', [email]);
+    if (user?.emailVerifiedAt) return res.json({ alreadyVerified: true, message: 'Tu correo ya está verificado. Ya puedes iniciar sesión.' });
     if (user && !user.emailVerifiedAt && await canResendEmailVerification(user.id)) {
       const verification = await createEmailVerification(user.id);
       try {
