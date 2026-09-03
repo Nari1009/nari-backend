@@ -1,4 +1,4 @@
-const postmarkEndpoint = 'https://api.postmarkapp.com/email';
+const resendEndpoint = 'https://api.resend.com/emails';
 
 const escapeHtml = (value) => String(value || '')
   .replace(/&/g, '&amp;')
@@ -7,20 +7,38 @@ const escapeHtml = (value) => String(value || '')
   .replace(/"/g, '&quot;')
   .replace(/'/g, '&#039;');
 
-const sendEmail = async ({ to, subject, htmlBody, textBody }) => {
-  const token = String(process.env.POSTMARK_SERVER_TOKEN || '').trim();
-  const from = String(process.env.POSTMARK_FROM_EMAIL || '').trim();
-  const fromName = String(process.env.POSTMARK_FROM_NAME || 'NARI').trim();
-  if (!token || !from) throw new Error('Postmark is not configured.');
+const emailConfig = () => {
+  const apiKey = String(process.env.RESEND_API_KEY || '').trim();
+  const fromEmail = String(process.env.RESEND_FROM_EMAIL || '').trim();
+  const fromName = String(process.env.RESEND_FROM_NAME || '').trim();
+  const replyTo = String(process.env.RESEND_REPLY_TO || '').trim();
+  if (!apiKey || !fromEmail || !fromName || !replyTo) throw new Error('Transactional email is not configured.');
+  return { apiKey, from: `${fromName} <${fromEmail}>`, replyTo };
+};
 
-  const response = await fetch(postmarkEndpoint, {
+const sendEmail = async ({ to, subject, htmlBody, textBody }) => {
+  const config = emailConfig();
+  const response = await fetch(resendEndpoint, {
     method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/json', 'X-Postmark-Server-Token': token },
-    body: JSON.stringify({ From: `${fromName} <${from}>`, To: to, Subject: subject, HtmlBody: htmlBody, TextBody: textBody, MessageStream: 'outbound' }),
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      from: config.from,
+      to: [to],
+      reply_to: config.replyTo,
+      subject,
+      html: htmlBody,
+      text: textBody,
+    }),
   });
-  if (!response.ok) throw new Error(`Postmark request failed with status ${response.status}.`);
+  if (!response.ok) throw new Error(`Transactional email request failed with status ${response.status}.`);
   return response.json();
 };
+
+const supportEmail = () => String(process.env.RESEND_REPLY_TO || '').trim();
 
 const sendPasswordResetEmail = ({ to, firstName, resetUrl }) => sendEmail({
   to,
@@ -32,21 +50,21 @@ const sendPasswordResetEmail = ({ to, firstName, resetUrl }) => sendEmail({
 const sendWelcomeEmail = ({ to, firstName }) => sendEmail({
   to,
   subject: 'Bienvenido a NARI',
-  htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>Tu cuenta fue creada correctamente. Ahora puedes iniciar sesión, consultar tus pedidos y mantener tus datos actualizados desde tu espacio personal.</p><p>Gracias por elegir NARI.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(process.env.POSTMARK_FROM_EMAIL)}">${escapeHtml(process.env.POSTMARK_FROM_EMAIL)}</a>.</p></div>`,
-  textBody: `Hola ${firstName || ''},\n\nTu cuenta de NARI fue creada correctamente. Ahora puedes iniciar sesión, consultar tus pedidos y mantener tus datos actualizados desde tu espacio personal.\n\nGracias por elegir NARI.\n\nSi necesitas ayuda, escríbenos a ${process.env.POSTMARK_FROM_EMAIL || 'NARI'}.`,
+  htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>Tu cuenta fue creada correctamente. Ahora puedes iniciar sesión, consultar tus pedidos y mantener tus datos actualizados desde tu espacio personal.</p><p>Gracias por elegir NARI.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p></div>`,
+  textBody: `Hola ${firstName || ''},\n\nTu cuenta de NARI fue creada correctamente. Ahora puedes iniciar sesión, consultar tus pedidos y mantener tus datos actualizados desde tu espacio personal.\n\nGracias por elegir NARI.\n\nSi necesitas ayuda, escríbenos a ${supportEmail()}.`,
 });
 
 const sendPasswordChangedEmail = ({ to, firstName }) => sendEmail({
   to,
   subject: 'Tu contraseña de NARI fue actualizada',
-  htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>La contraseña de tu cuenta NARI fue actualizada correctamente.</p><p>Si tú no realizaste este cambio, escribe inmediatamente a <a href="mailto:${escapeHtml(process.env.POSTMARK_FROM_EMAIL)}">${escapeHtml(process.env.POSTMARK_FROM_EMAIL)}</a> para recibir ayuda.</p><p>Por seguridad, cerramos todas las sesiones activas de tu cuenta.</p></div>`,
-  textBody: `Hola ${firstName || ''},\n\nLa contraseña de tu cuenta NARI fue actualizada correctamente.\n\nSi tú no realizaste este cambio, escribe inmediatamente a ${process.env.POSTMARK_FROM_EMAIL || 'NARI'} para recibir ayuda.\n\nPor seguridad, cerramos todas las sesiones activas de tu cuenta.`,
+  htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>La contraseña de tu cuenta NARI fue actualizada correctamente.</p><p>Si tú no realizaste este cambio, escribe inmediatamente a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a> para recibir ayuda.</p><p>Por seguridad, cerramos todas las sesiones activas de tu cuenta.</p></div>`,
+  textBody: `Hola ${firstName || ''},\n\nLa contraseña de tu cuenta NARI fue actualizada correctamente.\n\nSi tú no realizaste este cambio, escribe inmediatamente a ${supportEmail()} para recibir ayuda.\n\nPor seguridad, cerramos todas las sesiones activas de tu cuenta.`,
 });
 
 const sendReviewLinkEmail = ({ to, firstName, reviewUrl, productNames }) => sendEmail({
   to,
   subject: 'Cuéntanos qué te pareció tu compra en NARI',
-  htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>Esperamos que ya estés disfrutando tu pedido. Nos gustaría conocer tu experiencia con:</p><ul>${productNames.map((name) => `<li>${escapeHtml(name)}</li>`).join('')}</ul><p><a href="${escapeHtml(reviewUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Valorar mi compra</a></p><p>El enlace estará disponible durante 30 días. Solo podrás valorar productos de este pedido una vez.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(process.env.POSTMARK_FROM_EMAIL)}">${escapeHtml(process.env.POSTMARK_FROM_EMAIL)}</a>.</p></div>`,
+  htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>Esperamos que ya estés disfrutando tu pedido. Nos gustaría conocer tu experiencia con:</p><ul>${productNames.map((name) => `<li>${escapeHtml(name)}</li>`).join('')}</ul><p><a href="${escapeHtml(reviewUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Valorar mi compra</a></p><p>El enlace estará disponible durante 30 días. Solo podrás valorar productos de este pedido una vez.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p></div>`,
   textBody: `Hola ${firstName || ''},\n\nCuéntanos qué te pareció tu compra en NARI:\n${productNames.map((name) => `- ${name}`).join('\n')}\n\nValora tu compra aquí:\n${reviewUrl}\n\nEl enlace estará disponible durante 30 días.`,
 });
 
