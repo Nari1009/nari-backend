@@ -22,6 +22,14 @@ const listColumns = new Set(['skinTypes', 'concerns', 'ingredients', 'featuredIn
 // DEV/mock: una orden no cancelada representa una venta registrada; el pago real queda pendiente de paymentStatus.
 const validSaleStatuses = ['Pendiente', 'Preparando', 'Enviado', 'Entregado'];
 const saleStatusSql = `(${validSaleStatuses.map(() => '?').join(',')})`;
+const customerAccountState = (customer) => {
+  const hasCustomerAuthUser = Boolean(String(customer.authUserId || '').trim());
+  const hasAuthUserRecord = Boolean(String(customer.authUserRecordId || '').trim());
+  const accountType = hasCustomerAuthUser ? 'registered' : 'guest';
+  const verificationStatus = !hasCustomerAuthUser || !hasAuthUserRecord ? 'none' : customer.emailVerifiedAt ? 'verified' : 'pending';
+  const accountStatus = !hasCustomerAuthUser || !hasAuthUserRecord ? 'none' : Number(customer.authIsActive) === 0 ? 'inactive' : 'active';
+  return { accountType, verificationStatus, accountStatus };
+};
 const dashboardDate = (value, fallback) => {
   const parsed = value ? new Date(value) : fallback;
   return Number.isNaN(parsed.getTime()) ? fallback.toISOString() : parsed.toISOString();
@@ -239,8 +247,8 @@ router.get('/inventory/movements', async (req, res) => {
 });
 
 router.get('/customers', async (req, res) => {
-  const customers = await all('SELECT id, authUserId, email, firstName, lastName, phone, firstPurchaseAt, lastPurchaseAt, orderCount, totalPurchased, latestAddress, city, department, country, status, notes, createdAt, updatedAt FROM customers ORDER BY createdAt DESC');
-  res.json(customers.map((customer) => ({ ...customer, orders: [] })));
+  const customers = await all('SELECT customers.id, customers.authuserid AS "authUserId", customers.email, customers.firstname AS "firstName", customers.lastname AS "lastName", customers.phone, customers.firstpurchaseat AS "firstPurchaseAt", customers.lastpurchaseat AS "lastPurchaseAt", customers.ordercount AS "orderCount", customers.totalpurchased AS "totalPurchased", customers.latestaddress AS "latestAddress", customers.city, customers.department, customers.country, customers.status, customers.notes, customers.createdat AS "createdAt", customers.updatedat AS "updatedAt", auth_users.id AS "authUserRecordId", auth_users.isactive AS "authIsActive", auth_users.emailverifiedat AS "emailVerifiedAt" FROM customers LEFT JOIN auth_users ON auth_users.id = customers.authuserid ORDER BY customers.createdat DESC');
+  res.json(customers.map((customer) => ({ ...customer, ...customerAccountState(customer), orders: [] })));
 });
 
 router.get('/abandoned-carts', async (req, res, next) => {
@@ -260,12 +268,12 @@ router.get('/abandoned-carts/:id', async (req, res, next) => {
 });
 
 router.get('/customers/:id', async (req, res) => {
-  const customer = await get('SELECT id, authUserId, email, firstName, lastName, phone, firstPurchaseAt, lastPurchaseAt, orderCount, totalPurchased, latestAddress, city, department, country, status, notes, createdAt, updatedAt FROM customers WHERE id = ?', [req.params.id]);
+  const customer = await get('SELECT customers.id, customers.authuserid AS "authUserId", customers.email, customers.firstname AS "firstName", customers.lastname AS "lastName", customers.phone, customers.firstpurchaseat AS "firstPurchaseAt", customers.lastpurchaseat AS "lastPurchaseAt", customers.ordercount AS "orderCount", customers.totalpurchased AS "totalPurchased", customers.latestaddress AS "latestAddress", customers.city, customers.department, customers.country, customers.status, customers.notes, customers.createdat AS "createdAt", customers.updatedat AS "updatedAt", auth_users.id AS "authUserRecordId", auth_users.isactive AS "authIsActive", auth_users.emailverifiedat AS "emailVerifiedAt" FROM customers LEFT JOIN auth_users ON auth_users.id = customers.authuserid WHERE customers.id = ?', [req.params.id]);
   if (!customer) return res.status(404).json({ error: 'Customer not found' });
   const orders = await all(`SELECT id, createdat AS date, total, status, customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot"
     FROM orders WHERE customerid = ? ORDER BY createdat DESC`, [customer.id]);
   const purchaseDates = orders.map((order) => order.date).filter(Boolean);
-  res.json({ ...customer, firstPurchaseAt: purchaseDates[purchaseDates.length - 1] || null, lastPurchaseAt: purchaseDates[0] || null, orders });
+  res.json({ ...customer, ...customerAccountState(customer), firstPurchaseAt: purchaseDates[purchaseDates.length - 1] || null, lastPurchaseAt: purchaseDates[0] || null, orders });
 });
 
 router.get('/orders', async (req, res) => {
