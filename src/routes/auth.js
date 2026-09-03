@@ -2,7 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const { all, get, run } = require('../db/init');
 const { normalizeEmail, passwordHash, verifyPassword, publicUser, createSession, hashToken, SESSION_COOKIE } = require('../services/auth');
-const { sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail } = require('../services/email');
+const { sendPasswordResetEmail, sendEmailVerification, sendWelcomeEmail, sendPasswordChangedEmail } = require('../services/email');
 const { VERIFICATION_TTL_MS, clientAppUrl, createEmailVerification, canResendEmailVerification } = require('../services/emailVerification');
 const { requireUser, cookieValue } = require('../middleware/clientAuth');
 const { createOrder } = require('../services/orderCreation');
@@ -103,7 +103,7 @@ router.post('/verify-email', async (req, res, next) => {
     if (!token) return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
     const record = await get('SELECT id, userid AS "userId", usedat AS "usedAt", expiresat AS "expiresAt" FROM email_verification_tokens WHERE tokenhash = ?', [hashToken(token)]);
     if (!record || record.usedAt || new Date(record.expiresAt).getTime() <= Date.now()) return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
-    const user = await get('SELECT id, emailverifiedat AS "emailVerifiedAt", isactive AS "isActive" FROM auth_users WHERE id = ?', [record.userId]);
+    const user = await get('SELECT id, email, firstname AS "firstName", emailverifiedat AS "emailVerifiedAt", welcomeemailsentat AS "welcomeEmailSentAt", isactive AS "isActive" FROM auth_users WHERE id = ?', [record.userId]);
     if (!user || Number(user.isActive) === 0) return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
     if (user.emailVerifiedAt) return res.json({ alreadyVerified: true, message: 'Este correo ya estaba confirmado.' });
     await run('BEGIN TRANSACTION');
@@ -114,6 +114,14 @@ router.post('/verify-email', async (req, res, next) => {
       await run('DELETE FROM email_verification_tokens WHERE userid = ? AND id <> ?', [record.userId, record.id]);
       await run('COMMIT');
     } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
+    if (!user.welcomeEmailSentAt) {
+      try {
+        await sendWelcomeEmail({ to: user.email, firstName: user.firstName });
+        await run('UPDATE auth_users SET welcomeemailsentat = CURRENT_TIMESTAMP WHERE id = ? AND welcomeemailsentat IS NULL', [user.id]);
+      } catch (emailError) {
+        console.error('Welcome email could not be sent:', emailError.message);
+      }
+    }
     res.json({ message: 'Correo confirmado. Ya puedes iniciar sesión.' });
   } catch (error) { next(error); }
 });
