@@ -2,7 +2,8 @@ const express = require('express');
 const crypto = require('crypto');
 const { all, get, run } = require('../db/init');
 const { normalizeEmail, passwordHash, verifyPassword, publicUser, createSession, hashToken, SESSION_COOKIE } = require('../services/auth');
-const { sendWelcomeEmail, sendPasswordResetEmail, sendPasswordChangedEmail } = require('../services/email');
+const { sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail } = require('../services/email');
+const { VERIFICATION_TTL_MS, clientAppUrl, createEmailVerification, canResendEmailVerification } = require('../services/emailVerification');
 const { requireUser, cookieValue } = require('../middleware/clientAuth');
 const { createOrder } = require('../services/orderCreation');
 const router = express.Router();
@@ -23,9 +24,10 @@ router.post('/register', async (req, res, next) => {
     const validation = validateRegistration(input);
     if (validation) return res.status(400).json({ error: validation });
     const email = normalizeEmail(input.email);
-    const existingAuthUser = await get('SELECT id, isactive AS "isActive" FROM auth_users WHERE email = ?', [email]);
+    const existingAuthUser = await get('SELECT id, isactive AS "isActive", emailverifiedat AS "emailVerifiedAt" FROM auth_users WHERE email = ?', [email]);
     if (existingAuthUser) {
       if (Number(existingAuthUser.isActive) === 0) return res.status(409).json({ code: 'ACCOUNT_INACTIVE', error: 'Esta cuenta está desactivada. Contacta con soporte para recuperar el acceso.' });
+      if (!existingAuthUser.emailVerifiedAt) return res.status(409).json({ code: 'EMAIL_NOT_VERIFIED', error: 'Este correo está pendiente de verificación.' });
       return res.status(409).json({ error: 'No fue posible crear la cuenta con esos datos.' });
     }
     const normalizedPhone = normalizePhone(input.phone);
@@ -34,6 +36,8 @@ router.post('/register', async (req, res, next) => {
     const id = `auth-${cryptoRandomId()}`;
     const customerId = `customer-${cryptoRandomId()}`;
     const user = { id, firstName: String(input.firstName).trim(), lastName: String(input.lastName).trim(), email, phone: String(input.phone).trim() };
+    const rawVerificationToken = crypto.randomBytes(32).toString('base64url');
+    const verification = { rawToken: rawVerificationToken, expiresAt: new Date(Date.now() + VERIFICATION_TTL_MS).toISOString() };
     await run('BEGIN TRANSACTION');
     try {
       await run('INSERT INTO auth_users (id, email, passwordHash, firstName, lastName, phone) VALUES (?, ?, ?, ?, ?, ?)', [id, email, passwordHash(input.password), user.firstName, user.lastName, user.phone]);
@@ -43,15 +47,18 @@ router.post('/register', async (req, res, next) => {
       } else {
         await run('INSERT INTO customers (id, authUserId, email, firstName, lastName, phone, phoneNormalized) VALUES (?, ?, ?, ?, ?, ?, ?)', [customerId, id, email, user.firstName, user.lastName, user.phone, normalizePhone(user.phone)]);
       }
+      await run('DELETE FROM email_verification_tokens WHERE userid = ? AND usedat IS NULL', [id]);
+      await run('INSERT INTO email_verification_tokens (id, userid, tokenhash, expiresat) VALUES (?, ?, ?, ?)', [`verify-${cryptoRandomId()}`, id, hashToken(verification.rawToken), verification.expiresAt]);
       await run('COMMIT');
     } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
-    await createSession(run, id, res);
     try {
-      await sendWelcomeEmail({ to: user.email, firstName: user.firstName });
+      const appUrl = clientAppUrl();
+      if (!appUrl) throw new Error('APP_URL is not configured.');
+      await sendEmailVerification({ to: user.email, firstName: user.firstName, verifyUrl: `${appUrl}/verify-email?token=${encodeURIComponent(verification.rawToken)}` });
     } catch (emailError) {
-      console.error('Welcome email could not be sent:', emailError.message);
+      console.error('Email verification could not be sent:', emailError.message);
     }
-    res.status(201).json({ user });
+    res.status(201).json({ registrationPendingVerification: true, message: 'Revisa tu correo para confirmar tu cuenta.' });
   } catch (error) { next(error); }
 });
 
@@ -59,9 +66,10 @@ router.post('/login', async (req, res, next) => {
   try {
     const email = normalizeEmail(req.body?.email);
     const password = String(req.body?.password || '');
-    const user = await get('SELECT id, email, firstname AS "firstName", lastname AS "lastName", phone, passwordhash AS "passwordHash", isactive AS "isActive" FROM auth_users WHERE email = ? AND isactive = 1', [email]);
+    const user = await get('SELECT id, email, firstname AS "firstName", lastname AS "lastName", phone, passwordhash AS "passwordHash", isactive AS "isActive", emailverifiedat AS "emailVerifiedAt" FROM auth_users WHERE email = ? AND isactive = 1', [email]);
     if (!user) return res.status(401).json({ error: 'El correo no está registrado.' });
     if (!verifyPassword(password, user.passwordHash)) return res.status(401).json({ error: 'La contraseña es incorrecta.' });
+    if (!user.emailVerifiedAt) return res.status(403).json({ code: 'EMAIL_NOT_VERIFIED', error: 'Debes confirmar tu correo antes de iniciar sesión.' });
     await run('UPDATE auth_users SET lastLoginAt = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
     await createSession(run, user.id, res);
     res.json({ user: publicUser(user) });
@@ -69,6 +77,45 @@ router.post('/login', async (req, res, next) => {
 });
 
 router.get('/me', requireUser, (req, res) => res.json({ user: req.user }));
+
+const verificationMessage = 'Si la cuenta existe y aún no está verificada, recibirás un nuevo correo de confirmación.';
+router.post('/resend-verification', async (req, res, next) => {
+  try {
+    const email = normalizeEmail(req.body?.email);
+    if (!validEmail(email)) return res.json({ message: verificationMessage });
+    const user = await get('SELECT id, email, firstname AS "firstName", emailverifiedat AS "emailVerifiedAt" FROM auth_users WHERE email = ? AND isactive = 1', [email]);
+    if (user && !user.emailVerifiedAt && await canResendEmailVerification(user.id)) {
+      const verification = await createEmailVerification(user.id);
+      try {
+        const appUrl = clientAppUrl();
+        if (!appUrl) throw new Error('APP_URL is not configured.');
+        await sendEmailVerification({ to: user.email, firstName: user.firstName, verifyUrl: `${appUrl}/verify-email?token=${encodeURIComponent(verification.rawToken)}` });
+      } catch (emailError) { console.error('Email verification resend could not be sent:', emailError.message); }
+    }
+    res.json({ message: verificationMessage });
+  } catch (error) { next(error); }
+});
+
+router.post('/verify-email', async (req, res, next) => {
+  try {
+    const token = String(req.body?.token || '');
+    if (!token) return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
+    const record = await get('SELECT id, userid AS "userId", usedat AS "usedAt", expiresat AS "expiresAt" FROM email_verification_tokens WHERE tokenhash = ?', [hashToken(token)]);
+    if (!record || record.usedAt || new Date(record.expiresAt).getTime() <= Date.now()) return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
+    const user = await get('SELECT id, emailverifiedat AS "emailVerifiedAt", isactive AS "isActive" FROM auth_users WHERE id = ?', [record.userId]);
+    if (!user || Number(user.isActive) === 0) return res.status(400).json({ error: 'El enlace no es válido o ya expiró.' });
+    if (user.emailVerifiedAt) return res.json({ alreadyVerified: true, message: 'Este correo ya estaba confirmado.' });
+    await run('BEGIN TRANSACTION');
+    try {
+      const used = await run('UPDATE email_verification_tokens SET usedat = CURRENT_TIMESTAMP WHERE id = ? AND usedat IS NULL', [record.id]);
+      if (!used.changes) throw new Error('Verification token already used.');
+      await run('UPDATE auth_users SET emailverifiedat = CURRENT_TIMESTAMP, updatedat = CURRENT_TIMESTAMP WHERE id = ? AND emailverifiedat IS NULL', [record.userId]);
+      await run('DELETE FROM email_verification_tokens WHERE userid = ? AND id <> ?', [record.userId, record.id]);
+      await run('COMMIT');
+    } catch (error) { await run('ROLLBACK').catch(() => undefined); throw error; }
+    res.json({ message: 'Correo confirmado. Ya puedes iniciar sesión.' });
+  } catch (error) { next(error); }
+});
 router.post('/logout', async (req, res, next) => {
   try {
     const raw = cookieValue(req.headers.cookie, SESSION_COOKIE);
