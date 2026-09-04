@@ -214,7 +214,7 @@ router.get('/orders', requireUser, async (req, res, next) => {
   try {
     const customer = await get('SELECT id FROM customers WHERE authuserid = ?', [req.user.id]);
     if (!customer) return res.json([]);
-    const orders = await all('SELECT id, createdat AS date, status, total, customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot" FROM orders WHERE customerid = ? ORDER BY createdat DESC', [customer.id]);
+  const orders = await all('SELECT id, createdat AS date, status, total, shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot" FROM orders WHERE customerid = ? ORDER BY createdat DESC', [customer.id]);
     const result = await Promise.all(orders.map(async (order) => ({ ...order, products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
     res.json(result);
   } catch (error) { next(error); }
@@ -224,7 +224,7 @@ router.get('/orders/:id', requireUser, async (req, res, next) => {
   try {
     const customer = await get('SELECT id FROM customers WHERE authuserid = ?', [req.user.id]);
     if (!customer) return res.status(404).json({ error: 'Pedido no encontrado.' });
-    const order = await get(`SELECT id, createdat AS date, status, total, subtotal, shippingtotal AS "shippingTotal", discounttotal AS "discountTotal", shippingaddress AS "shippingAddress", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot"
+    const order = await get(`SELECT id, createdat AS date, status, total, subtotal, shippingtotal AS "shippingTotal", discounttotal AS "discountTotal", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", shippingaddress AS "shippingAddress", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot"
       FROM orders WHERE id = ? AND customerid = ?`, [req.params.id, customer.id]);
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
     const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);

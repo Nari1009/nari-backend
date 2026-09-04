@@ -97,6 +97,26 @@ const sendOrderReceivedEmail = ({ order, items, accountUrl = null }) => {
   return sendEmail({ to: email, ...message });
 };
 
+const buildOrderShippedEmail = ({ order, items, accountUrl = null }) => {
+  const orderNumber = String(order?.id || '').trim();
+  const firstName = String(order?.customerFirstNameSnapshot || '').trim();
+  const provider = String(order?.shippingProvider || '').trim();
+  const tracking = String(order?.trackingNumber || '').trim();
+  const rows = (Array.isArray(items) ? items : []).map((item) => `<li>${escapeHtml(item.productName)} · Cantidad: ${Number(item.quantity || 0)}</li>`).join('');
+  const cta = accountUrl ? `<p style="margin:24px 0"><a href="${escapeHtml(accountUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Ver mi pedido</a></p>` : '';
+  return {
+    subject: `Tu pedido NARI #${orderNumber} va en camino`,
+    htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35;line-height:1.5"><h1 style="color:#064c3e">NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p><strong>¡Tu pedido va en camino!</strong></p><p>Tu pedido NARI <strong>#${escapeHtml(orderNumber)}</strong> fue enviado.</p><p><strong>Transportadora:</strong><br>${escapeHtml(provider)}</p><p><strong>Número de guía:</strong><br>${escapeHtml(tracking)}</p><p>El tiempo de entrega puede depender de la transportadora. Guarda este número para consultar el envío directamente con ella.</p>${rows ? `<h2 style="font-size:18px;color:#064c3e">Productos</h2><ul>${rows}</ul>` : ''}${cta}<p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p><p style="color:#587169">NARI<br>Skincare coreano</p></div>`,
+    textBody: `Hola ${firstName || ''},\n\n¡Tu pedido va en camino!\n\nTu pedido NARI #${orderNumber} fue enviado.\n\nTransportadora: ${provider}\nNúmero de guía: ${tracking}\n\nEl tiempo de entrega puede depender de la transportadora.\n\nProductos:\n${(Array.isArray(items) ? items : []).map((item) => `- ${item.productName || 'Producto'} · Cantidad: ${Number(item.quantity || 0)}`).join('\n')}${accountUrl ? `\n\nVer mi pedido: ${accountUrl}` : ''}\n\nSi necesitas ayuda, escríbenos a ${supportEmail()}.\n\nNARI · Skincare coreano`,
+  };
+};
+
+const sendOrderShippedEmail = ({ order, items, accountUrl = null }) => {
+  const email = String(order?.customerEmailSnapshot || '').trim();
+  if (!email) throw new Error('Order email snapshot is missing.');
+  return sendEmail({ to: email, ...buildOrderShippedEmail({ order, items, accountUrl }) });
+};
+
 const sendPasswordResetEmail = ({ to, firstName, resetUrl }) => sendEmail({
   to,
   subject: 'Recupera tu contraseña de NARI',
@@ -139,4 +159,4 @@ const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber 
   textBody: `Hola ${firstName || ''},\n\n${reminderNumber === 1 ? 'Vimos que dejaste productos en tu carrito.' : 'Este es el último recordatorio de tu carrito.'}\n\n${items.map((item) => `- ${item.name} · ${item.quantity} unidad(es)`).join('\n')}\n\nContinúa tu compra aquí:\n${cartUrl}`,
 });
 
-module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
+module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildOrderShippedEmail, sendOrderShippedEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
