@@ -4,7 +4,7 @@ const { requireAdmin } = require('../middleware/adminAuth');
 const { getContent, saveContent } = require('../db/content');
 const crypto = require('crypto');
 const { hashToken } = require('../services/auth');
-const { sendReviewLinkEmail, sendOrderShippedEmail } = require('../services/email');
+const { sendReviewLinkEmail, sendOrderShippedEmail, sendOrderDeliveredEmail } = require('../services/email');
 const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
 const { uploadProductImage } = require('../services/storage');
@@ -277,14 +277,14 @@ router.get('/customers/:id', async (req, res) => {
 });
 
 router.get('/orders', async (req, res) => {
-  const orders = await all(`SELECT orders.id, orders.createdat AS date, orders.status, orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
+  const orders = await all(`SELECT orders.id, orders.createdat AS date, orders.status, orders.deliveredat AS "deliveredAt", orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid ORDER BY orders.createdat DESC`);
   const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
   res.json(result);
 });
 
 router.get('/orders/:id', async (req, res) => {
-  const order = await get(`SELECT orders.id, orders.createdat AS date, orders.status, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
+  const order = await get(`SELECT orders.id, orders.createdat AS date, orders.status, orders.deliveredat AS "deliveredAt", orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid WHERE orders.id = ?`, [req.params.id]);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
@@ -350,9 +350,18 @@ router.patch('/orders/:id/status', async (req, res) => {
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const transitions = { Pendiente: ['Preparando', 'Cancelado'], Preparando: ['Pendiente', 'Cancelado'], Enviado: ['Entregado', 'Cancelado'], Entregado: [], Cancelado: [] };
   if (status === 'Enviado' || !transitions[order.currentStatus]?.includes(status)) return res.status(409).json({ error: 'Esta transición de estado no está permitida.' });
-  const result = await run('UPDATE orders SET status = ? WHERE id = ? AND status = ?', [status, req.params.id, order.currentStatus]);
+  const result = status === 'Entregado'
+    ? await run("UPDATE orders SET status = 'Entregado', deliveredat = COALESCE(deliveredat, CURRENT_TIMESTAMP) WHERE id = ? AND status = 'Enviado'", [req.params.id])
+    : await run('UPDATE orders SET status = ? WHERE id = ? AND status = ?', [status, req.params.id, order.currentStatus]);
   if (!result.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
-  const updatedOrder = await get('SELECT id, createdAt AS date, status, total FROM orders WHERE id = ?', [req.params.id]);
+  if (status === 'Entregado') {
+    try {
+      const persistedOrder = await get('SELECT id, userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
+      const items = await all('SELECT productname AS "productName", quantity FROM order_items WHERE orderid = ? ORDER BY id', [req.params.id]);
+      await sendOrderDeliveredEmail({ order: persistedOrder, items, accountUrl: persistedOrder?.userId ? `${String(process.env.APP_URL || '').replace(/\/$/, '')}/account/orders/${encodeURIComponent(req.params.id)}` : null });
+    } catch (emailError) { console.error('Order delivered email could not be sent:', emailError.message); }
+  }
+  const updatedOrder = await get('SELECT id, createdat AS date, status, total, deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
   res.json(updatedOrder);
 });
 

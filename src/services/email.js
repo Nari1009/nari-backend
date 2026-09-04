@@ -117,6 +117,29 @@ const sendOrderShippedEmail = ({ order, items, accountUrl = null }) => {
   return sendEmail({ to: email, ...buildOrderShippedEmail({ order, items, accountUrl }) });
 };
 
+const buildOrderDeliveredEmail = ({ order, items, accountUrl = null }) => {
+  const orderNumber = String(order?.id || '').trim();
+  const firstName = String(order?.customerFirstNameSnapshot || '').trim();
+  const deliveredAt = new Date(order?.deliveredAt);
+  const deliveryDate = Number.isNaN(deliveredAt.getTime()) ? 'Fecha no disponible' : deliveredAt.toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/Bogota' });
+  const provider = String(order?.shippingProvider || '').trim();
+  const tracking = String(order?.trackingNumber || '').trim();
+  const rows = (Array.isArray(items) ? items : []).map((item) => `<li>${escapeHtml(item.productName || 'Producto')} · Cantidad: ${Number(item.quantity || 0)}</li>`).join('');
+  const trackingBlock = provider || tracking ? `<p><strong>Seguimiento:</strong><br>${provider ? `Transportadora: ${escapeHtml(provider)}<br>` : ''}${tracking ? `Número de guía: ${escapeHtml(tracking)}` : ''}</p>` : '';
+  const cta = accountUrl ? `<p style="margin:24px 0"><a href="${escapeHtml(accountUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Ver mi pedido</a></p>` : '<p>Guarda este correo como referencia de tu pedido.</p>';
+  return {
+    subject: `Tu pedido NARI #${orderNumber} fue entregado`,
+    htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35;line-height:1.5"><h1 style="color:#064c3e">NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p><strong>¡Tu pedido fue entregado!</strong></p><p>Tu pedido NARI <strong>#${escapeHtml(orderNumber)}</strong> aparece como entregado.</p><p><strong>Fecha de entrega:</strong><br>${escapeHtml(deliveryDate)}</p>${trackingBlock}${rows ? `<h2 style="font-size:18px;color:#064c3e">Productos</h2><ul>${rows}</ul>` : ''}${cta}<p>Si tienes alguna novedad con tu entrega, contáctanos en <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p><p style="color:#587169">NARI<br>Skincare coreano</p></div>`,
+    textBody: `Hola ${firstName || ''},\n\n¡Tu pedido fue entregado!\n\nTu pedido NARI #${orderNumber} aparece como entregado.\n\nFecha de entrega: ${deliveryDate}\n${provider ? `\nTransportadora: ${provider}` : ''}${tracking ? `\nNúmero de guía: ${tracking}` : ''}${rows ? `\n\nProductos:\n${(Array.isArray(items) ? items : []).map((item) => `- ${item.productName || 'Producto'} · Cantidad: ${Number(item.quantity || 0)}`).join('\n')}` : ''}\n\n${accountUrl ? `Ver mi pedido: ${accountUrl}` : 'Guarda este correo como referencia de tu pedido.'}\n\nSi tienes alguna novedad con tu entrega, contáctanos en ${supportEmail()}.\n\nNARI · Skincare coreano`,
+  };
+};
+
+const sendOrderDeliveredEmail = ({ order, items, accountUrl = null }) => {
+  const email = String(order?.customerEmailSnapshot || '').trim();
+  if (!email) throw new Error('Order email snapshot is missing.');
+  return sendEmail({ to: email, ...buildOrderDeliveredEmail({ order, items, accountUrl }) });
+};
+
 const sendPasswordResetEmail = ({ to, firstName, resetUrl }) => sendEmail({
   to,
   subject: 'Recupera tu contraseña de NARI',
@@ -159,4 +182,4 @@ const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber 
   textBody: `Hola ${firstName || ''},\n\n${reminderNumber === 1 ? 'Vimos que dejaste productos en tu carrito.' : 'Este es el último recordatorio de tu carrito.'}\n\n${items.map((item) => `- ${item.name} · ${item.quantity} unidad(es)`).join('\n')}\n\nContinúa tu compra aquí:\n${cartUrl}`,
 });
 
-module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildOrderShippedEmail, sendOrderShippedEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
+module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
