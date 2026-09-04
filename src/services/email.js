@@ -40,6 +40,63 @@ const sendEmail = async ({ to, subject, htmlBody, textBody }) => {
 
 const supportEmail = () => String(process.env.RESEND_REPLY_TO || '').trim();
 
+const formatCop = (value) => new Intl.NumberFormat('es-CO', {
+  style: 'currency', currency: 'COP', maximumFractionDigits: 0,
+}).format(Number.isFinite(Number(value)) ? Number(value) : 0).replace(/\u00a0/g, ' ');
+
+const normalizeAddress = (value) => {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try { return JSON.parse(value); } catch { return {}; }
+};
+
+const addressLines = (value) => {
+  const address = normalizeAddress(value);
+  return [
+    address.firstName && address.lastName ? `${address.firstName} ${address.lastName}` : address.firstName || address.lastName,
+    address.addressLine1,
+    address.addressLine2,
+    address.neighborhood,
+    [address.city, address.department].filter(Boolean).join(' / '),
+    address.country,
+    address.phone,
+  ].map((line) => String(line || '').trim()).filter(Boolean);
+};
+
+const buildOrderReceivedEmail = ({ order, items, accountUrl = null }) => {
+  const orderItems = Array.isArray(items) ? items : [];
+  const discount = Number(order?.discountTotal || 0);
+  const shipping = Number(order?.shippingTotal || 0);
+  const itemRows = orderItems.map((item) => {
+    const quantity = Number(item.quantity || 0);
+    const unitPrice = Number(item.unitPrice || 0);
+    const lineTotal = unitPrice * quantity;
+    return `<tr><td style="padding:10px 0;border-bottom:1px solid #e7efec"><strong>${escapeHtml(item.productName)}</strong><br><span style="color:#587169">Cantidad: ${quantity} · ${formatCop(unitPrice)} c/u</span></td><td style="padding:10px 0;border-bottom:1px solid #e7efec;text-align:right;white-space:nowrap">${formatCop(lineTotal)}</td></tr>`;
+  }).join('');
+  const addressHtml = addressLines(order?.shippingAddress).map((line) => `<div>${escapeHtml(line)}</div>`).join('');
+  const discountRow = discount > 0 ? `<tr><td style="padding:4px 0">Descuento</td><td style="padding:4px 0;text-align:right">-${formatCop(discount)}</td></tr>` : '';
+  const registeredCta = accountUrl ? `<p style="margin:24px 0"><a href="${escapeHtml(accountUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Ver mis pedidos</a></p>` : '';
+  const firstName = String(order?.customerFirstNameSnapshot || '').trim();
+  const orderNumber = String(order?.id || '').trim();
+  const subject = `Recibimos tu pedido NARI #${orderNumber}`;
+  const textItems = orderItems.map((item) => `- ${item.productName || 'Producto'} · Cantidad: ${Number(item.quantity || 0)} · ${formatCop(item.unitPrice)} c/u · ${formatCop(Number(item.unitPrice || 0) * Number(item.quantity || 0))}`).join('\n');
+  const textAddress = addressLines(order?.shippingAddress).join('\n');
+  const textDiscount = discount > 0 ? `\nDescuento: -${formatCop(discount)}` : '';
+  const textCta = accountUrl ? `\nConsulta tus pedidos: ${accountUrl}` : '\nGuarda este correo como referencia de tu pedido.';
+  return {
+    subject,
+    htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35;line-height:1.5"><h1 style="color:#064c3e">NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p><strong>¡Gracias por tu pedido!</strong></p><p>Recibimos tu pedido y ya está registrado en nuestro sistema.</p><p><strong>Número de pedido:</strong><br>${escapeHtml(orderNumber)}</p><h2 style="font-size:18px;color:#064c3e">Productos</h2><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tbody>${itemRows}</tbody></table><h2 style="font-size:18px;color:#064c3e">Resumen</h2><table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tbody><tr><td style="padding:4px 0">Subtotal productos</td><td style="padding:4px 0;text-align:right">${formatCop(order?.subtotal)}</td></tr>${discountRow}<tr><td style="padding:4px 0">Envío</td><td style="padding:4px 0;text-align:right">${shipping > 0 ? formatCop(shipping) : 'Gratis'}</td></tr><tr><td style="padding:10px 0;border-top:1px solid #123f35"><strong>Total</strong></td><td style="padding:10px 0;border-top:1px solid #123f35;text-align:right"><strong>${formatCop(order?.total)}</strong></td></tr></tbody></table><h2 style="font-size:18px;color:#064c3e">Dirección de envío</h2><div>${addressHtml || 'No disponible'}</div>${registeredCta}<p>Recibimos tu pedido y podrás consultar actualizaciones posteriormente. Este mensaje confirma el registro del pedido; no constituye una confirmación de pago.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p><p style="color:#587169">NARI<br>Skincare coreano</p></div>`,
+    textBody: `Hola ${firstName || ''},\n\n¡Gracias por tu pedido! Recibimos tu pedido y ya está registrado en nuestro sistema.\n\nNúmero de pedido: ${orderNumber}\n\nProductos:\n${textItems}\n\nSubtotal productos: ${formatCop(order?.subtotal)}${textDiscount}\nEnvío: ${shipping > 0 ? formatCop(shipping) : 'Gratis'}\nTotal: ${formatCop(order?.total)}\n\nDirección de envío:\n${textAddress || 'No disponible'}\n\nEste mensaje confirma el registro del pedido; no constituye una confirmación de pago.${textCta}\n\nSi necesitas ayuda, escríbenos a ${supportEmail()}.\n\nNARI · Skincare coreano`,
+  };
+};
+
+const sendOrderReceivedEmail = ({ order, items, accountUrl = null }) => {
+  const email = String(order?.customerEmailSnapshot || '').trim();
+  if (!email) throw new Error('Order email snapshot is missing.');
+  const message = buildOrderReceivedEmail({ order, items, accountUrl });
+  return sendEmail({ to: email, ...message });
+};
+
 const sendPasswordResetEmail = ({ to, firstName, resetUrl }) => sendEmail({
   to,
   subject: 'Recupera tu contraseña de NARI',
@@ -82,4 +139,4 @@ const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber 
   textBody: `Hola ${firstName || ''},\n\n${reminderNumber === 1 ? 'Vimos que dejaste productos en tu carrito.' : 'Este es el último recordatorio de tu carrito.'}\n\n${items.map((item) => `- ${item.name} · ${item.quantity} unidad(es)`).join('\n')}\n\nContinúa tu compra aquí:\n${cartUrl}`,
 });
 
-module.exports = { sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
+module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
