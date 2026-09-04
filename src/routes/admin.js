@@ -4,7 +4,7 @@ const { requireAdmin } = require('../middleware/adminAuth');
 const { getContent, saveContent } = require('../db/content');
 const crypto = require('crypto');
 const { hashToken } = require('../services/auth');
-const { sendReviewLinkEmail } = require('../services/email');
+const { sendReviewLinkEmail, sendOrderShippedEmail } = require('../services/email');
 const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
 const { uploadProductImage } = require('../services/storage');
@@ -297,10 +297,26 @@ router.get('/orders/:id', async (req, res) => {
 router.patch('/orders/:id/shipping', async (req, res) => {
   const shippingProvider = String(req.body?.shippingProvider || '').trim();
   const trackingNumber = String(req.body?.trackingNumber || '').trim();
+  if (!shippingProvider || !trackingNumber) return res.status(400).json({ error: 'Proveedor y número de guía son obligatorios.' });
   if (shippingProvider.length > 120 || trackingNumber.length > 160) return res.status(400).json({ error: 'Los datos de envío superan el límite permitido.' });
-  const result = await run('UPDATE orders SET shippingProvider = ?, trackingNumber = ? WHERE id = ?', [shippingProvider || null, trackingNumber || null, req.params.id]);
-  if (!result.changes) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  res.json({ id: req.params.id, shippingProvider: shippingProvider || null, trackingNumber: trackingNumber || null });
+  const order = await get('SELECT id, status FROM orders WHERE id = ?', [req.params.id]);
+  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (!['Preparando', 'Enviado'].includes(order.status)) return res.status(409).json({ error: order.status === 'Pendiente' ? 'Cambia primero el pedido a Preparando.' : 'El seguimiento es de solo lectura para este estado.' });
+  const transitioningToShipped = order.status === 'Preparando';
+  const result = transitioningToShipped
+    ? await run("UPDATE orders SET shippingProvider = ?, trackingNumber = ?, status = 'Enviado' WHERE id = ? AND status = 'Preparando'", [shippingProvider, trackingNumber, req.params.id])
+    : await run("UPDATE orders SET shippingProvider = ?, trackingNumber = ? WHERE id = ? AND status = 'Enviado'", [shippingProvider, trackingNumber, req.params.id]);
+  if (!result.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
+  if (transitioningToShipped) {
+    try {
+      const persistedOrder = await get('SELECT id, userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber" FROM orders WHERE id = ?', [req.params.id]);
+      const items = await all('SELECT productname AS "productName", quantity FROM order_items WHERE orderid = ? ORDER BY id', [req.params.id]);
+      await sendOrderShippedEmail({ order: persistedOrder, items, accountUrl: persistedOrder?.userId ? `${String(process.env.APP_URL || '').replace(/\/$/, '')}/account/orders/${encodeURIComponent(req.params.id)}` : null });
+    } catch (emailError) {
+      console.error('Order shipped email could not be sent:', emailError.message);
+    }
+  }
+  res.json({ id: req.params.id, status: 'Enviado', shippingProvider, trackingNumber });
 });
 
 router.post('/orders/:id/review-link', async (req, res) => {
@@ -330,10 +346,14 @@ router.patch('/orders/:id/status', async (req, res) => {
   const status = String(req.body?.status || '');
   const allowed = ['Pendiente', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
   if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado logístico inválido.' });
-  const result = await run('UPDATE orders SET status = ? WHERE id = ?', [status, req.params.id]);
-  if (!result.changes) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  const order = await get('SELECT id, createdAt AS date, status, total FROM orders WHERE id = ?', [req.params.id]);
-  res.json(order);
+  const order = await get('SELECT id, status AS "currentStatus" FROM orders WHERE id = ?', [req.params.id]);
+  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  const transitions = { Pendiente: ['Preparando', 'Cancelado'], Preparando: ['Pendiente', 'Cancelado'], Enviado: ['Entregado', 'Cancelado'], Entregado: [], Cancelado: [] };
+  if (status === 'Enviado' || !transitions[order.currentStatus]?.includes(status)) return res.status(409).json({ error: 'Esta transición de estado no está permitida.' });
+  const result = await run('UPDATE orders SET status = ? WHERE id = ? AND status = ?', [status, req.params.id, order.currentStatus]);
+  if (!result.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
+  const updatedOrder = await get('SELECT id, createdAt AS date, status, total FROM orders WHERE id = ?', [req.params.id]);
+  res.json(updatedOrder);
 });
 
 router.patch('/customers/:id/notes', async (req, res) => {
