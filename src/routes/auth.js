@@ -6,6 +6,7 @@ const { sendPasswordResetEmail, sendEmailVerification, sendWelcomeEmail, sendPas
 const { VERIFICATION_TTL_MS, clientAppUrl, createEmailVerification, canResendEmailVerification } = require('../services/emailVerification');
 const { requireUser, cookieValue } = require('../middleware/clientAuth');
 const { createOrder } = require('../services/orderCreation');
+const { getAppUrl } = require('../services/appUrl');
 const router = express.Router();
 
 const validEmail = (email) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -260,7 +261,7 @@ router.post('/forgot-password', async (req, res, next) => {
       const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
       await run('DELETE FROM password_reset_tokens WHERE userId = ? OR expiresAt < ?', [user.id, new Date().toISOString()]);
       await run('INSERT INTO password_reset_tokens (id, userId, tokenHash, expiresAt) VALUES (?, ?, ?, ?)', [`reset-${cryptoRandomId()}`, user.id, tokenHash, expiresAt]);
-      const appUrl = String(process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+      const appUrl = getAppUrl();
       const resetUrl = `${appUrl}/reset-password?token=${encodeURIComponent(rawToken)}`;
       try {
         await sendPasswordResetEmail({ to: user.email, firstName: user.firstName, resetUrl });

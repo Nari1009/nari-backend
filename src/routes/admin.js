@@ -4,8 +4,10 @@ const { requireAdmin } = require('../middleware/adminAuth');
 const { getContent, saveContent } = require('../db/content');
 const crypto = require('crypto');
 const { hashToken } = require('../services/auth');
-const { sendReviewLinkEmail, sendOrderShippedEmail, sendOrderDeliveredEmail } = require('../services/email');
+const { sendReviewLinkEmail } = require('../services/email');
 const { createReviewRequestForDeliveredOrder } = require('../services/reviewRequests');
+const { enqueueOrderEmail } = require('../services/emailOutbox');
+const { getAppUrl } = require('../services/appUrl');
 const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
 const { uploadProductImage } = require('../services/storage');
@@ -300,23 +302,28 @@ router.patch('/orders/:id/shipping', async (req, res) => {
   const trackingNumber = String(req.body?.trackingNumber || '').trim();
   if (!shippingProvider || !trackingNumber) return res.status(400).json({ error: 'Proveedor y número de guía son obligatorios.' });
   if (shippingProvider.length > 120 || trackingNumber.length > 160) return res.status(400).json({ error: 'Los datos de envío superan el límite permitido.' });
-  const order = await get('SELECT id, status FROM orders WHERE id = ?', [req.params.id]);
-  if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  if (!['Preparando', 'Enviado'].includes(order.status)) return res.status(409).json({ error: order.status === 'Pendiente' ? 'Cambia primero el pedido a Preparando.' : 'El seguimiento es de solo lectura para este estado.' });
-  const transitioningToShipped = order.status === 'Preparando';
-  const result = transitioningToShipped
-    ? await run("UPDATE orders SET shippingProvider = ?, trackingNumber = ?, status = 'Enviado' WHERE id = ? AND status = 'Preparando'", [shippingProvider, trackingNumber, req.params.id])
-    : await run("UPDATE orders SET shippingProvider = ?, trackingNumber = ? WHERE id = ? AND status = 'Enviado'", [shippingProvider, trackingNumber, req.params.id]);
+  let result;
+  try {
+    result = await withTransaction(async (tx) => {
+      const order = await tx.get('SELECT id, status FROM orders WHERE id = ? FOR UPDATE', [req.params.id]);
+      if (!order) return { changes: -1 };
+      if (!['Preparando', 'Enviado'].includes(order.status)) return { changes: -2, status: order.status };
+      const transitioningToShipped = order.status === 'Preparando';
+      const updated = transitioningToShipped
+        ? await tx.run("UPDATE orders SET shippingProvider = ?, trackingNumber = ?, status = 'Enviado' WHERE id = ? AND status = 'Preparando'", [shippingProvider, trackingNumber, req.params.id])
+        : await tx.run("UPDATE orders SET shippingProvider = ?, trackingNumber = ? WHERE id = ? AND status = 'Enviado'", [shippingProvider, trackingNumber, req.params.id]);
+      if (!updated.changes) return { changes: 0 };
+      if (transitioningToShipped) {
+        const persistedOrder = await tx.get('SELECT id, userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber" FROM orders WHERE id = ?', [req.params.id]);
+        const items = await tx.all('SELECT productname AS "productName", quantity FROM order_items WHERE orderid = ? ORDER BY id', [req.params.id]);
+        await enqueueOrderEmail(tx, 'order_shipped', persistedOrder, items);
+      }
+      return { changes: 1 };
+    });
+  } catch (error) { return res.status(error.status || 500).json({ error: error.message }); }
+  if (result.changes === -1) return res.status(404).json({ error: 'Pedido no encontrado.' });
+  if (result.changes === -2) return res.status(409).json({ error: result.status === 'Pendiente' ? 'Cambia primero el pedido a Preparando.' : 'El seguimiento es de solo lectura para este estado.' });
   if (!result.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
-  if (transitioningToShipped) {
-    try {
-      const persistedOrder = await get('SELECT id, userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber" FROM orders WHERE id = ?', [req.params.id]);
-      const items = await all('SELECT productname AS "productName", quantity FROM order_items WHERE orderid = ? ORDER BY id', [req.params.id]);
-      await sendOrderShippedEmail({ order: persistedOrder, items, accountUrl: persistedOrder?.userId ? `${String(process.env.APP_URL || '').replace(/\/$/, '')}/account/orders/${encodeURIComponent(req.params.id)}` : null });
-    } catch (emailError) {
-      console.error('Order shipped email could not be sent:', emailError.message);
-    }
-  }
   res.json({ id: req.params.id, status: 'Enviado', shippingProvider, trackingNumber });
 });
 
@@ -333,7 +340,11 @@ router.post('/orders/:id/review-link', async (req, res) => {
   const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
   await run('DELETE FROM review_links WHERE orderId = ?', [order.id]);
   await run('INSERT INTO review_links (id, orderId, userId, tokenHash, expiresAt) VALUES (?, ?, ?, ?, ?)', [`review-link-${crypto.randomBytes(12).toString('hex')}`, order.id, order.userId, tokenHash, expiresAt]);
-  const appUrl = String(process.env.APP_URL || 'http://localhost:3000').replace(/\/$/, '');
+  let appUrl;
+  try { appUrl = getAppUrl(); } catch (error) {
+    await run('DELETE FROM review_links WHERE tokenHash = ?', [tokenHash]);
+    return res.status(503).json({ error: 'La aplicación no tiene configurada una URL pública válida.' });
+  }
   try {
     await sendReviewLinkEmail({ to: order.email, firstName: order.firstName, reviewUrl: `${appUrl}/review?token=${encodeURIComponent(rawToken)}`, productNames: products.map((product) => product.productName) });
   } catch (error) {
@@ -344,7 +355,7 @@ router.post('/orders/:id/review-link', async (req, res) => {
   res.json({ message: 'Enlace de valoración enviado correctamente.', expiresAt });
 });
 
-router.patch('/orders/:id/status', async (req, res) => {
+router.patch('/orders/:id/status', async (req, res, next) => {
   const status = String(req.body?.status || '');
   const allowed = ['Pendiente', 'Preparando', 'Enviado', 'Entregado', 'Cancelado'];
   if (!allowed.includes(status)) return res.status(400).json({ error: 'Estado logístico inválido.' });
@@ -360,8 +371,10 @@ router.patch('/orders/:id/status', async (req, res) => {
       if (status === 'Entregado') {
         const updated = await tx.run("UPDATE orders SET status = 'Entregado', deliveredat = COALESCE(deliveredat, CURRENT_TIMESTAMP) WHERE id = ? AND status = 'Enviado'", [req.params.id]);
         if (updated.changes !== 1) return { changes: 0 };
-        const persisted = await tx.get('SELECT id, userid AS "userId", deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
+        const persisted = await tx.get('SELECT id, userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
+        const items = await tx.all('SELECT productname AS "productName", quantity FROM order_items WHERE orderid = ? ORDER BY id', [req.params.id]);
         await createReviewRequestForDeliveredOrder(tx, persisted);
+        await enqueueOrderEmail(tx, 'order_delivered', persisted, items);
         return { changes: 1 };
       }
       const updated = await tx.run('UPDATE orders SET status = ? WHERE id = ? AND status = ?', [status, req.params.id, order.currentStatus]);
@@ -369,13 +382,6 @@ router.patch('/orders/:id/status', async (req, res) => {
     });
   } catch (error) { return next(error); }
   if (!transition?.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
-  if (status === 'Entregado') {
-    try {
-      const persistedOrder = await get('SELECT id, userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
-      const items = await all('SELECT productname AS "productName", quantity FROM order_items WHERE orderid = ? ORDER BY id', [req.params.id]);
-      await sendOrderDeliveredEmail({ order: persistedOrder, items, accountUrl: persistedOrder?.userId ? `${String(process.env.APP_URL || '').replace(/\/$/, '')}/account/orders/${encodeURIComponent(req.params.id)}` : null });
-    } catch (emailError) { console.error('Order delivered email could not be sent:', emailError.message); }
-  }
   const updatedOrder = await get('SELECT id, createdat AS date, status, total, deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
   res.json(updatedOrder);
 });
