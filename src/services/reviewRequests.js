@@ -1,13 +1,13 @@
 const crypto = require('crypto');
 const { all, get, run, withTransaction } = require('../db/init');
 const { generateReviewToken, hashReviewToken, encryptReviewToken, decryptReviewToken } = require('./reviewToken');
+const { getAppUrl } = require('./appUrl');
 
 const REVIEW_DELAY_DAYS = (() => { const value = Number.parseInt(process.env.REVIEW_REQUEST_DELAY_DAYS || '3', 10); return Number.isInteger(value) && value > 0 ? value : 3; })();
 const REVIEW_WINDOW_DAYS = 30;
 const LEASE_MS = 10 * 60 * 1000;
 const BATCH_LIMIT = 20;
 const randomId = () => `review-request-${crypto.randomBytes(12).toString('hex')}`;
-const appUrl = () => String(process.env.APP_URL || '').trim().replace(/\/$/, '');
 const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
 const createReviewRequestForDeliveredOrder = async (tx, order) => {
@@ -71,8 +71,8 @@ const processOne = async ({ request, sendReviewRequestEmail }) => {
   if (!validEmail(email)) { await blockReviewRequest(request.id, 'invalid_email_snapshot'); return 'blocked'; }
   let token;
   try { token = await prepareToken(request); } catch (error) { await blockReviewRequest(request.id, error.message === 'token_state_invalid' ? 'token_state_invalid' : 'token_encryption_failed'); return 'blocked'; }
-  const baseUrl = appUrl();
-  if (!baseUrl) { await blockReviewRequest(request.id, 'missing_client_app_url'); return 'blocked'; }
+  let baseUrl;
+  try { baseUrl = getAppUrl(); } catch { await blockReviewRequest(request.id, 'missing_client_app_url'); return 'blocked'; }
   try {
     await sendReviewRequestEmail({ to: email, customerName: order.customerFirstNameSnapshot, orderReference: order.id, products, reviewUrl: `${baseUrl}/review/${encodeURIComponent(token.rawToken)}`, idempotencyKey: `review-request/${request.id}` });
   } catch (error) { await releaseReviewRequestForRetry(request.id, 'resend_failed'); return 'retry'; }

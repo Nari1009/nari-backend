@@ -1,7 +1,7 @@
 const crypto = require('crypto');
-const { all, get, run } = require('../db/init');
+const { get, withTransaction } = require('../db/init');
 const { normalizeEmail } = require('./auth');
-const { sendOrderReceivedEmail } = require('./email');
+const { enqueueOrderEmail } = require('./emailOutbox');
 
 const randomId = () => crypto.randomBytes(12).toString('hex');
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
@@ -56,57 +56,52 @@ async function createOrder({ payload, userId = null }) {
   const customerRow = authenticatedCustomer || emailCustomer;
   const customerId = customerRow?.id || `customer-${randomId()}`;
 
-  await run('BEGIN TRANSACTION');
-  try {
+  await withTransaction(async (tx) => {
     if (customerRow) {
-      await run(`UPDATE customers SET authUserId = COALESCE(authUserId, ?), firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), latestAddress = COALESCE(NULLIF(?, ''), latestAddress), city = COALESCE(NULLIF(?, ''), city), department = COALESCE(NULLIF(?, ''), department), country = COALESCE(NULLIF(?, ''), country), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
+      await tx.run(`UPDATE customers SET authUserId = COALESCE(authUserId, ?), firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), latestAddress = COALESCE(NULLIF(?, ''), latestAddress), city = COALESCE(NULLIF(?, ''), city), department = COALESCE(NULLIF(?, ''), department), country = COALESCE(NULLIF(?, ''), country), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
         userId, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
         address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia', customerId,
       ]);
     } else {
-      await run(`INSERT INTO customers (id, authUserId, email, firstName, lastName, phone, phoneNormalized, latestAddress, city, department, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      await tx.run(`INSERT INTO customers (id, authUserId, email, firstName, lastName, phone, phoneNormalized, latestAddress, city, department, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         customerId, userId, email, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
         address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia',
       ]);
     }
-    const snapshotCustomer = await get('SELECT email, firstname AS "firstName", lastname AS "lastName", phone FROM customers WHERE id = ?', [customerId]);
+    const snapshotCustomer = await tx.get('SELECT email, firstname AS "firstName", lastname AS "lastName", phone FROM customers WHERE id = ?', [customerId]);
     const emailSnapshot = normalizeEmail(snapshotCustomer?.email || email) || null;
     const firstNameSnapshot = String(snapshotCustomer?.firstName || '').trim() || null;
     const lastNameSnapshot = String(snapshotCustomer?.lastName || '').trim() || null;
     const phoneSnapshot = String(snapshotCustomer?.phone || '').trim() || null;
-    await run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+    await tx.run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
       id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, now,
     ]);
     for (const [index, product] of products.entries()) {
       const quantity = items[index].quantity;
       const stockAfter = product.stock - quantity;
-      await run('INSERT INTO order_items (id, orderId, productId, productName, quantity, unitPrice, unitCost) VALUES (?, ?, ?, ?, ?, ?, ?)', [
+      await tx.run('INSERT INTO order_items (id, orderId, productId, productName, quantity, unitPrice, unitCost) VALUES (?, ?, ?, ?, ?, ?, ?)', [
         `item-${randomId()}`, id, product.id, product.name, quantity, product.price, product.cost ?? 0,
       ]);
-      await run('UPDATE products SET stock = stock - ?, soldCount = soldCount + ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [quantity, quantity, product.id]);
-      await run('INSERT INTO inventory_movements (id, productId, quantity, type, description, stockBefore, stockAfter, reason, orderId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+      await tx.run('UPDATE products SET stock = stock - ?, soldCount = soldCount + ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [quantity, quantity, product.id]);
+      await tx.run('INSERT INTO inventory_movements (id, productId, quantity, type, description, stockBefore, stockAfter, reason, orderId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [
         `m-${Date.now()}-${randomId()}`, product.id, -quantity, 'sale', 'Salida por venta', product.stock, stockAfter, 'Pedido creado', id,
       ]);
     }
-    await run('UPDATE customers SET firstPurchaseAt = COALESCE(firstPurchaseAt, ?), lastPurchaseAt = ?, orderCount = orderCount + 1, totalPurchased = totalPurchased + ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [now, now, total, customerId]);
-    await run("UPDATE abandoned_carts SET convertedAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE email = ? AND (convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '')", [now, email]);
-    await run('COMMIT');
-  } catch (error) {
-    await run('ROLLBACK').catch(() => undefined);
-    throw error;
-  }
-  try {
-    const persistedOrder = await get('SELECT id, customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", shippingaddress AS "shippingAddress", subtotal, discounttotal AS "discountTotal", shippingtotal AS "shippingTotal", total, userid AS "userId" FROM orders WHERE id = ?', [id]);
-    const persistedItems = await all('SELECT productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [id]);
-    if (!persistedOrder) throw new Error('Created order could not be reloaded for notification.');
-    await sendOrderReceivedEmail({
-      order: persistedOrder,
-      items: persistedItems,
-      accountUrl: persistedOrder.userId ? `${String(process.env.APP_URL || '').replace(/\/$/, '')}/account/orders` : null,
-    });
-  } catch (emailError) {
-    console.error('Order received email could not be sent:', emailError.message);
-  }
+    await tx.run('UPDATE customers SET firstPurchaseAt = COALESCE(firstPurchaseAt, ?), lastPurchaseAt = ?, orderCount = orderCount + 1, totalPurchased = totalPurchased + ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [now, now, total, customerId]);
+    await tx.run("UPDATE abandoned_carts SET convertedAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE email = ? AND (convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '')", [now, email]);
+    await enqueueOrderEmail(tx, 'order_received', {
+      id,
+      userId,
+      customerEmailSnapshot: emailSnapshot,
+      customerFirstNameSnapshot: firstNameSnapshot,
+      customerLastNameSnapshot: lastNameSnapshot,
+      shippingAddress: address,
+      subtotal,
+      discountTotal: discount,
+      shippingTotal: shipping,
+      total,
+    }, products.map((product, index) => ({ productName: product.name, quantity: items[index].quantity, unitPrice: product.price })));
+  });
   return { id, date: now, status: payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, products: products.map((product) => product.name) };
 }
 

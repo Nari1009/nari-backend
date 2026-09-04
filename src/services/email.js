@@ -36,7 +36,11 @@ const sendEmail = async ({ to, subject, htmlBody, textBody, idempotencyKey }) =>
       text: textBody,
     }),
   });
-  if (!response.ok) throw new Error(`Transactional email request failed with status ${response.status}.`);
+  if (!response.ok) {
+    const error = new Error(`Transactional email request failed with status ${response.status}.`);
+    error.status = response.status;
+    throw error;
+  }
   return response.json();
 };
 
@@ -92,11 +96,11 @@ const buildOrderReceivedEmail = ({ order, items, accountUrl = null }) => {
   };
 };
 
-const sendOrderReceivedEmail = ({ order, items, accountUrl = null }) => {
+const sendOrderReceivedEmail = ({ order, items, accountUrl = null, idempotencyKey }) => {
   const email = String(order?.customerEmailSnapshot || '').trim();
   if (!email) throw new Error('Order email snapshot is missing.');
   const message = buildOrderReceivedEmail({ order, items, accountUrl });
-  return sendEmail({ to: email, ...message });
+  return sendEmail({ to: email, ...message, idempotencyKey });
 };
 
 const buildOrderShippedEmail = ({ order, items, accountUrl = null }) => {
@@ -113,10 +117,10 @@ const buildOrderShippedEmail = ({ order, items, accountUrl = null }) => {
   };
 };
 
-const sendOrderShippedEmail = ({ order, items, accountUrl = null }) => {
+const sendOrderShippedEmail = ({ order, items, accountUrl = null, idempotencyKey }) => {
   const email = String(order?.customerEmailSnapshot || '').trim();
   if (!email) throw new Error('Order email snapshot is missing.');
-  return sendEmail({ to: email, ...buildOrderShippedEmail({ order, items, accountUrl }) });
+  return sendEmail({ to: email, ...buildOrderShippedEmail({ order, items, accountUrl }), idempotencyKey });
 };
 
 const buildOrderDeliveredEmail = ({ order, items, accountUrl = null }) => {
@@ -136,10 +140,10 @@ const buildOrderDeliveredEmail = ({ order, items, accountUrl = null }) => {
   };
 };
 
-const sendOrderDeliveredEmail = ({ order, items, accountUrl = null }) => {
+const sendOrderDeliveredEmail = ({ order, items, accountUrl = null, idempotencyKey }) => {
   const email = String(order?.customerEmailSnapshot || '').trim();
   if (!email) throw new Error('Order email snapshot is missing.');
-  return sendEmail({ to: email, ...buildOrderDeliveredEmail({ order, items, accountUrl }) });
+  return sendEmail({ to: email, ...buildOrderDeliveredEmail({ order, items, accountUrl }), idempotencyKey });
 };
 
 const sendPasswordResetEmail = ({ to, firstName, resetUrl }) => sendEmail({
