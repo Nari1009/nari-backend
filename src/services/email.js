@@ -16,15 +16,17 @@ const emailConfig = () => {
   return { apiKey, from: `${fromName} <${fromEmail}>`, replyTo };
 };
 
-const sendEmail = async ({ to, subject, htmlBody, textBody }) => {
+const sendEmail = async ({ to, subject, htmlBody, textBody, idempotencyKey }) => {
   const config = emailConfig();
+  const headers = {
+    Accept: 'application/json',
+    Authorization: `Bearer ${config.apiKey}`,
+    'Content-Type': 'application/json',
+  };
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   const response = await fetch(resendEndpoint, {
     method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       from: config.from,
       to: [to],
@@ -175,6 +177,17 @@ const sendReviewLinkEmail = ({ to, firstName, reviewUrl, productNames }) => send
   textBody: `Hola ${firstName || ''},\n\nCuéntanos qué te pareció tu compra en NARI:\n${productNames.map((name) => `- ${name}`).join('\n')}\n\nValora tu compra aquí:\n${reviewUrl}\n\nEl enlace estará disponible durante 30 días.`,
 });
 
+const buildReviewRequestEmail = ({ customerName, orderReference, products, reviewUrl }) => {
+  const firstName = String(customerName || '').trim();
+  const rows = (Array.isArray(products) ? products : []).map((item) => `<li>${escapeHtml(item.productName || 'Producto')}</li>`).join('');
+  return {
+    subject: 'Cuéntanos qué te parecieron tus productos NARI',
+    htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35;line-height:1.5"><h1 style="color:#064c3e">NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p>Esperamos que estés disfrutando tus productos. Tu opinión puede ayudar a otras personas a elegir mejor su rutina.</p><p>Pedido: <strong>#${escapeHtml(orderReference)}</strong></p><ul>${rows}</ul><p style="margin:24px 0"><a href="${escapeHtml(reviewUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Dejar mi reseña</a></p><p>El enlace estará disponible durante 30 días.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p><p style="color:#587169">NARI<br>Skincare coreano</p></div>`,
+    textBody: `Hola ${firstName || ''},\n\nEsperamos que estés disfrutando tus productos. Tu opinión puede ayudar a otras personas a elegir mejor su rutina.\n\nPedido: #${orderReference}\n\n${(Array.isArray(products) ? products : []).map((item) => `- ${item.productName || 'Producto'}`).join('\n')}\n\nDejar mi reseña: ${reviewUrl}\n\nEl enlace estará disponible durante 30 días.\n\nNARI · Skincare coreano`,
+  };
+};
+const sendReviewRequestEmail = ({ to, customerName, orderReference, products, reviewUrl, idempotencyKey }) => sendEmail({ to, ...buildReviewRequestEmail({ customerName, orderReference, products, reviewUrl }), idempotencyKey });
+
 const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber }) => sendEmail({
   to,
   subject: reminderNumber === 1 ? 'Tus productos siguen esperándote en NARI' : 'Último recordatorio de tu carrito NARI',
@@ -182,4 +195,4 @@ const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber 
   textBody: `Hola ${firstName || ''},\n\n${reminderNumber === 1 ? 'Vimos que dejaste productos en tu carrito.' : 'Este es el último recordatorio de tu carrito.'}\n\n${items.map((item) => `- ${item.name} · ${item.quantity} unidad(es)`).join('\n')}\n\nContinúa tu compra aquí:\n${cartUrl}`,
 });
 
-module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, sendAbandonedCartEmail };
+module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, buildReviewRequestEmail, sendReviewRequestEmail, sendAbandonedCartEmail };

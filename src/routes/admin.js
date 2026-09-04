@@ -1,10 +1,11 @@
 const express = require('express');
-const { all, get, run } = require('../db/init');
+const { all, get, run, withTransaction } = require('../db/init');
 const { requireAdmin } = require('../middleware/adminAuth');
 const { getContent, saveContent } = require('../db/content');
 const crypto = require('crypto');
 const { hashToken } = require('../services/auth');
 const { sendReviewLinkEmail, sendOrderShippedEmail, sendOrderDeliveredEmail } = require('../services/email');
+const { createReviewRequestForDeliveredOrder } = require('../services/reviewRequests');
 const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
 const { uploadProductImage } = require('../services/storage');
@@ -320,6 +321,7 @@ router.patch('/orders/:id/shipping', async (req, res) => {
 });
 
 router.post('/orders/:id/review-link', async (req, res) => {
+  if (await get('SELECT id FROM order_review_requests WHERE orderid = ?', [req.params.id])) return res.status(409).json({ error: 'Este pedido utiliza el flujo automático de solicitudes de reseña.' });
   const order = await get(`SELECT orders.id, orders.status, orders.userId, customers.firstName, customers.email
     FROM orders LEFT JOIN customers ON customers.authUserId = orders.userId WHERE orders.id = ?`, [req.params.id]);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
@@ -350,10 +352,23 @@ router.patch('/orders/:id/status', async (req, res) => {
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const transitions = { Pendiente: ['Preparando', 'Cancelado'], Preparando: ['Pendiente', 'Cancelado'], Enviado: ['Entregado', 'Cancelado'], Entregado: [], Cancelado: [] };
   if (status === 'Enviado' || !transitions[order.currentStatus]?.includes(status)) return res.status(409).json({ error: 'Esta transición de estado no está permitida.' });
-  const result = status === 'Entregado'
-    ? await run("UPDATE orders SET status = 'Entregado', deliveredat = COALESCE(deliveredat, CURRENT_TIMESTAMP) WHERE id = ? AND status = 'Enviado'", [req.params.id])
-    : await run('UPDATE orders SET status = ? WHERE id = ? AND status = ?', [status, req.params.id, order.currentStatus]);
-  if (!result.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
+  let transition;
+  try {
+    transition = await withTransaction(async (tx) => {
+      const locked = await tx.get('SELECT id, status, userid AS "userId", deliveredat AS "deliveredAt" FROM orders WHERE id = ? FOR UPDATE', [req.params.id]);
+      if (!locked || locked.status !== order.currentStatus) return { changes: 0 };
+      if (status === 'Entregado') {
+        const updated = await tx.run("UPDATE orders SET status = 'Entregado', deliveredat = COALESCE(deliveredat, CURRENT_TIMESTAMP) WHERE id = ? AND status = 'Enviado'", [req.params.id]);
+        if (updated.changes !== 1) return { changes: 0 };
+        const persisted = await tx.get('SELECT id, userid AS "userId", deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
+        await createReviewRequestForDeliveredOrder(tx, persisted);
+        return { changes: 1 };
+      }
+      const updated = await tx.run('UPDATE orders SET status = ? WHERE id = ? AND status = ?', [status, req.params.id, order.currentStatus]);
+      return { changes: updated.changes };
+    });
+  } catch (error) { return next(error); }
+  if (!transition?.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
   if (status === 'Entregado') {
     try {
       const persistedOrder = await get('SELECT id, userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);

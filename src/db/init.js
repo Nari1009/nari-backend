@@ -19,6 +19,24 @@ const translate = (sql) => {
 const run = (sql, params = []) => pool.query(translate(sql), params).then((result) => ({ changes: result.rowCount, lastID: result.rows[0]?.id }));
 const get = (sql, params = []) => pool.query(translate(sql), params).then((result) => result.rows[0]);
 const all = (sql, params = []) => pool.query(translate(sql), params).then((result) => result.rows);
+const withTransaction = async (callback) => {
+  const client = await pool.connect();
+  const tx = {
+    query: (sql, params = []) => client.query(translate(sql), params),
+    get: async (sql, params = []) => (await client.query(translate(sql), params)).rows[0],
+    all: async (sql, params = []) => (await client.query(translate(sql), params)).rows,
+    run: async (sql, params = []) => { const result = await client.query(translate(sql), params); return { changes: result.rowCount, lastID: result.rows[0]?.id }; },
+  };
+  try {
+    await client.query('BEGIN');
+    const result = await callback(tx);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch(() => undefined);
+    throw error;
+  } finally { client.release(); }
+};
 
 const initDb = async () => {
   const statements = [
@@ -102,4 +120,4 @@ const ensureCatalogOptions = async () => {
   }
 };
 
-module.exports = { pool, initDb, ensureOrderShippingColumns, ensureCatalogOptions, run, get, all };
+module.exports = { pool, initDb, ensureOrderShippingColumns, ensureCatalogOptions, run, get, all, withTransaction };
