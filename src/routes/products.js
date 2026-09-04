@@ -9,11 +9,18 @@ const withRatingDistribution = async (products) => {
   const placeholders = ids.map(() => '?').join(',');
   const rows = await all(`SELECT productId, rating, COUNT(*) AS count FROM reviews WHERE productId IN (${placeholders}) GROUP BY productId, rating`, ids);
   const totals = await all(`SELECT productId, ROUND(AVG(rating), 1) AS rating, COUNT(*) AS reviewCount FROM reviews WHERE productId IN (${placeholders}) GROUP BY productId`, ids);
-  const distributions = Object.fromEntries(ids.map((id) => [id, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }]));
-  const summary = Object.fromEntries(ids.map((id) => [id, { rating: 0, reviewCount: 0 }]));
-  rows.forEach((row) => { distributions[row.productId][row.rating] = row.count; });
-  totals.forEach((row) => { summary[row.productId] = { rating: row.rating, reviewCount: row.reviewCount }; });
-  return products.map((product) => ({ ...product, ...summary[product.id], ratingDistribution: distributions[product.id] }));
+  const distributions = Object.fromEntries(ids.map((id) => [String(id), { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }]));
+  const summary = Object.fromEntries(ids.map((id) => [String(id), { rating: 0, reviewCount: 0 }]));
+  rows.forEach((row) => {
+    const productId = String(row.productId);
+    const rating = Number(row.rating);
+    if (distributions[productId] && rating >= 1 && rating <= 5) distributions[productId][rating] = row.count;
+  });
+  totals.forEach((row) => {
+    const productId = String(row.productId);
+    if (summary[productId]) summary[productId] = { rating: row.rating, reviewCount: row.reviewCount };
+  });
+  return products.map((product) => ({ ...product, ...summary[String(product.id)], ratingDistribution: distributions[String(product.id)] }));
 };
 
 router.get('/content/:page', async (req, res) => {
