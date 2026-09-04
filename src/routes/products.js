@@ -3,6 +3,14 @@ const { all, get } = require('../db/init');
 const { getContent } = require('../db/content');
 const router = express.Router();
 
+const publicAuthorName = (firstName, lastName) => {
+  const first = String(firstName || '').trim().replace(/\s+/g, ' ');
+  const last = String(lastName || '').trim().replace(/\s+/g, ' ');
+  if (!first) return 'Cliente NARI';
+  if (!last) return first;
+  return `${first} ${Array.from(last)[0].toUpperCase()}.`;
+};
+
 const withRatingDistribution = async (products) => {
   const ids = products.map((product) => product.id);
   if (!ids.length) return products;
@@ -52,6 +60,7 @@ router.get('/:id/reviews', async (req, res, next) => {
 
     const reviewScope = `
       FROM reviews r
+      JOIN orders review_order ON review_order.id = r.orderId
       WHERE r.productId = ?
         AND r.rating BETWEEN 1 AND 5
         AND EXISTS (
@@ -63,7 +72,7 @@ router.get('/:id/reviews', async (req, res, next) => {
             AND o.status = 'Entregado'
         )`;
     const [reviews, summary, distributionRows] = await Promise.all([
-      all(`SELECT r.rating, r.comment, r.createdAt AS "createdAt" ${reviewScope} ORDER BY r.createdAt DESC LIMIT 50`, [req.params.id]),
+      all(`SELECT r.rating, r.comment, r.createdAt AS "createdAt", review_order.customerFirstNameSnapshot AS "authorFirstName", review_order.customerLastNameSnapshot AS "authorLastName" ${reviewScope} ORDER BY r.createdAt DESC LIMIT 50`, [req.params.id]),
       get(`SELECT ROUND(AVG(r.rating), 1) AS "averageRating", COUNT(*) AS "reviewCount" ${reviewScope}`, [req.params.id]),
       all(`SELECT r.rating, COUNT(*) AS count ${reviewScope} GROUP BY r.rating`, [req.params.id]),
     ]);
@@ -78,7 +87,7 @@ router.get('/:id/reviews', async (req, res, next) => {
         comment: typeof review.comment === 'string' ? review.comment : '',
         createdAt: review.createdAt,
         verifiedPurchase: true,
-        author: 'Cliente NARI',
+        authorName: publicAuthorName(review.authorFirstName, review.authorLastName),
       })),
     });
   } catch (error) { next(error); }
