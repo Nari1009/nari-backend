@@ -7,8 +7,12 @@ const withRatingDistribution = async (products) => {
   const ids = products.map((product) => product.id);
   if (!ids.length) return products;
   const placeholders = ids.map(() => '?').join(',');
-  const rows = await all(`SELECT productId, rating, COUNT(*) AS count FROM reviews WHERE productId IN (${placeholders}) GROUP BY productId, rating`, ids);
-  const totals = await all(`SELECT productId, ROUND(AVG(rating), 1) AS rating, COUNT(*) AS reviewCount FROM reviews WHERE productId IN (${placeholders}) GROUP BY productId`, ids);
+  const reviewScope = `FROM reviews r WHERE r.productId IN (${placeholders}) AND r.rating BETWEEN 1 AND 5 AND EXISTS (
+    SELECT 1 FROM order_items oi JOIN orders o ON o.id = oi.orderId
+    WHERE oi.orderId = r.orderId AND oi.productId = r.productId AND o.status = 'Entregado'
+  )`;
+  const rows = await all(`SELECT r.productId, r.rating, COUNT(*) AS count ${reviewScope} GROUP BY r.productId, r.rating`, ids);
+  const totals = await all(`SELECT r.productId, ROUND(AVG(r.rating), 1) AS rating, COUNT(*) AS reviewCount ${reviewScope} GROUP BY r.productId`, ids);
   const distributions = Object.fromEntries(ids.map((id) => [String(id), { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }]));
   const summary = Object.fromEntries(ids.map((id) => [String(id), { rating: 0, reviewCount: 0 }]));
   rows.forEach((row) => {
