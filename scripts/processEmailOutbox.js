@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 require('dotenv').config();
-const { withTransaction, run } = require('../src/db/init');
+const { pool, withTransaction, run } = require('../src/db/init');
 const { sendOrderReceivedEmail, sendOrderShippedEmail, sendOrderDeliveredEmail } = require('../src/services/email');
 
 const LIMIT = 20;
@@ -71,7 +71,8 @@ if (require.main === module) {
   processEmailOutbox().then((results) => {
     const summary = results.reduce((counts, item) => { counts[item.result] = (counts[item.result] || 0) + 1; return counts; }, {});
     console.log(`Email outbox worker finished: ${results.length} processed.`, summary);
-  }).catch((error) => { console.error('Email outbox worker failed:', error.message); process.exitCode = 1; });
+  }).catch((error) => { console.error('Email outbox worker failed:', error.message); process.exitCode = 1; })
+    .finally(() => pool.end().catch(() => undefined));
 }
 
 module.exports = { processEmailOutbox, claimNext, retryAt };
