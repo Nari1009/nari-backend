@@ -12,7 +12,7 @@ const withRatingDistribution = async (products) => {
     WHERE oi.orderId = r.orderId AND oi.productId = r.productId AND o.status = 'Entregado'
   )`;
   const rows = await all(`SELECT r.productId AS "productId", r.rating, COUNT(*) AS count ${reviewScope} GROUP BY r.productId, r.rating`, ids);
-  const totals = await all(`SELECT r.productId AS "productId", ROUND(AVG(r.rating), 1) AS rating, COUNT(*) AS reviewCount ${reviewScope} GROUP BY r.productId`, ids);
+  const totals = await all(`SELECT r.productId AS "productId", ROUND(AVG(r.rating), 1) AS rating, COUNT(*) AS "reviewCount" ${reviewScope} GROUP BY r.productId`, ids);
   const distributions = Object.fromEntries(ids.map((id) => [String(id), { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 }]));
   const summary = Object.fromEntries(ids.map((id) => [String(id), { rating: 0, reviewCount: 0 }]));
   rows.forEach((row) => {
