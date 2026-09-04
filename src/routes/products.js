@@ -40,6 +40,45 @@ router.get('/catalog-options', async (req, res) => {
   res.json(options);
 });
 
+router.get('/:id/reviews', async (req, res, next) => {
+  try {
+    const product = await get('SELECT id, status FROM products WHERE id = ?', [req.params.id]);
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    if (product.status !== 'active') return res.status(410).json({ error: 'Este producto ya no está disponible.' });
+
+    const reviewScope = `
+      FROM reviews r
+      WHERE r.productId = ?
+        AND r.rating BETWEEN 1 AND 5
+        AND EXISTS (
+          SELECT 1
+          FROM order_items oi
+          JOIN orders o ON o.id = oi.orderId
+          WHERE oi.orderId = r.orderId
+            AND oi.productId = r.productId
+            AND o.status = 'Entregado'
+        )`;
+    const [reviews, summary] = await Promise.all([
+      all(`SELECT r.rating, r.comment, r.createdAt AS "createdAt" ${reviewScope} ORDER BY r.createdAt DESC LIMIT 50`, [req.params.id]),
+      get(`SELECT ROUND(AVG(r.rating), 1) AS "averageRating", COUNT(*) AS "reviewCount" ${reviewScope}`, [req.params.id]),
+    ]);
+    const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    reviews.forEach((review) => { distribution[Number(review.rating)] += 1; });
+    res.json({
+      averageRating: Number(summary?.averageRating || 0),
+      reviewCount: Number(summary?.reviewCount || 0),
+      distribution,
+      reviews: reviews.map((review) => ({
+        rating: Number(review.rating),
+        comment: typeof review.comment === 'string' ? review.comment : '',
+        createdAt: review.createdAt,
+        verifiedPurchase: true,
+        author: 'Cliente NARI',
+      })),
+    });
+  } catch (error) { next(error); }
+});
+
 router.get('/', async (req, res) => {
   const { search, category } = req.query;
 
