@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const { all, get, run } = require('../db/init');
 const { normalizeEmail } = require('./auth');
+const { sendOrderReceivedEmail } = require('./email');
 
 const randomId = () => crypto.randomBytes(12).toString('hex');
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
@@ -93,6 +94,18 @@ async function createOrder({ payload, userId = null }) {
   } catch (error) {
     await run('ROLLBACK').catch(() => undefined);
     throw error;
+  }
+  try {
+    const persistedOrder = await get('SELECT id, customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", shippingaddress AS "shippingAddress", subtotal, discounttotal AS "discountTotal", shippingtotal AS "shippingTotal", total, userid AS "userId" FROM orders WHERE id = ?', [id]);
+    const persistedItems = await all('SELECT productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [id]);
+    if (!persistedOrder) throw new Error('Created order could not be reloaded for notification.');
+    await sendOrderReceivedEmail({
+      order: persistedOrder,
+      items: persistedItems,
+      accountUrl: persistedOrder.userId ? `${String(process.env.APP_URL || '').replace(/\/$/, '')}/account/orders` : null,
+    });
+  } catch (emailError) {
+    console.error('Order received email could not be sent:', emailError.message);
   }
   return { id, date: now, status: payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, products: products.map((product) => product.name) };
 }
