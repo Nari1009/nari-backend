@@ -62,12 +62,13 @@ router.get('/:id/reviews', async (req, res, next) => {
             AND oi.productId = r.productId
             AND o.status = 'Entregado'
         )`;
-    const [reviews, summary] = await Promise.all([
+    const [reviews, summary, distributionRows] = await Promise.all([
       all(`SELECT r.rating, r.comment, r.createdAt AS "createdAt" ${reviewScope} ORDER BY r.createdAt DESC LIMIT 50`, [req.params.id]),
       get(`SELECT ROUND(AVG(r.rating), 1) AS "averageRating", COUNT(*) AS "reviewCount" ${reviewScope}`, [req.params.id]),
+      all(`SELECT r.rating, COUNT(*) AS count ${reviewScope} GROUP BY r.rating`, [req.params.id]),
     ]);
     const distribution = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-    reviews.forEach((review) => { distribution[Number(review.rating)] += 1; });
+    distributionRows.forEach((row) => { distribution[Number(row.rating)] = Number(row.count); });
     res.json({
       averageRating: Number(summary?.averageRating || 0),
       reviewCount: Number(summary?.reviewCount || 0),
