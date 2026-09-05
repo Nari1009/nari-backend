@@ -23,17 +23,36 @@ CREATE INDEX IF NOT EXISTS email_verification_tokens_expiresat_idx
 
 ALTER TABLE email_verification_tokens ENABLE ROW LEVEL SECURITY;
 
--- Existing active accounts with their valid Customer relationship remain
--- usable. Orphan AuthUsers are intentionally not backfilled.
-UPDATE auth_users au
-SET emailverifiedat = COALESCE(au.createdat, CURRENT_TIMESTAMP)
-WHERE au.emailverifiedat IS NULL
-  AND au.isactive = 1
-  AND EXISTS (
-    SELECT 1
-    FROM customers c
-    WHERE c.authuserid = au.id
-      AND lower(trim(c.email)) = lower(trim(au.email))
-  );
+-- The legacy compatibility backfill is one-shot. The marker prevents a
+-- later re-run from auto-verifying users created after this migration.
+CREATE TABLE IF NOT EXISTS email_verification_backfill_runs (
+  id TEXT PRIMARY KEY CHECK (id = 'legacy-v1'),
+  appliedat TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE email_verification_backfill_runs ENABLE ROW LEVEL SECURITY;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM email_verification_backfill_runs WHERE id = 'legacy-v1'
+  ) THEN
+    -- Existing active accounts with a valid Customer relationship remain
+    -- usable. Orphan AuthUsers are intentionally not backfilled.
+    UPDATE auth_users au
+    SET emailverifiedat = COALESCE(au.createdat, CURRENT_TIMESTAMP)
+    WHERE au.emailverifiedat IS NULL
+      AND au.isactive = 1
+      AND EXISTS (
+        SELECT 1
+        FROM customers c
+        WHERE c.authuserid = au.id
+          AND lower(trim(c.email)) = lower(trim(au.email))
+      );
+
+    INSERT INTO email_verification_backfill_runs (id)
+    VALUES ('legacy-v1');
+  END IF;
+END $$;
 
 COMMIT;
