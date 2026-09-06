@@ -192,11 +192,12 @@ const buildReviewRequestEmail = ({ customerName, orderReference, products, revie
 };
 const sendReviewRequestEmail = ({ to, customerName, orderReference, products, reviewUrl, idempotencyKey }) => sendEmail({ to, ...buildReviewRequestEmail({ customerName, orderReference, products, reviewUrl }), idempotencyKey });
 
-const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber }) => sendEmail({
+const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber, idempotencyKey }) => sendEmail({
   to,
   subject: reminderNumber === 1 ? 'Tus productos siguen esperándote en NARI' : 'Último recordatorio de tu carrito NARI',
   htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35"><h1>NARI</h1><p>Hola ${escapeHtml(firstName || '')},</p><p>${reminderNumber === 1 ? 'Vimos que dejaste algunos productos en tu carrito.' : 'Este es el último recordatorio de los productos que dejaste en tu carrito.'}</p><ul>${items.map((item) => `<li>${escapeHtml(item.name)} · ${item.quantity} unidad(es)</li>`).join('')}</ul><p><a href="${escapeHtml(cartUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Volver a mi carrito</a></p><p>Si ya no deseas comprarlos, puedes ignorar este mensaje.</p></div>`,
   textBody: `Hola ${firstName || ''},\n\n${reminderNumber === 1 ? 'Vimos que dejaste productos en tu carrito.' : 'Este es el último recordatorio de tu carrito.'}\n\n${items.map((item) => `- ${item.name} · ${item.quantity} unidad(es)`).join('\n')}\n\nContinúa tu compra aquí:\n${cartUrl}`,
+  idempotencyKey,
 });
 
 module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, buildReviewRequestEmail, sendReviewRequestEmail, sendAbandonedCartEmail };
