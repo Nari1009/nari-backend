@@ -99,9 +99,10 @@ router.get('/', async (req, res) => {
   let sql = 'SELECT * FROM products WHERE status = ?';
   let params = ['active'];
 
-  if (search) {
-    sql += ' AND (name LIKE ? OR brand LIKE ? OR description LIKE ?)';
-    const searchTerm = `%${search}%`;
+  const normalizedSearch = String(search || '').trim();
+  if (normalizedSearch) {
+    sql += ' AND (name ILIKE ? OR brand ILIKE ? OR description ILIKE ?)';
+    const searchTerm = `%${normalizedSearch}%`;
     params.push(searchTerm, searchTerm, searchTerm);
   }
 
