@@ -53,8 +53,12 @@ const startServer = async () => {
     await ensureOrderShippingColumns();
     await ensureAdminUser();
     await ensureContent();
-    await processAbandonedCarts();
-    setInterval(() => { processAbandonedCarts().catch((error) => console.error('Abandoned cart processor failed:', error.message)); }, 15 * 60 * 1000);
+    if (process.env.ABANDONED_CART_EMAILS_ENABLED !== 'false') {
+      await processAbandonedCarts();
+      setInterval(() => { processAbandonedCarts().catch((error) => console.error('Abandoned cart processor failed:', error.message)); }, 15 * 60 * 1000);
+    } else {
+      console.log('Abandoned cart email processing disabled by configuration.');
+    }
     app.listen(port, () => {
       console.log(`\n🎉 NARI Backend running on http://localhost:${port}`);
       console.log(`📊 API: http://localhost:${port}/api/products`);
