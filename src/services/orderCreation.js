@@ -17,7 +17,19 @@ async function createOrder({ payload, userId = null }) {
   const items = Array.isArray(payload?.items)
     ? payload.items.filter((item) => item && Number.isInteger(item.quantity) && item.quantity > 0)
     : [];
-  if (!email || phoneNormalized.length < 7 || !items.length || !payload.shippingAddress || !validDocumentTypes.has(document.type) || document.number.length < 3 || document.number.length > 40) {
+  const hasDocumentType = Boolean(document.type);
+  const hasDocumentNumber = Boolean(document.number);
+  if (hasDocumentType !== hasDocumentNumber) {
+    const error = new Error('El tipo y número de documento deben enviarse juntos.');
+    error.status = 400;
+    throw error;
+  }
+  if ((hasDocumentType && !validDocumentTypes.has(document.type)) || (hasDocumentNumber && (document.number.length < 3 || document.number.length > 40))) {
+    const error = new Error('Los datos del documento no son válidos.');
+    error.status = 400;
+    throw error;
+  }
+  if (!email || phoneNormalized.length < 7 || !items.length || !payload.shippingAddress) {
     const error = new Error('El pedido no tiene productos, correo o dirección.');
     error.status = 400;
     throw error;
@@ -64,12 +76,12 @@ async function createOrder({ payload, userId = null }) {
     if (customerRow) {
       await tx.run(`UPDATE customers SET authUserId = COALESCE(authUserId, ?), firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), documenttype = ?, documentnumber = ?, latestAddress = COALESCE(NULLIF(?, ''), latestAddress), city = COALESCE(NULLIF(?, ''), city), department = COALESCE(NULLIF(?, ''), department), country = COALESCE(NULLIF(?, ''), country), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
         userId, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
-        document.type, document.number, address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia', customerId,
+        document.type || null, document.number || null, address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia', customerId,
       ]);
     } else {
       await tx.run(`INSERT INTO customers (id, authUserId, email, firstName, lastName, phone, phoneNormalized, documenttype, documentnumber, latestAddress, city, department, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         customerId, userId, email, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
-        document.type, document.number, address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia',
+        document.type || null, document.number || null, address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia',
       ]);
     }
     const snapshotCustomer = await tx.get('SELECT email, firstname AS "firstName", lastname AS "lastName", phone, documenttype AS "documentType", documentnumber AS "documentNumber" FROM customers WHERE id = ?', [customerId]);
