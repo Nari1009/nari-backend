@@ -88,7 +88,7 @@ async function createOrder({ payload, userId = null }) {
       ]);
     }
     await tx.run('UPDATE customers SET firstPurchaseAt = COALESCE(firstPurchaseAt, ?), lastPurchaseAt = ?, orderCount = orderCount + 1, totalPurchased = totalPurchased + ?, updatedAt = CURRENT_TIMESTAMP WHERE id = ?', [now, now, total, customerId]);
-    await tx.run("UPDATE abandoned_carts SET convertedAt = ?, updatedAt = CURRENT_TIMESTAMP WHERE email = ? AND (convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '')", [now, email]);
+    await tx.run("UPDATE abandoned_carts SET convertedAt = ?, status = 'completed', completedAt = ?, processingStage = NULL, processingAt = NULL, nextAttemptAt = NULL, updatedAt = CURRENT_TIMESTAMP WHERE (normalizedEmail = ? OR lower(trim(email)) = ?) AND (convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '') AND COALESCE(status, 'active') IN ('active', 'recovered')", [now, now, normalizeEmail(email), normalizeEmail(email)]);
     await enqueueOrderEmail(tx, 'order_received', {
       id,
       userId,
