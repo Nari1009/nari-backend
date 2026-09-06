@@ -73,7 +73,7 @@ const calculateShipping = ({ department, city, now = new Date(), standardCost })
     };
   }
   const fee = Number(standardCost);
-  if (!Number.isFinite(fee) || fee < 0) {
+  if (!Number.isFinite(fee) || fee <= 0) {
     throw new ShippingPolicyError('El costo nacional de envío no está disponible.', 503, 'SHIPPING_CONFIGURATION_INVALID');
   }
   return {
@@ -97,7 +97,7 @@ const configuredNationalShippingCost = async () => {
   let settings;
   try { settings = JSON.parse(row.value); } catch { throw new ShippingPolicyError('La configuración nacional de envío no es válida.', 503, 'SHIPPING_CONFIGURATION_INVALID'); }
   const fee = Number(settings?.standardCost);
-  if (!Number.isFinite(fee) || fee < 0) throw new ShippingPolicyError('La tarifa nacional de envío no es válida.', 503, 'SHIPPING_CONFIGURATION_INVALID');
+  if (!Number.isFinite(fee) || fee <= 0) throw new ShippingPolicyError('La tarifa nacional de envío no es válida.', 503, 'SHIPPING_CONFIGURATION_INVALID');
   return fee;
 };
 

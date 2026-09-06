@@ -42,5 +42,7 @@ assert.equal(accentMatch.shippingZone, 'LOCAL');
 assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff }), ShippingPolicyError);
 assert.throws(() => calculateShipping({ department: 'Unknown', city: 'Medellín', now: beforeCutoff, standardCost: nationalFee }), ShippingPolicyError);
 assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff, standardCost: 'abc' }), ShippingPolicyError);
+assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff, standardCost: 0 }), ShippingPolicyError);
+assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff, standardCost: -1 }), ShippingPolicyError);
 
 console.log('shippingPolicy tests: PASS');
