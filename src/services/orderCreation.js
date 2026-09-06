@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { get, withTransaction } = require('../db/init');
 const { normalizeEmail } = require('./auth');
 const { enqueueOrderEmail } = require('./emailOutbox');
+const { getShippingQuote } = require('./shippingPolicy');
 
 const randomId = () => crypto.randomBytes(12).toString('hex');
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
@@ -41,7 +42,11 @@ async function createOrder({ payload, userId = null }) {
     throw error;
   }
   const subtotal = products.reduce((sum, product, index) => sum + Number(product.price) * items[index].quantity, 0);
-  const shipping = Math.max(0, Number(payload.shippingTotal || 0));
+  const shippingQuote = await getShippingQuote({
+    department: payload.shippingAddress.department,
+    city: payload.shippingAddress.city,
+  });
+  const shipping = shippingQuote.shippingTotal;
   // R4 has no active discount system. Never trust client-supplied discounts.
   const discount = 0;
   const total = Math.max(0, subtotal + shipping - discount);
@@ -91,8 +96,8 @@ async function createOrder({ payload, userId = null }) {
     const phoneSnapshot = String(snapshotCustomer?.phone || '').trim() || null;
     const documentTypeSnapshot = String(snapshotCustomer?.documentType || document.type).trim() || null;
     const documentNumberSnapshot = String(snapshotCustomer?.documentNumber || document.number).trim() || null;
-    await tx.run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, documenttypesnapshot, documentnumbersnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-      id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, documentTypeSnapshot, documentNumberSnapshot, now,
+    await tx.run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, shippingzone, deliverytype, samedayeligible, shippingpolicyversion, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, documenttypesnapshot, documentnumbersnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+      id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), shippingQuote.shippingZone, shippingQuote.deliveryType, shippingQuote.sameDayEligible, shippingQuote.policyVersion, emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, documentTypeSnapshot, documentNumberSnapshot, now,
     ]);
     for (const [index, product] of products.entries()) {
       const quantity = items[index].quantity;
@@ -117,6 +122,10 @@ async function createOrder({ payload, userId = null }) {
       subtotal,
       discountTotal: discount,
       shippingTotal: shipping,
+      shippingZone: shippingQuote.shippingZone,
+      deliveryType: shippingQuote.deliveryType,
+      sameDayEligible: shippingQuote.sameDayEligible,
+      shippingPolicyVersion: shippingQuote.policyVersion,
       total,
     }, products.map((product, index) => ({ productName: product.name, quantity: items[index].quantity, unitPrice: product.price })));
   });

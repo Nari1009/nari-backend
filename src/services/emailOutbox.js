@@ -17,6 +17,10 @@ const snapshotOrder = (eventType, order) => {
       subtotal: order?.subtotal,
       discountTotal: order?.discountTotal,
       shippingTotal: order?.shippingTotal,
+      shippingZone: order?.shippingZone,
+      deliveryType: order?.deliveryType,
+      sameDayEligible: order?.sameDayEligible,
+      shippingPolicyVersion: order?.shippingPolicyVersion,
       total: order?.total,
     });
   }
