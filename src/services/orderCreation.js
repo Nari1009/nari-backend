@@ -5,16 +5,19 @@ const { enqueueOrderEmail } = require('./emailOutbox');
 
 const randomId = () => crypto.randomBytes(12).toString('hex');
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
+const validDocumentTypes = new Set(['CC', 'NIT', 'CE']);
+const normalizeDocument = (type, number) => ({ type: String(type || '').trim().toUpperCase(), number: String(number || '').trim() });
 
 async function createOrder({ payload, userId = null }) {
   const customer = payload?.customer || {};
   const email = normalizeEmail(customer.email);
   const phone = String(customer.phone || '').trim();
   const phoneNormalized = normalizePhone(phone);
+  const document = normalizeDocument(customer.documentType, customer.documentNumber);
   const items = Array.isArray(payload?.items)
     ? payload.items.filter((item) => item && Number.isInteger(item.quantity) && item.quantity > 0)
     : [];
-  if (!email || phoneNormalized.length < 7 || !items.length || !payload.shippingAddress) {
+  if (!email || phoneNormalized.length < 7 || !items.length || !payload.shippingAddress || !validDocumentTypes.has(document.type) || document.number.length < 3 || document.number.length > 40) {
     const error = new Error('El pedido no tiene productos, correo o dirección.');
     error.status = 400;
     throw error;
@@ -27,7 +30,8 @@ async function createOrder({ payload, userId = null }) {
   }
   const subtotal = products.reduce((sum, product, index) => sum + Number(product.price) * items[index].quantity, 0);
   const shipping = Math.max(0, Number(payload.shippingTotal || 0));
-  const discount = Math.max(0, Number(payload.discount || 0));
+  // R4 has no active discount system. Never trust client-supplied discounts.
+  const discount = 0;
   const total = Math.max(0, subtotal + shipping - discount);
   const id = String(payload.reference || `NARI-${Date.now()}`).replace(/[^A-Za-z0-9-]/g, '').slice(0, 50);
   if (await get('SELECT id FROM orders WHERE id = ?', [id])) {
@@ -58,23 +62,25 @@ async function createOrder({ payload, userId = null }) {
 
   await withTransaction(async (tx) => {
     if (customerRow) {
-      await tx.run(`UPDATE customers SET authUserId = COALESCE(authUserId, ?), firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), latestAddress = COALESCE(NULLIF(?, ''), latestAddress), city = COALESCE(NULLIF(?, ''), city), department = COALESCE(NULLIF(?, ''), department), country = COALESCE(NULLIF(?, ''), country), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
+      await tx.run(`UPDATE customers SET authUserId = COALESCE(authUserId, ?), firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), documenttype = ?, documentnumber = ?, latestAddress = COALESCE(NULLIF(?, ''), latestAddress), city = COALESCE(NULLIF(?, ''), city), department = COALESCE(NULLIF(?, ''), department), country = COALESCE(NULLIF(?, ''), country), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
         userId, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
-        address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia', customerId,
+        document.type, document.number, address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia', customerId,
       ]);
     } else {
-      await tx.run(`INSERT INTO customers (id, authUserId, email, firstName, lastName, phone, phoneNormalized, latestAddress, city, department, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+      await tx.run(`INSERT INTO customers (id, authUserId, email, firstName, lastName, phone, phoneNormalized, documenttype, documentnumber, latestAddress, city, department, country) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
         customerId, userId, email, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
-        address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia',
+        document.type, document.number, address.addressLine1 || '', address.city || '', address.department || '', address.country || 'Colombia',
       ]);
     }
-    const snapshotCustomer = await tx.get('SELECT email, firstname AS "firstName", lastname AS "lastName", phone FROM customers WHERE id = ?', [customerId]);
+    const snapshotCustomer = await tx.get('SELECT email, firstname AS "firstName", lastname AS "lastName", phone, documenttype AS "documentType", documentnumber AS "documentNumber" FROM customers WHERE id = ?', [customerId]);
     const emailSnapshot = normalizeEmail(snapshotCustomer?.email || email) || null;
     const firstNameSnapshot = String(snapshotCustomer?.firstName || '').trim() || null;
     const lastNameSnapshot = String(snapshotCustomer?.lastName || '').trim() || null;
     const phoneSnapshot = String(snapshotCustomer?.phone || '').trim() || null;
-    await tx.run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-      id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, now,
+    const documentTypeSnapshot = String(snapshotCustomer?.documentType || document.type).trim() || null;
+    const documentNumberSnapshot = String(snapshotCustomer?.documentNumber || document.number).trim() || null;
+    await tx.run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, documenttypesnapshot, documentnumbersnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+      id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, documentTypeSnapshot, documentNumberSnapshot, now,
     ]);
     for (const [index, product] of products.entries()) {
       const quantity = items[index].quantity;
