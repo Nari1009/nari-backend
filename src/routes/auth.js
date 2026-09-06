@@ -73,11 +73,17 @@ router.post('/login', async (req, res, next) => {
     if (!user.emailVerifiedAt) return res.status(403).json({ code: 'EMAIL_NOT_VERIFIED', error: 'Debes confirmar tu correo antes de iniciar sesión.' });
     await run('UPDATE auth_users SET lastLoginAt = CURRENT_TIMESTAMP WHERE id = ?', [user.id]);
     await createSession(run, user.id, res);
-    res.json({ user: publicUser(user) });
+    const customer = await get('SELECT documenttype AS "documentType", documentnumber AS "documentNumber" FROM customers WHERE authuserid = ?', [user.id]);
+    res.json({ user: { ...publicUser(user), documentType: customer?.documentType || '', documentNumber: customer?.documentNumber || '' } });
   } catch (error) { next(error); }
 });
 
-router.get('/me', requireUser, (req, res) => res.json({ user: req.user }));
+router.get('/me', requireUser, async (req, res, next) => {
+  try {
+    const customer = await get('SELECT documenttype AS "documentType", documentnumber AS "documentNumber" FROM customers WHERE authuserid = ?', [req.user.id]);
+    res.json({ user: { ...req.user, documentType: customer?.documentType || '', documentNumber: customer?.documentNumber || '' } });
+  } catch (error) { next(error); }
+});
 
 const verificationMessage = 'Si la cuenta existe y aún no está verificada, recibirás un nuevo correo de confirmación.';
 router.post('/resend-verification', async (req, res, next) => {
@@ -225,7 +231,7 @@ router.get('/orders/:id', requireUser, async (req, res, next) => {
   try {
     const customer = await get('SELECT id FROM customers WHERE authuserid = ?', [req.user.id]);
     if (!customer) return res.status(404).json({ error: 'Pedido no encontrado.' });
-    const order = await get(`SELECT id, createdat AS date, status, deliveredat AS "deliveredAt", total, subtotal, shippingtotal AS "shippingTotal", discounttotal AS "discountTotal", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", shippingaddress AS "shippingAddress", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot"
+    const order = await get(`SELECT id, createdat AS date, status, deliveredat AS "deliveredAt", total, subtotal, shippingtotal AS "shippingTotal", discounttotal AS "discountTotal", shippingprovider AS "shippingProvider", trackingnumber AS "trackingNumber", shippingaddress AS "shippingAddress", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot", documenttypesnapshot AS "documentTypeSnapshot", documentnumbersnapshot AS "documentNumberSnapshot"
       FROM orders WHERE id = ? AND customerid = ?`, [req.params.id, customer.id]);
     if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
     const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
