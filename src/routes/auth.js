@@ -178,7 +178,7 @@ router.patch('/password', requireUser, async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-const addressFields = 'id, userId, firstName, lastName, phone, country, department, city, addressLine1, addressLine2, neighborhood, postalCode, deliveryInstructions, isDefault, createdAt, updatedAt';
+const addressFields = 'id, userid AS "userId", firstname AS "firstName", lastname AS "lastName", phone, country, department, city, addressline1 AS "addressLine1", addressline2 AS "addressLine2", neighborhood, postalcode AS "postalCode", deliveryinstructions AS "deliveryInstructions", isdefault AS "isDefault", createdat AS "createdAt", updatedat AS "updatedAt"';
 const addressInput = (body) => ({ firstName: String(body?.firstName || '').trim(), lastName: String(body?.lastName || '').trim(), phone: String(body?.phone || '').trim(), country: String(body?.country || 'Colombia').trim(), department: String(body?.department || '').trim(), city: String(body?.city || '').trim(), addressLine1: String(body?.addressLine1 || '').trim(), addressLine2: String(body?.addressLine2 || '').trim(), neighborhood: String(body?.neighborhood || '').trim(), postalCode: String(body?.postalCode || '').trim(), deliveryInstructions: String(body?.deliveryInstructions || '').trim(), isDefault: Boolean(body?.isDefault) });
 const validAddress = (address) => address.firstName && address.lastName && address.phone && address.country && address.department && address.city && address.addressLine1;
 
