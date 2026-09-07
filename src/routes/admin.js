@@ -12,6 +12,8 @@ const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
 const { uploadProductImage } = require('../services/storage');
 const { getAnalytics } = require('../services/analyticsService');
+const { getSetting, updateSetting, validSections } = require('./settings');
+const { ContractValidationError } = require('../services/settingsContract');
 const router = express.Router();
 const serializeList = (value) => {
   if (Array.isArray(value)) return JSON.stringify(value);
@@ -40,6 +42,24 @@ const dashboardDate = (value, fallback) => {
 };
 
 router.use(requireAdmin);
+
+router.get('/settings/:section', async (req, res, next) => {
+  try {
+    if (!validSections.has(req.params.section)) return res.status(404).json({ error: 'Setting section not found' });
+    res.json(await getSetting(req.params.section));
+  } catch (error) { next(error); }
+});
+
+router.put('/settings/:section', async (req, res, next) => {
+  try {
+    if (!validSections.has(req.params.section)) return res.status(404).json({ error: 'Setting section not found' });
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) return res.status(400).json({ error: 'Settings must be an object' });
+    res.json(await updateSetting(req.params.section, req.body));
+  } catch (error) {
+    if (error instanceof ContractValidationError) return res.status(400).json({ error: error.message });
+    next(error);
+  }
+});
 
 router.get('/analytics', async (req, res, next) => {
   try {
@@ -70,9 +90,14 @@ router.get('/content/:page', async (req, res) => {
   res.json({ page: req.params.page, content });
 });
 
-router.put('/content/:page', async (req, res) => {
-  if (!req.body || typeof req.body.content !== 'object' || Array.isArray(req.body.content)) return res.status(400).json({ error: 'Content must be a JSON object' });
-  res.json({ page: req.params.page, content: await saveContent(req.params.page, req.body.content) });
+router.put('/content/:page', async (req, res, next) => {
+  try {
+    if (!req.body || typeof req.body.content !== 'object' || Array.isArray(req.body.content)) return res.status(400).json({ error: 'Content must be a JSON object' });
+    res.json({ page: req.params.page, content: await saveContent(req.params.page, req.body.content) });
+  } catch (error) {
+    if (error instanceof ContractValidationError) return res.status(400).json({ error: error.message });
+    next(error);
+  }
 });
 
 router.get('/products', async (req, res) => {
