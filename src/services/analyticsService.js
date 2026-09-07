@@ -55,6 +55,7 @@ const periodFromDates = (from, to) => ({
   to: zonedBoundary(to),
   localFrom: from,
   localTo: to,
+  localThrough: shiftDate(to, -1),
 });
 
 const analyticsPeriod = ({ period = '30d', from, to, now = new Date() } = {}) => {
@@ -64,7 +65,7 @@ const analyticsPeriod = ({ period = '30d', from, to, now = new Date() } = {}) =>
   if (period === 'today') { localFrom = today; localTo = shiftDate(today, 1); }
   else if (period === '7d') { localFrom = shiftDate(today, -6); localTo = shiftDate(today, 1); }
   else if (period === '30d' || !period) { localFrom = shiftDate(today, -29); localTo = shiftDate(today, 1); }
-  else if (period === 'month') { localFrom = `${today.slice(0, 7)}-01`; localTo = shiftDate(localFrom, 31).slice(0, 7) + '-01'; }
+  else if (period === 'month') { localFrom = `${today.slice(0, 7)}-01`; localTo = shiftDate(today, 1); }
   else if (period === 'custom' && from && to) localTo = shiftDate(to, 1);
   else { localFrom = localFrom || shiftDate(today, -29); localTo = localTo || shiftDate(today, 1); }
   const current = periodFromDates(localFrom, localTo);

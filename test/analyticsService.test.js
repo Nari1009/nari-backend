@@ -30,7 +30,19 @@ test('Bogota boundaries convert local midnight to UTC consistently', () => {
   assert.equal(zonedBoundary('2026-09-10'), '2026-09-10T05:00:00.000Z');
   assert.equal(zonedBoundary('2026-09-11'), '2026-09-11T05:00:00.000Z');
   const ranges = analyticsPeriod({ period: 'today', now: new Date('2026-09-10T04:59:59.000Z') });
-  assert.equal(ranges.current.localFrom, '2026-09-09'); assert.equal(ranges.current.localTo, '2026-09-10');
+  assert.equal(ranges.current.localFrom, '2026-09-09'); assert.equal(ranges.current.localTo, '2026-09-10'); assert.equal(ranges.current.localThrough, '2026-09-09');
+});
+
+test('period metadata exposes the inclusive Bogotá display date separately', () => {
+  const now = new Date('2026-09-06T15:00:00.000Z');
+  const seven = analyticsPeriod({ period: '7d', now }).current;
+  const thirty = analyticsPeriod({ period: '30d', now }).current;
+  const month = analyticsPeriod({ period: 'month', now }).current;
+  const custom = analyticsPeriod({ period: 'custom', from: '2026-09-01', to: '2026-09-05', now }).current;
+  assert.deepEqual([seven.localFrom, seven.localThrough, seven.localTo], ['2026-08-31', '2026-09-06', '2026-09-07']);
+  assert.deepEqual([thirty.localFrom, thirty.localThrough, thirty.localTo], ['2026-08-08', '2026-09-06', '2026-09-07']);
+  assert.deepEqual([month.localFrom, month.localThrough, month.localTo], ['2026-09-01', '2026-09-06', '2026-09-07']);
+  assert.deepEqual([custom.localFrom, custom.localThrough, custom.localTo], ['2026-09-01', '2026-09-05', '2026-09-06']);
 });
 
 test('top products preserve snapshot names and support safe catalog display fallback', () => {
