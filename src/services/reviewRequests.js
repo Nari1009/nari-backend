@@ -39,7 +39,7 @@ const setRequest = (id, fields, expectedStatus = 'processing') => {
 const blockReviewRequest = (id, code) => setRequest(id, { status: 'blocked', processingat: null, lasterror: code });
 const releaseReviewRequestForRetry = (id, code) => setRequest(id, { status: 'pending', processingat: null, lasterror: code });
 const markReviewRequestSent = (id) => setRequest(id, { status: 'sent', sentat: new Date().toISOString(), processingat: null, tokenciphertext: null, lasterror: null });
-const loadOrderForRequest = (orderId) => get(`SELECT id, status, deliveredat AS "deliveredAt", userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot" FROM orders WHERE id = ?`, [orderId]);
+const loadOrderForRequest = (orderId) => get(`SELECT id, ordernumber AS "orderNumber", status, deliveredat AS "deliveredAt", userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot" FROM orders WHERE id = ?`, [orderId]);
 const loadEligibleProducts = async (orderId) => all(`SELECT DISTINCT ON (oi.productid) oi.productid AS "productId", oi.productname AS "productName"
   FROM order_items oi WHERE oi.orderid = ? ORDER BY oi.productid, oi.id`, [orderId]);
 const loadReviewState = async (orderId, productIds) => {
@@ -74,7 +74,7 @@ const processOne = async ({ request, sendReviewRequestEmail }) => {
   let baseUrl;
   try { baseUrl = getAppUrl(); } catch { await blockReviewRequest(request.id, 'missing_client_app_url'); return 'blocked'; }
   try {
-    await sendReviewRequestEmail({ to: email, customerName: order.customerFirstNameSnapshot, orderReference: order.id, products, reviewUrl: `${baseUrl}/review/${encodeURIComponent(token.rawToken)}`, idempotencyKey: `review-request/${request.id}` });
+    await sendReviewRequestEmail({ to: email, customerName: order.customerFirstNameSnapshot, orderReference: order.orderNumber || order.id, products, reviewUrl: `${baseUrl}/review/${encodeURIComponent(token.rawToken)}`, idempotencyKey: `review-request/${request.id}` });
   } catch (error) { await releaseReviewRequestForRetry(request.id, 'resend_failed'); return 'retry'; }
   await markReviewRequestSent(request.id); return 'sent';
 };
