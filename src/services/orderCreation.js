@@ -133,7 +133,7 @@ async function createOrder({ payload, userId = null }) {
       total,
     }, products.map((product, index) => ({ productName: product.name, quantity: items[index].quantity, unitPrice: product.price })));
   });
-  return { id, date: now, status: payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, products: products.map((product) => product.name) };
+  return { id, orderNumber, date: now, status: payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, products: products.map((product) => product.name) };
 }
 
 module.exports = { createOrder };
