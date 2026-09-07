@@ -2,6 +2,22 @@ const { get, run } = require('./init');
 const { ContractValidationError } = require('../services/settingsContract');
 
 const defaults = {
+  home: {
+    hero: {
+      eyebrow: 'NARI · SKINCARE COREANO',
+      title: 'Skincare con criterio.',
+      description: 'Una selección de skincare coreano para ayudarte a entender qué tiene sentido para tu piel.',
+      ctaLabel: 'Explorar productos',
+    },
+    faq: [
+      { question: '¿Cómo sé qué productos son adecuados para mi piel?', answer: 'Cuéntanos cómo sientes tu piel y qué quieres mejorar. NARI te ayudará a encontrar una rutina sencilla y personalizada.' },
+      { question: '¿Los productos son originales?', answer: 'Sí. Trabajamos con distribuidores confiables y seleccionamos cada producto con intención.' },
+      { question: '¿Cómo funcionan los envíos?', answer: 'Enviamos tus productos cuidadosamente empacados a todo Colombia.' },
+      { question: '¿Cómo puedo crear una rutina?', answer: 'Puedes comenzar conversando con NARI o escribiéndonos para recibir una recomendación.' },
+      { question: '¿Cuánto tarda mi pedido?', answer: 'Los pedidos suelen llegar entre 2 y 5 días hábiles, según tu ciudad.' },
+      { question: '¿Qué métodos de pago aceptan?', answer: 'Aceptamos los principales medios de pago disponibles en Colombia.' },
+    ],
+  },
   ayuda: {
     eyebrow: 'NARI · CENTRO DE AYUDA', title: '¿Cómo podemos ayudarte?', description: 'Encuentra información clara sobre los temas más importantes de tu experiencia con NARI.',
     topics: [
@@ -32,7 +48,7 @@ const defaults = {
   },
 };
 
-const contentLimits = { short: 160, body: 1200, array: 20 };
+const contentLimits = { short: 160, body: 1200, question: 240, answer: 800, array: 20, faq: 12 };
 const contentFail = (message) => { throw new ContractValidationError(message); };
 const contentObject = (value, label) => { if (!value || typeof value !== 'object' || Array.isArray(value)) contentFail(`${label} debe ser un objeto.`); };
 const contentString = (value, field, max = contentLimits.body) => {
@@ -56,10 +72,33 @@ const textList = (value, fields, label) => {
   if (!Array.isArray(value) || value.length > contentLimits.array) contentFail(`${label} debe ser una lista válida.`);
   return value.map((item) => textItem(item, fields, label));
 };
+const faqList = (value) => {
+  if (!Array.isArray(value) || value.length > contentLimits.faq) contentFail('home.faq debe ser una lista válida.');
+  return value.map((item) => textItemWithLimits(item, ['question', 'answer'], 'home.faq', { question: contentLimits.question, answer: contentLimits.answer }));
+};
+const textItemWithLimits = (value, fields, label, limits) => {
+  contentObject(value, label);
+  contentKeys(value, fields, label);
+  return Object.fromEntries(fields.map((field) => [field, contentString(value[field], `${label}.${field}`, limits[field])]));
+};
 
 const validateContent = (page, value) => {
   if (!Object.prototype.hasOwnProperty.call(defaults, page)) contentFail('Content page not found');
   contentObject(value, page);
+  if (page === 'home') {
+    contentKeys(value, ['hero', 'faq'], page);
+    contentObject(value.hero, 'home.hero');
+    contentKeys(value.hero, ['eyebrow', 'title', 'description', 'ctaLabel'], 'home.hero');
+    return {
+      hero: {
+        eyebrow: contentString(value.hero.eyebrow, 'home.hero.eyebrow', contentLimits.short),
+        title: contentString(value.hero.title, 'home.hero.title', contentLimits.short),
+        description: contentString(value.hero.description, 'home.hero.description', contentLimits.body),
+        ctaLabel: contentString(value.hero.ctaLabel, 'home.hero.ctaLabel', contentLimits.short),
+      },
+      faq: faqList(value.faq),
+    };
+  }
   if (page === 'ayuda') {
     contentKeys(value, ['eyebrow', 'title', 'description', 'topics', 'contactTitle', 'contactText'], page);
     return {
@@ -102,6 +141,7 @@ const validateContent = (page, value) => {
 async function ensureContent() {
   await run(`CREATE TABLE IF NOT EXISTS site_content (page TEXT PRIMARY KEY, content TEXT NOT NULL, updatedAt TEXT DEFAULT CURRENT_TIMESTAMP)`);
   for (const [page, content] of Object.entries(defaults)) {
+    if (page === 'home') continue;
     const existing = await get('SELECT page FROM site_content WHERE page = ?', [page]);
     if (!existing) await run('INSERT INTO site_content (page, content) VALUES (?, ?)', [page, JSON.stringify(content)]);
   }
