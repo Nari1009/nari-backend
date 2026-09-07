@@ -42,7 +42,7 @@ const dashboardDate = (value, fallback) => {
 router.use(requireAdmin);
 
 router.get('/r7-analytics-validation', async (req, res, next) => {
-  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
+  if (process.env.NARI_ENV !== 'dev') return res.status(404).json({ error: 'Not found' });
   try {
     const period = String(req.query.period || '30d');
     const from = req.query.from ? String(req.query.from) : undefined;
