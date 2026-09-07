@@ -1,6 +1,7 @@
 const express = require('express');
 const { all, get } = require('../db/init');
 const { getContent } = require('../db/content');
+const { PUBLIC_PRODUCT_SELECT } = require('../services/productProjection');
 const router = express.Router();
 
 const publicAuthorName = (firstName, lastName) => {
@@ -96,7 +97,7 @@ router.get('/:id/reviews', async (req, res, next) => {
 router.get('/', async (req, res) => {
   const { search, category } = req.query;
 
-  let sql = 'SELECT * FROM products WHERE status = ?';
+  let sql = `${PUBLIC_PRODUCT_SELECT} WHERE status = ?`;
   let params = ['active'];
 
   const normalizedSearch = String(search || '').trim();
@@ -119,7 +120,7 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   const product = await get(
-    'SELECT * FROM products WHERE id = ?',
+    `${PUBLIC_PRODUCT_SELECT} WHERE id = ?`,
     [req.params.id]
   );
 
