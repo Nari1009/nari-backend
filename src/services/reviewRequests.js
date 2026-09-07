@@ -7,8 +7,14 @@ const REVIEW_DELAY_DAYS = (() => { const value = Number.parseInt(process.env.REV
 const REVIEW_WINDOW_DAYS = 30;
 const LEASE_MS = 10 * 60 * 1000;
 const BATCH_LIMIT = 20;
+const MAX_ATTEMPTS = 8;
+const BACKOFF_MINUTES = [5, 15, 60, 360];
 const randomId = () => `review-request-${crypto.randomBytes(12).toString('hex')}`;
 const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+const retryAt = (attempt, now = Date.now()) => new Date(now + BACKOFF_MINUTES[Math.min(Math.max(attempt, 1) - 1, BACKOFF_MINUTES.length - 1)] * 60000).toISOString();
+const retryState = (attempt, now = Date.now()) => attempt >= MAX_ATTEMPTS
+  ? { status: 'blocked', nextAttemptAt: null }
+  : { status: 'pending', nextAttemptAt: retryAt(attempt, now) };
 
 const createReviewRequestForDeliveredOrder = async (tx, order) => {
   const deliveredAt = order.deliveredAt || new Date().toISOString();
@@ -21,9 +27,10 @@ const createReviewRequestForDeliveredOrder = async (tx, order) => {
 };
 
 const claimNextReviewRequest = async () => withTransaction(async (tx) => {
-  const request = await tx.get(`SELECT id, orderid AS "orderId", userid AS "userId", tokenhash AS "tokenHash", tokenciphertext AS "tokenCiphertext", status, eligibleat AS "eligibleAt", sentat AS "sentAt", processingat AS "processingAt", expiresat AS "expiresAt", completedat AS "completedAt", attemptcount AS "attemptCount", lasterror AS "lastError"
+  const request = await tx.get(`SELECT id, orderid AS "orderId", userid AS "userId", tokenhash AS "tokenHash", tokenciphertext AS "tokenCiphertext", status, eligibleat AS "eligibleAt", sentat AS "sentAt", processingat AS "processingAt", nextattemptat AS "nextAttemptAt", expiresat AS "expiresAt", completedat AS "completedAt", attemptcount AS "attemptCount", lasterror AS "lastError"
     FROM order_review_requests
-    WHERE ((status = 'pending' AND eligibleat <= CURRENT_TIMESTAMP)
+    WHERE ((status = 'pending' AND eligibleat <= CURRENT_TIMESTAMP AND expiresat > CURRENT_TIMESTAMP
+        AND (nextattemptat IS NULL OR nextattemptat <= CURRENT_TIMESTAMP))
         OR (status = 'processing' AND processingat < CURRENT_TIMESTAMP - INTERVAL '10 minutes'))
     ORDER BY eligibleat, createdat
     FOR UPDATE SKIP LOCKED LIMIT 1`);
@@ -36,9 +43,12 @@ const setRequest = (id, fields, expectedStatus = 'processing') => {
   const entries = Object.entries(fields); const values = entries.map(([, value]) => value);
   return run(`UPDATE order_review_requests SET ${entries.map(([key]) => `${key} = ?`).join(', ')} WHERE id = ? AND status = ?`, [...values, id, expectedStatus]);
 };
-const blockReviewRequest = (id, code) => setRequest(id, { status: 'blocked', processingat: null, lasterror: code });
-const releaseReviewRequestForRetry = (id, code) => setRequest(id, { status: 'pending', processingat: null, lasterror: code });
-const markReviewRequestSent = (id) => setRequest(id, { status: 'sent', sentat: new Date().toISOString(), processingat: null, tokenciphertext: null, lasterror: null });
+const blockReviewRequest = (id, code) => setRequest(id, { status: 'blocked', processingat: null, nextattemptat: null, lasterror: code });
+const releaseReviewRequestForRetry = (id, attempt, code) => {
+  const next = retryState(attempt);
+  return setRequest(id, { status: next.status, processingat: null, nextattemptat: next.nextAttemptAt, lasterror: code });
+};
+const markReviewRequestSent = (id) => setRequest(id, { status: 'sent', sentat: new Date().toISOString(), processingat: null, nextattemptat: null, tokenciphertext: null, lasterror: null });
 const loadOrderForRequest = (orderId) => get(`SELECT id, ordernumber AS "orderNumber", status, deliveredat AS "deliveredAt", userid AS "userId", customeremailsnapshot AS "customerEmailSnapshot", customerfirstnamesnapshot AS "customerFirstNameSnapshot" FROM orders WHERE id = ?`, [orderId]);
 const loadEligibleProducts = async (orderId) => all(`SELECT DISTINCT ON (oi.productid) oi.productid AS "productId", oi.productname AS "productName"
   FROM order_items oi WHERE oi.orderid = ? ORDER BY oi.productid, oi.id`, [orderId]);
@@ -75,7 +85,7 @@ const processOne = async ({ request, sendReviewRequestEmail }) => {
   try { baseUrl = getAppUrl(); } catch { await blockReviewRequest(request.id, 'missing_client_app_url'); return 'blocked'; }
   try {
     await sendReviewRequestEmail({ to: email, customerName: order.customerFirstNameSnapshot, orderReference: order.orderNumber || order.id, products, reviewUrl: `${baseUrl}/review/${encodeURIComponent(token.rawToken)}`, idempotencyKey: `review-request/${request.id}` });
-  } catch (error) { await releaseReviewRequestForRetry(request.id, 'resend_failed'); return 'retry'; }
+  } catch (error) { await releaseReviewRequestForRetry(request.id, request.attemptCount, 'resend_failed'); return request.attemptCount >= MAX_ATTEMPTS ? 'blocked' : 'retry'; }
   await markReviewRequestSent(request.id); return 'sent';
 };
 const processReviewRequests = async ({ sendReviewRequestEmail, limit = BATCH_LIMIT } = {}) => {
@@ -84,7 +94,7 @@ const processReviewRequests = async ({ sendReviewRequestEmail, limit = BATCH_LIM
   for (let index = 0; index < limit; index += 1) {
     const request = await claimNextReviewRequest(); if (!request) break;
     try { results.push({ id: request.id, result: await processOne({ request, sendReviewRequestEmail: sender }) }); }
-    catch (error) { await releaseReviewRequestForRetry(request.id, 'worker_error'); results.push({ id: request.id, result: 'retry' }); }
+    catch (error) { await releaseReviewRequestForRetry(request.id, request.attemptCount, 'worker_error'); results.push({ id: request.id, result: request.attemptCount >= MAX_ATTEMPTS ? 'blocked' : 'retry' }); }
   }
   return results;
 };
@@ -94,4 +104,4 @@ const completeIfReviewed = async (requestId, orderId) => {
   const products = await loadEligibleProducts(orderId); const reviewed = await loadReviewState(orderId, products.map((item) => item.productId));
   if (products.length && reviewed.size === products.length) await run("UPDATE order_review_requests SET status = 'completed', completedat = COALESCE(completedat, CURRENT_TIMESTAMP) WHERE id = ? AND status = 'sent'", [requestId]);
 };
-module.exports = { REVIEW_DELAY_DAYS, REVIEW_WINDOW_DAYS, LEASE_MS, BATCH_LIMIT, createReviewRequestForDeliveredOrder, claimNextReviewRequest, processReviewRequests, findRequestByToken, loadOrderForRequest, loadEligibleProducts, loadReviewState, completeIfReviewed };
+module.exports = { REVIEW_DELAY_DAYS, REVIEW_WINDOW_DAYS, LEASE_MS, BATCH_LIMIT, MAX_ATTEMPTS, BACKOFF_MINUTES, retryAt, retryState, createReviewRequestForDeliveredOrder, claimNextReviewRequest, processReviewRequests, findRequestByToken, loadOrderForRequest, loadEligibleProducts, loadReviewState, completeIfReviewed };
