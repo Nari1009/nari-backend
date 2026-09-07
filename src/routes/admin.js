@@ -11,6 +11,7 @@ const { getAppUrl } = require('../services/appUrl');
 const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
 const { uploadProductImage } = require('../services/storage');
+const { getAnalytics } = require('../services/analyticsService');
 const router = express.Router();
 const serializeList = (value) => {
   if (Array.isArray(value)) return JSON.stringify(value);
@@ -39,6 +40,17 @@ const dashboardDate = (value, fallback) => {
 };
 
 router.use(requireAdmin);
+
+router.get('/r7-analytics-validation', async (req, res, next) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'Not found' });
+  try {
+    const period = String(req.query.period || '30d');
+    const from = req.query.from ? String(req.query.from) : undefined;
+    const to = req.query.to ? String(req.query.to) : undefined;
+    const analytics = await getAnalytics({ period, from, to });
+    res.json(analytics);
+  } catch (error) { next(error); }
+});
 
 router.get('/content/:page', async (req, res) => {
   const content = await getContent(req.params.page);
