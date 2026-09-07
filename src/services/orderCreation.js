@@ -3,6 +3,7 @@ const { get, withTransaction } = require('../db/init');
 const { normalizeEmail } = require('./auth');
 const { enqueueOrderEmail } = require('./emailOutbox');
 const { getShippingQuote } = require('./shippingPolicy');
+const { nextOrderNumber } = require('./orderNumber');
 
 const randomId = () => crypto.randomBytes(12).toString('hex');
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
@@ -76,8 +77,10 @@ async function createOrder({ payload, userId = null }) {
   // El teléfono se conserva como contacto, pero nunca selecciona un Customer.
   const customerRow = authenticatedCustomer || emailCustomer;
   const customerId = customerRow?.id || `customer-${randomId()}`;
+  let orderNumber;
 
   await withTransaction(async (tx) => {
+    orderNumber = await nextOrderNumber(tx);
     if (customerRow) {
       await tx.run(`UPDATE customers SET authUserId = COALESCE(authUserId, ?), firstName = COALESCE(NULLIF(?, ''), firstName), lastName = COALESCE(NULLIF(?, ''), lastName), phone = COALESCE(NULLIF(?, ''), phone), phoneNormalized = COALESCE(NULLIF(?, ''), phoneNormalized), documenttype = ?, documentnumber = ?, latestAddress = COALESCE(NULLIF(?, ''), latestAddress), city = COALESCE(NULLIF(?, ''), city), department = COALESCE(NULLIF(?, ''), department), country = COALESCE(NULLIF(?, ''), country), updatedAt = CURRENT_TIMESTAMP WHERE id = ?`, [
         userId, String(customer.firstName || '').trim(), String(customer.lastName || '').trim(), phone, phoneNormalized,
@@ -96,8 +99,8 @@ async function createOrder({ payload, userId = null }) {
     const phoneSnapshot = String(snapshotCustomer?.phone || '').trim() || null;
     const documentTypeSnapshot = String(snapshotCustomer?.documentType || document.type).trim() || null;
     const documentNumberSnapshot = String(snapshotCustomer?.documentNumber || document.number).trim() || null;
-    await tx.run('INSERT INTO orders (id, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, shippingzone, deliverytype, samedayeligible, shippingpolicyversion, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, documenttypesnapshot, documentnumbersnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
-      id, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), shippingQuote.shippingZone, shippingQuote.deliveryType, shippingQuote.sameDayEligible, shippingQuote.policyVersion, emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, documentTypeSnapshot, documentNumberSnapshot, now,
+    await tx.run('INSERT INTO orders (id, ordernumber, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, shippingzone, deliverytype, samedayeligible, shippingpolicyversion, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, documenttypesnapshot, documentnumbersnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+      id, orderNumber, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), shippingQuote.shippingZone, shippingQuote.deliveryType, shippingQuote.sameDayEligible, shippingQuote.policyVersion, emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, documentTypeSnapshot, documentNumberSnapshot, now,
     ]);
     for (const [index, product] of products.entries()) {
       const quantity = items[index].quantity;
@@ -114,6 +117,7 @@ async function createOrder({ payload, userId = null }) {
     await tx.run("UPDATE abandoned_carts SET convertedAt = ?, status = 'completed', completedAt = ?, processingStage = NULL, processingAt = NULL, nextAttemptAt = NULL, updatedAt = CURRENT_TIMESTAMP WHERE (normalizedEmail = ? OR lower(trim(email)) = ?) AND (convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '') AND COALESCE(status, 'active') IN ('active', 'recovered')", [now, now, normalizeEmail(email), normalizeEmail(email)]);
     await enqueueOrderEmail(tx, 'order_received', {
       id,
+      orderNumber,
       userId,
       customerEmailSnapshot: emailSnapshot,
       customerFirstNameSnapshot: firstNameSnapshot,

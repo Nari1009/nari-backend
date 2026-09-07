@@ -7,6 +7,7 @@ const randomId = () => `email-${crypto.randomBytes(12).toString('hex')}`;
 const snapshotOrder = (eventType, order) => {
   const payload = {
     id: String(order?.id || ''),
+    orderNumber: String(order?.orderNumber || order?.id || '').trim(),
     customerEmailSnapshot: String(order?.customerEmailSnapshot || '').trim(),
     customerFirstNameSnapshot: String(order?.customerFirstNameSnapshot || '').trim(),
     customerLastNameSnapshot: String(order?.customerLastNameSnapshot || '').trim(),

@@ -88,7 +88,7 @@ const buildOrderReceivedEmail = ({ order, items, accountUrl = null }) => {
   const discountRow = discount > 0 ? `<tr><td style="padding:4px 0">Descuento</td><td style="padding:4px 0;text-align:right">-${formatCop(discount)}</td></tr>` : '';
   const registeredCta = accountUrl ? `<p style="margin:24px 0"><a href="${escapeHtml(accountUrl)}" style="display:inline-block;background:#064c3e;color:#fff;padding:12px 20px;text-decoration:none;border-radius:4px">Ver mis pedidos</a></p>` : '';
   const firstName = String(order?.customerFirstNameSnapshot || '').trim();
-  const orderNumber = String(order?.id || '').trim();
+  const orderNumber = String(order?.orderNumber || order?.id || '').trim();
   const subject = `Recibimos tu pedido NARI #${orderNumber}`;
   const textItems = orderItems.map((item) => `- ${item.productName || 'Producto'} · Cantidad: ${Number(item.quantity || 0)} · ${formatCop(item.unitPrice)} c/u · ${formatCop(Number(item.unitPrice || 0) * Number(item.quantity || 0))}`).join('\n');
   const textAddress = addressLines(order?.shippingAddress).join('\n');
@@ -109,7 +109,7 @@ const sendOrderReceivedEmail = ({ order, items, accountUrl = null, idempotencyKe
 };
 
 const buildOrderShippedEmail = ({ order, items, accountUrl = null }) => {
-  const orderNumber = String(order?.id || '').trim();
+  const orderNumber = String(order?.orderNumber || order?.id || '').trim();
   const firstName = String(order?.customerFirstNameSnapshot || '').trim();
   const provider = String(order?.shippingProvider || '').trim();
   const tracking = String(order?.trackingNumber || '').trim();
@@ -129,7 +129,7 @@ const sendOrderShippedEmail = ({ order, items, accountUrl = null, idempotencyKey
 };
 
 const buildOrderDeliveredEmail = ({ order, items, accountUrl = null }) => {
-  const orderNumber = String(order?.id || '').trim();
+  const orderNumber = String(order?.orderNumber || order?.id || '').trim();
   const firstName = String(order?.customerFirstNameSnapshot || '').trim();
   const deliveredAt = new Date(order?.deliveredAt);
   const deliveryDate = Number.isNaN(deliveredAt.getTime()) ? 'Fecha no disponible' : deliveredAt.toLocaleString('es-CO', { dateStyle: 'long', timeStyle: 'short', timeZone: 'America/Bogota' });
