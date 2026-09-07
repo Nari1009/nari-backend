@@ -99,7 +99,7 @@ async function createOrder({ payload, userId = null }) {
     const phoneSnapshot = String(snapshotCustomer?.phone || '').trim() || null;
     const documentTypeSnapshot = String(snapshotCustomer?.documentType || document.type).trim() || null;
     const documentNumberSnapshot = String(snapshotCustomer?.documentNumber || document.number).trim() || null;
-    await tx.run('INSERT INTO orders (id, ordernumber, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, shippingzone, deliverytype, samedayeligible, shippingpolicyversion, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, documenttypesnapshot, documentnumbersnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+    await tx.run('INSERT INTO orders (id, ordernumber, userId, customerId, status, total, subtotal, shippingTotal, discountTotal, shippingAddress, shippingzone, deliverytype, samedayeligible, shippingpolicyversion, customerEmailSnapshot, customerFirstNameSnapshot, customerLastNameSnapshot, customerPhoneSnapshot, documenttypesnapshot, documentnumbersnapshot, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
       id, orderNumber, userId, customerId, payload.paymentStatus === 'paid' ? 'Pagado' : 'Pendiente', total, subtotal, shipping, discount, JSON.stringify(address), shippingQuote.shippingZone, shippingQuote.deliveryType, shippingQuote.sameDayEligible, shippingQuote.policyVersion, emailSnapshot, firstNameSnapshot, lastNameSnapshot, phoneSnapshot, documentTypeSnapshot, documentNumberSnapshot, now,
     ]);
     for (const [index, product] of products.entries()) {
