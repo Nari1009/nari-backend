@@ -27,5 +27,6 @@ test('order INSERT maps one generated public number to one database column', () 
   assert.equal(columns.length, placeholders.length);
   assert.equal(columns[1], 'ordernumber');
   assert.match(source, /orderNumber = await nextOrderNumber\(tx\)/);
+  assert.match(source, /return \{ id, orderNumber,/);
   assert.doesNotMatch(source, /payload\.(?:orderNumber|ordernumber)/);
 });
