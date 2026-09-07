@@ -53,6 +53,17 @@ router.get('/analytics', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.get('/reports/analytics', async (req, res, next) => {
+  try {
+    const period = String(req.query.period || '30d');
+    const from = req.query.from ? String(req.query.from) : undefined;
+    const to = req.query.to ? String(req.query.to) : undefined;
+    if (!['today', '7d', '30d', 'month', 'custom'].includes(period)) return res.status(400).json({ error: 'Periodo inválido.' });
+    if (period === 'custom' && (!from || !to)) return res.status(400).json({ error: 'El periodo personalizado requiere fechas.' });
+    res.json(await getAnalytics({ period, from, to }));
+  } catch (error) { next(error); }
+});
+
 router.get('/content/:page', async (req, res) => {
   const content = await getContent(req.params.page);
   if (!content) return res.status(404).json({ error: 'Content not found' });
@@ -199,13 +210,15 @@ const rememberCatalogOption = async (type, value) => {
 
 router.get('/reports.xlsx', async (req, res, next) => {
   try {
-    const end = new Date(); const start = new Date(end); start.setDate(start.getDate() - 30);
-    const from = dashboardDate(req.query.from, start); const to = dashboardDate(req.query.to, end); const visibleEndDate = new Date(to); visibleEndDate.setDate(visibleEndDate.getDate() - 1); const visibleTo = visibleEndDate.toISOString(); const lowStockThreshold = Math.max(0, Number(req.query.lowStockThreshold || 3));
-    const report = String(req.query.report || 'complete'); const data = await getReportData({ from, to, lowStockThreshold }); const workbook = makeWorkbook(data, { from, to: visibleTo, lowStockThreshold });
+    const period = String(req.query.period || '30d'); const inputFrom = req.query.from ? String(req.query.from) : undefined; const inputTo = req.query.to ? String(req.query.to) : undefined;
+    if (!['today', '7d', '30d', 'month', 'custom'].includes(period)) return res.status(400).json({ error: 'Periodo inválido.' });
+    if (period === 'custom' && (!inputFrom || !inputTo)) return res.status(400).json({ error: 'El periodo personalizado requiere fechas.' });
+    const analytics = await getAnalytics({ period, from: inputFrom, to: inputTo }); const from = analytics.period.from; const to = analytics.period.to; const visibleFrom = analytics.period.localFrom; const visibleTo = analytics.period.localThrough; const lowStockThreshold = Math.max(0, Number(req.query.lowStockThreshold || 3));
+    const report = String(req.query.report || 'complete'); const data = await getReportData({ from, to, lowStockThreshold }); const workbook = makeWorkbook(data, { from: visibleFrom, to: visibleTo, lowStockThreshold, analytics });
     const included = { orders: ['Resumen', 'Pedidos'], products: ['Resumen', 'Productos vendidos'], profit: ['Resumen', 'Rentabilidad pedidos', 'Rentabilidad productos'], inventory: ['Resumen', 'Inventario', 'Movimientos inventario'], customers: ['Resumen', 'Clientes', 'Resumen clientes'], purchases: ['Resumen', 'Compras', 'Proveedores'], shipping: ['Resumen', 'Envíos'], discounts: ['Resumen', 'Descuentos'], referrals: ['Resumen', 'Referidos'] }[report];
     if (included) workbook.worksheets.filter((sheet) => !included.includes(sheet.name)).forEach((sheet) => workbook.removeWorksheet(sheet.id));
     const suffix = report === 'complete' ? 'Reporte_Completo' : ({ orders: 'Ventas', products: 'Productos', profit: 'Rentabilidad', inventory: 'Inventario', customers: 'Clientes', purchases: 'Compras', shipping: 'Envios', discounts: 'Descuentos', referrals: 'Referidos' }[report] || 'Reporte');
-    const filename = `NARI_${suffix}_${from.slice(0, 10)}_a_${visibleTo.slice(0, 10)}.xlsx`;
+    const filename = `NARI_${suffix}_${visibleFrom}_a_${visibleTo}.xlsx`;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'); res.setHeader('Content-Disposition', `attachment; filename="${filename}"`); await workbook.xlsx.write(res); res.end();
   } catch (error) { next(error); }
 });
