@@ -1,4 +1,5 @@
 const { get, run } = require('./init');
+const { ContractValidationError } = require('../services/settingsContract');
 
 const defaults = {
   ayuda: {
@@ -31,6 +32,73 @@ const defaults = {
   },
 };
 
+const contentLimits = { short: 160, body: 1200, array: 20 };
+const contentFail = (message) => { throw new ContractValidationError(message); };
+const contentObject = (value, label) => { if (!value || typeof value !== 'object' || Array.isArray(value)) contentFail(`${label} debe ser un objeto.`); };
+const contentString = (value, field, max = contentLimits.body) => {
+  if (typeof value !== 'string') contentFail(`${field} debe ser texto.`);
+  const result = value.trim();
+  if (result.length > max) contentFail(`${field} supera el máximo permitido.`);
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(result)) contentFail(`${field} contiene caracteres no permitidos.`);
+  if (/<\/?[a-z][^>]*>/i.test(result)) contentFail(`${field} no admite HTML.`);
+  return result;
+};
+const contentKeys = (value, keys, label) => {
+  const unknown = Object.keys(value).filter((key) => !keys.includes(key));
+  if (unknown.length) contentFail(`${label} contiene campos no permitidos: ${unknown.join(', ')}.`);
+};
+const textItem = (value, fields, label) => {
+  contentObject(value, label);
+  contentKeys(value, fields, label);
+  return Object.fromEntries(fields.map((field) => [field, contentString(value[field], `${label}.${field}`, contentLimits.short)]));
+};
+const textList = (value, fields, label) => {
+  if (!Array.isArray(value) || value.length > contentLimits.array) contentFail(`${label} debe ser una lista válida.`);
+  return value.map((item) => textItem(item, fields, label));
+};
+
+const validateContent = (page, value) => {
+  if (!Object.prototype.hasOwnProperty.call(defaults, page)) contentFail('Content page not found');
+  contentObject(value, page);
+  if (page === 'ayuda') {
+    contentKeys(value, ['eyebrow', 'title', 'description', 'topics', 'contactTitle', 'contactText'], page);
+    return {
+      eyebrow: contentString(value.eyebrow, 'ayuda.eyebrow', contentLimits.short),
+      title: contentString(value.title, 'ayuda.title', contentLimits.short),
+      description: contentString(value.description, 'ayuda.description'),
+      topics: textList(value.topics, ['id', 'title', 'intro', 'detail'], 'ayuda.topics'),
+      contactTitle: contentString(value.contactTitle, 'ayuda.contactTitle', contentLimits.short),
+      contactText: contentString(value.contactText, 'ayuda.contactText'),
+    };
+  }
+  if (page === 'contacto') {
+    contentKeys(value, ['eyebrow', 'title', 'description', 'sectionTitle', 'channels', 'topics', 'questions'], page);
+    return {
+      eyebrow: contentString(value.eyebrow, 'contacto.eyebrow', contentLimits.short),
+      title: contentString(value.title, 'contacto.title', contentLimits.short),
+      description: contentString(value.description, 'contacto.description'),
+      sectionTitle: contentString(value.sectionTitle, 'contacto.sectionTitle', contentLimits.short),
+      channels: textList(value.channels, ['type', 'title', 'text', 'action'], 'contacto.channels'),
+      topics: textList(value.topics, ['title', 'text'], 'contacto.topics'),
+      questions: textList(value.questions, ['question', 'answer'], 'contacto.questions'),
+    };
+  }
+  contentKeys(value, ['eyebrow', 'title', 'description', 'introTitle', 'introText', 'methodTitle', 'methodText', 'criteria', 'philosophyTitle', 'philosophy'], page);
+  if (!Array.isArray(value.philosophy) || value.philosophy.length > contentLimits.array) contentFail('nosotros.philosophy debe ser una lista válida.');
+  return {
+    eyebrow: contentString(value.eyebrow, 'nosotros.eyebrow', contentLimits.short),
+    title: contentString(value.title, 'nosotros.title', contentLimits.short),
+    description: contentString(value.description, 'nosotros.description'),
+    introTitle: contentString(value.introTitle, 'nosotros.introTitle', contentLimits.short),
+    introText: contentString(value.introText, 'nosotros.introText'),
+    methodTitle: contentString(value.methodTitle, 'nosotros.methodTitle', contentLimits.short),
+    methodText: contentString(value.methodText, 'nosotros.methodText'),
+    criteria: textList(value.criteria, ['title', 'text'], 'nosotros.criteria'),
+    philosophyTitle: contentString(value.philosophyTitle, 'nosotros.philosophyTitle', contentLimits.short),
+    philosophy: value.philosophy.map((item) => contentString(item, 'nosotros.philosophy', contentLimits.short)),
+  };
+};
+
 async function ensureContent() {
   await run(`CREATE TABLE IF NOT EXISTS site_content (page TEXT PRIMARY KEY, content TEXT NOT NULL, updatedAt TEXT DEFAULT CURRENT_TIMESTAMP)`);
   for (const [page, content] of Object.entries(defaults)) {
@@ -41,12 +109,18 @@ async function ensureContent() {
 
 async function getContent(page) {
   const row = await get('SELECT content FROM site_content WHERE page = ?', [page]);
-  return row ? JSON.parse(row.content) : defaults[page] || null;
+  if (!Object.prototype.hasOwnProperty.call(defaults, page)) return null;
+  if (!row) return defaults[page];
+  try { return validateContent(page, JSON.parse(row.content)); } catch (error) {
+    console.error('Invalid persisted site content ignored', { page });
+    return defaults[page];
+  }
 }
 
 async function saveContent(page, content) {
-  await run('INSERT INTO site_content (page, content, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(page) DO UPDATE SET content = excluded.content, updatedAt = CURRENT_TIMESTAMP', [page, JSON.stringify(content)]);
+  const validated = validateContent(page, content);
+  await run('INSERT INTO site_content (page, content, updatedAt) VALUES (?, ?, CURRENT_TIMESTAMP) ON CONFLICT(page) DO UPDATE SET content = excluded.content, updatedAt = CURRENT_TIMESTAMP', [page, JSON.stringify(validated)]);
   return getContent(page);
 }
 
-module.exports = { defaults, ensureContent, getContent, saveContent };
+module.exports = { defaults, ensureContent, getContent, saveContent, validateContent };
