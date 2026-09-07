@@ -41,12 +41,13 @@ const dashboardDate = (value, fallback) => {
 
 router.use(requireAdmin);
 
-router.get('/r7-analytics-validation', async (req, res, next) => {
-  if (process.env.NARI_ENV !== 'dev') return res.status(404).json({ error: 'Not found' });
+router.get('/analytics', async (req, res, next) => {
   try {
     const period = String(req.query.period || '30d');
     const from = req.query.from ? String(req.query.from) : undefined;
     const to = req.query.to ? String(req.query.to) : undefined;
+    if (!['today', '7d', '30d', 'month', 'custom'].includes(period)) return res.status(400).json({ error: 'Periodo inválido.' });
+    if (period === 'custom' && (!from || !to)) return res.status(400).json({ error: 'El periodo personalizado requiere fechas.' });
     const analytics = await getAnalytics({ period, from, to });
     res.json(analytics);
   } catch (error) { next(error); }
