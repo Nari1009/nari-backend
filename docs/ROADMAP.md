@@ -177,7 +177,7 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 - **Purpose:** Provide safe Admin maintenance controls for canonical Product recommendation metadata without hardcoding Product-specific values.
 - **What was done:** Added Admin Product-form controls for `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets`, with Spanish display labels and explicit `Sin revisar` versus `Revisado` handling for `NULL` versus `[]`.
 - **What was not done:** No Client changes, AI runtime, Product research or automatic completion of PARTIAL Products.
-- **Result:** Admin production build, Backend regression tests and controlled live DEV UI round trips passed; temporary fixture state was restored exactly. R11B is closed. The 12 READY Products remain intact, the 8 PARTIAL Products remain intentionally unresolved, and the Product row is the sole persisted Product-specific source of truth.
+- **Result:** Admin production build, Backend regression tests and controlled live DEV UI round trips passed; temporary fixture state was restored exactly. The implementation was semantically integrated onto current Admin `origin/dev` and published as `2598c39`. R11B is closed. The 12 READY Products remain intact, the 8 PARTIAL Products remain intentionally unresolved, and the Product row is the sole persisted Product-specific source of truth.
 
 ## CURRENT ROADMAP FRONTIER
 

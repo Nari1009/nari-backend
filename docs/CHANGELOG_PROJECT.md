@@ -208,4 +208,4 @@ SUMMARY:
 - Kept taxonomy labels/options in Admin only; Product-specific values remain in the Backend database contract.
 - Backend regression tests and Admin production build passed.
 
-STATE AFTER: Controlled live DEV UI verification passed using a preserved fixture; all temporary values were restored exactly. No curation values were added to real Products by this task. R11B is now closed, R11 remains in progress, R11C is not started, and PROD remains untouched.
+STATE AFTER: Controlled live DEV UI verification passed using a preserved fixture; all temporary values were restored exactly. The implementation was then semantically integrated onto current Admin `origin/dev` and published as `2598c39`. No curation values were added to real Products by this task. R11B is now closed, R11 remains in progress, R11C is not started, and PROD remains untouched.

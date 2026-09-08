@@ -52,7 +52,7 @@ The Client uses legacy Product metadata for storefront display, filtering and se
 
 ### Admin
 
-The Admin frontend now supports canonical Product metadata editing in the verified implementation checkout at `/Users/luis/Documents/Codex/nari-admin-clone-I15V58/src/components/ProductForm.tsx`, with taxonomy labels/options in `src/data/canonicalProductMetadata.ts`. It exposes `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets`; array fields preserve `NULL` (Sin revisar), `[]` (Revisado sin valores) and non-empty selections. Backend validation remains authoritative. Controlled live DEV UI verification passed and temporary fixture state was restored. R11B is closed; Admin is the human editing surface and the DB Product row remains the sole persisted Product-specific source of truth.
+The Admin frontend supports canonical Product metadata editing in Admin DEV `origin/dev` commit `2598c39`, with taxonomy labels/options in `src/data/canonicalProductMetadata.ts`. It exposes `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets`; array fields preserve `NULL` (Sin revisar), `[]` (Revisado sin valores) and non-empty selections. Backend validation remains authoritative. Controlled live DEV UI verification passed on the verified implementation and temporary fixture state was restored; semantic integration onto current Admin DEV preserved that behavior. R11B is closed; Admin is the human editing surface and the DB Product row remains the sole persisted Product-specific source of truth.
 
 ### Database
 

@@ -14,7 +14,7 @@
 
 ## FINAL CLOSURE
 
-- R11B is now technically closed after successful packaging of the verified Admin implementation.
+- R11B is now technically closed after successful packaging and publication of the verified Admin implementation on Admin `origin/dev` as `2598c39`.
 - Live DEV verification remains PASS: `NULL`, `[]`, populated arrays, unresolved `routineStep`, empty `sizeLabel`, unrelated edits, and invalid enum rejection behaved as specified.
 - The 12 READY Products remain intact; the 8 PARTIAL Products remain intentionally unresolved.
 - The Product database row is the sole persisted Product-specific canonical metadata source; Admin is the human editing surface.
@@ -71,4 +71,4 @@ No Backend application files were changed for this task because the existing Bac
 
 ## REMAINING
 
-No Product curation or AI runtime work is part of this checkpoint. R11C and any successor numbered phase remain unapproved. Packaging is complete in the Admin and Backend repositories through their respective commits; remote publication is subject to the branch safety noted in the final task report.
+No Product curation or AI runtime work is part of this checkpoint. R11C and any successor numbered phase remain unapproved. Packaging and remote publication are complete in the Admin and Backend repositories through their respective commits. The current Admin DEV base was preserved during semantic integration; no stale release history was merged.

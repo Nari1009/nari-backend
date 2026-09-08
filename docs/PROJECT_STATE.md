@@ -22,6 +22,8 @@ NARI is a Colombian K-beauty e-commerce project with separate Backend, Client an
 
 The original Admin checkout `/Users/luis/Documents/Codex/2026-08-24/nari-admin` has unrelated dirty work in `src/pages/OrderDetail.tsx`, `src/pages/Orders.tsx` and `src/services/orderService.ts`. It must not be reset, stashed, cleaned, overwritten or committed.
 
+The verified R11B Admin implementation is published on Admin `origin/dev` as commit `2598c39`, based on Admin `origin/dev` `286a589`. The original checkout remains on `codex/admin-prod-release` with the unrelated Order changes preserved locally.
+
 ## ENVIRONMENTS
 
 Verified intended separation:
@@ -68,7 +70,7 @@ Read next:
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D is complete. R11B is now complete: the Admin canonical metadata editor was implemented, live-verified against DEV, and its temporary test state was restored.
+R11B2.6D is complete. R11B is now complete: the Admin canonical metadata editor was implemented, live-verified against DEV, semantically integrated onto current Admin `origin/dev`, published as `2598c39`, and its temporary test state was restored.
 
 R11B2 technical closure is complete and recorded in `docs/checkpoints/R11B2_READY_DEV_WRITE.md`: 12 approved Products were written and 8 PARTIAL Products were preserved. R11B Admin maintenance is recorded in `docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`; live DEV verification passed. The DB Product row remains the sole persisted Product-specific canonical metadata source, with Admin as the human editing surface. No reliable next numbered phase was recovered. Human approval is required before further mutation or development.
 
