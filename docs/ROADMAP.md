@@ -181,11 +181,11 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 
 ## CURRENT ROADMAP FRONTIER
 
-Last verified phase: **R11B — Admin Canonical Metadata Editor**.
+Last verified phase: **R11D — Deterministic Catalog Candidate Selection**.
 
 Next verified phase: **UNKNOWN / NOT YET APPROVED**.
 
-R11 remains in progress. R11C Backend AI Base is in progress. R11D is planned but not started; no later numbered phase is approved.
+R11 remains in progress. R11C and R11D are complete; no later numbered phase is approved.
 
 No R11B2.6E or R11B2.7 is recorded as established work.
 
@@ -193,7 +193,7 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 
 ## R11C — Backend AI Base
 
-- **Status:** IN_PROGRESS
+- **Status:** COMPLETE
 - **Purpose:** Establish the secure Backend-only NARI AI adviser contract, provider abstraction, transient intent/profile interpretation, safety boundary, limits and deterministic orchestration shell.
 - **What was done:** Added `POST /api/ai/adviser`, controlled request/response validation, canonical taxonomy reuse, provider-neutral service boundaries, optional OpenAI HTTP adapter, fake-provider testability, medical escalation, prompt-injection boundaries, bounded history/message limits and in-memory rate limiting.
 - **What was not done:** No catalog candidate search, recommendation engine, routine builder, Client chat UI, persistent conversation history, embeddings, vector DB, external product retrieval or Product DB mutation.
@@ -201,6 +201,8 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 
 ## R11D — Deterministic Catalog Candidate Selection
 
-- **Status:** PLANNED
+- **Status:** DONE
 - **Purpose:** Use the real NARI Product catalog and canonical Product metadata to select eligible candidates before any future LLM reasoning.
-- **What was not done:** No R11D implementation has started.
+- **What was done:** Added the nullable, controlled `catalogRole` schema boundary, fail-closed eligibility helper, explicit Product repository query, deterministic scoring, intent policy, confidence/reason fields, maximum-five cap and private-field-safe candidate projection. Human verification established 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL in DEV.
+- **What was not done:** No live DEV query was executed by Codex, no additional DEV writes were made, and no final LLM recommendation or external knowledge retrieval exists.
+- **Result:** R11D is complete. The candidate engine remains internal and does not alter the public R11C recommendation response. No final LLM Product reasoning, external official-source retrieval, permanent conversation history or Product mutation was implemented.

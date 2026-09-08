@@ -196,3 +196,30 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Prevent fabricated Products and preserve the planned Backend eligibility boundary.
 - **Status:** VERIFIED_DECISION / VERIFIED_IMPLEMENTATION
 - **Source class:** R11C user instruction and `src/services/ai/aiService.js`.
+
+## DEC-023 — Product Catalog Boundary Is Explicit and Fail-Closed
+
+- **Date:** 2026-09-08
+- **Area:** R11D catalog eligibility
+- **Decision:** Product rows use nullable `catalogRole` values `CATALOG` or `DEV_FIXTURE`. Only `CATALOG` is eligible for future AI candidate discovery; `NULL` and `DEV_FIXTURE` are ineligible.
+- **Rationale:** DEV/test fixtures must not leak into customer-facing recommendations, and unclassified Products must fail closed rather than defaulting to the catalog.
+- **Status:** IMPLEMENTED; DEV classification PENDING
+- **Source class:** R11D implementation and migration. The DEV database write was not verified because the Codex environment could not resolve the DEV host.
+
+## DEC-024 — R11D Candidate Selection Is Deterministic and Internal
+
+- **Date:** 2026-09-08
+- **Area:** R11D candidate discovery
+- **Decision:** Candidate discovery uses explicit Product rows, `catalogRole = CATALOG`, active status and positive stock. Routine-step conflicts are hard exclusions; known skin-type conflicts are hard exclusions; NULL remains unknown; [] remains field-specific neutral. Results are capped at five and ordered by score, confidence and Product ID.
+- **Rationale:** The Backend must constrain the candidate set before any future LLM reasoning, without fabricating Products or treating unresolved metadata as incompatibility.
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Source class:** R11D implementation and focused tests.
+
+## DEC-025 — R11D Budget Semantics Are Deferred
+
+- **Date:** 2026-09-08
+- **Area:** R11D budget handling
+- **Decision:** R11D does not filter candidates by budget because the transient R11C budget field does not distinguish per-Product from total-routine semantics. Current DB price remains the only valid commercial price source for a future explicit budget contract.
+- **Rationale:** Avoid silently applying an ambiguous budget interpretation.
+- **Status:** VERIFIED_DECISION
+- **Source class:** R11D user instruction and current R11C contract.

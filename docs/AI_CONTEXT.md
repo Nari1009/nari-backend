@@ -70,7 +70,7 @@ Implemented in progress:
 - `src/services/ai/safety.js` handles cautious medical escalation and privileged-instruction boundaries.
 - `src/services/ai/rateLimiter.js` provides a bounded in-memory route limiter.
 
-The response is Backend-controlled and never proxies raw provider objects. Recommendation mode returns an empty recommendation list with a controlled pending message until R11D exists. Conversation state is request-scoped only; no DB persistence exists.
+The response is Backend-controlled and never proxies raw provider objects. R11D candidate data remains internal; the public response still does not expose final Product recommendations. Conversation state is request-scoped only; no DB persistence exists.
 
 ## CANONICAL PRODUCT TAXONOMY
 
@@ -145,6 +145,12 @@ R11B2.6D reviewed 20 real Products:
 | Client | Legacy Product display/filtering exists; canonical consumption absent |
 | AI engine | R11C transient adviser base exists; catalog selection and recommendation runtime do not exist |
 
+### R11D Catalog / Fixture Boundary and Candidate Engine
+
+The internal `catalogRole` boundary is implemented in `src/services/ai/candidates/catalogEligibility.js` and migration `migrations/20260912_r11d_catalog_role.sql`. Human verification established 20 `CATALOG`, 5 `DEV_FIXTURE` and 0 NULL in DEV. Only `CATALOG` rows with active status and positive stock are eligible; `DEV_FIXTURE` and `NULL` fail closed. The public Product projection excludes this operational field.
+
+The deterministic engine is split across `candidateRepository.js`, `candidateScoring.js` and `candidateService.js`. It supports `PRODUCT_SELECTION` and step-specific `BUILD_ROUTINE` discovery only. It uses weights of 40 for routine-step match, 20 for skin-type match, 12 for condition match, 10 per requested-target overlap, and a 2-point uncertainty penalty. Routine conflicts and known skin-type conflicts exclude candidates. Results require a minimum score of 10, are capped at five, and sort by score, confidence and Product ID. Budget filtering is deferred because R11C does not define budget scope.
+
 ## SOURCE OF TRUTH
 
 Product rows are intended to hold canonical Product recommendation metadata. Legacy Product fields remain in use for storefront compatibility. Seed/import routines remain capable of mutating legacy metadata when explicitly run; normal server startup does not invoke catalog seeding.
@@ -152,17 +158,15 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 ## NOT IMPLEMENTED YET
 
 - Client chat UI.
-- Catalog candidate selection.
 - Full recommendation engine.
 - Routine builder.
 - Chat UI.
 - Recommendation engine.
 - Routine builder.
 - Canonical Client consumption.
-- AI tests.
 - Conversation database.
 - Embeddings/vector database.
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base is complete; R11D candidate selection is planned but not started. No DB or Product metadata was modified by R11C. Do not begin R11D without review and approval.
+R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base and R11D deterministic candidate discovery are complete. No additional DEV DB or Product metadata writes were made by Codex. No final LLM Product reasoning or external official-source retrieval exists.

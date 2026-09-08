@@ -105,4 +105,4 @@ const validateProviderOutput = (value) => {
   return { intent: value.intent, mode: value.mode, message, profile: validateProfile(value.profile) };
 };
 
-module.exports = { validateRequest, validateProviderOutput };
+module.exports = { validateRequest, validateProviderOutput, validateProfile };

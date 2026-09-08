@@ -4,7 +4,7 @@ const { validateRequest, validateProviderOutput } = require('./contract');
 const { assessSafety, assertNoPrivilegedInstruction } = require('./safety');
 const { createOpenAIProvider } = require('./providers/openaiProvider');
 
-const createAIService = ({ provider = createOpenAIProvider() } = {}) => ({
+const createAIService = ({ provider = createOpenAIProvider(), candidateService = null } = {}) => ({
   async advise(input) {
     const request = validateRequest(input);
     assertNoPrivilegedInstruction(request);
@@ -29,6 +29,10 @@ const createAIService = ({ provider = createOpenAIProvider() } = {}) => ({
     return { ...validated, recommendations: [] };
   },
   limits: AI_LIMITS,
+  discoverCandidates(input) {
+    if (!candidateService) return Promise.resolve({ searched: false, reason: 'CANDIDATE_SERVICE_NOT_CONFIGURED', candidates: [] });
+    return candidateService.search(input);
+  },
 });
 
 module.exports = { createAIService };

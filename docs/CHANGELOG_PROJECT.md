@@ -223,3 +223,29 @@ SUMMARY:
 - Added 11 focused AI base tests; the complete Backend suite passed 49 tests.
 
 STATE AFTER: R11C Backend AI Base is complete. No database, Product metadata, PROD environment, Client or Admin changes were made. R11D deterministic catalog candidate selection is planned but not started.
+
+## 2026-09-08 — R11D Catalog / DEV Fixture Boundary
+
+TYPE: R11D PREREQUISITE
+
+SUMMARY:
+
+- Added nullable fail-closed `catalogRole` classification with `CATALOG` and `DEV_FIXTURE` values.
+- Added internal eligibility logic requiring `CATALOG`, active status and positive stock.
+- Preserved the field from public projections, generic Product creation and Admin updates.
+- Added a reviewed one-time DEV classification runner without runtime fixture ID hardcoding.
+
+STATE AFTER: Boundary code and tests pass. Human verification established 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL in DEV; Codex made no additional DB writes. R11D candidate scoring remained the next implementation step at this checkpoint. PROD remains untouched.
+
+## 2026-09-08 — R11D Deterministic Catalog Candidate Engine
+
+TYPE: BACKEND AI CANDIDATE FOUNDATION
+
+SUMMARY:
+
+- Added explicit eligible-Product repository querying through `catalogRole`, active status and positive stock.
+- Added deterministic routine, skin-type, condition and target scoring with hard conflicts, uncertainty handling, confidence labels and machine-readable reasons.
+- Added intent policy, maximum-five cap, stable ordering and a private candidate projection.
+- Integrated candidate discovery internally with R11C without changing the public response or invoking an LLM.
+
+STATE AFTER: R11D candidate engine is complete. Tests use controlled fixtures; live DEV verification is HUMAN VERIFIED, not Codex-executed. No additional DEV writes, PROD access, final recommendation or external retrieval occurred.

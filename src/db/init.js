@@ -40,7 +40,7 @@ const withTransaction = async (callback) => {
 
 const initDb = async () => {
   const statements = [
-    `CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, brand TEXT NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, category TEXT NOT NULL, description TEXT, sku TEXT, price NUMERIC, cost NUMERIC, compareAtPrice NUMERIC, stock INTEGER NOT NULL DEFAULT 0, minimumStock INTEGER NOT NULL DEFAULT 3, status TEXT DEFAULT 'active', rating NUMERIC DEFAULT 0, reviewCount INTEGER DEFAULT 0, soldCount INTEGER DEFAULT 0, isBestSeller INTEGER DEFAULT 0, skinTypes TEXT, concerns TEXT, ingredients TEXT, benefits TEXT, howToUse TEXT, precautions TEXT, audience TEXT, skinBenefits TEXT, featuredIngredients TEXT, fullIngredients TEXT, productInfo TEXT, shippingReturns TEXT, images TEXT, routineStep TEXT, sizeLabel TEXT, suitableSkinTypes TEXT, suitableConditions TEXT, targets TEXT, supplier TEXT, createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)`,
+    `CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, brand TEXT NOT NULL, name TEXT NOT NULL, slug TEXT NOT NULL UNIQUE, category TEXT NOT NULL, description TEXT, sku TEXT, price NUMERIC, cost NUMERIC, compareAtPrice NUMERIC, stock INTEGER NOT NULL DEFAULT 0, minimumStock INTEGER NOT NULL DEFAULT 3, status TEXT DEFAULT 'active', rating NUMERIC DEFAULT 0, reviewCount INTEGER DEFAULT 0, soldCount INTEGER DEFAULT 0, isBestSeller INTEGER DEFAULT 0, skinTypes TEXT, concerns TEXT, ingredients TEXT, benefits TEXT, howToUse TEXT, precautions TEXT, audience TEXT, skinBenefits TEXT, featuredIngredients TEXT, fullIngredients TEXT, productInfo TEXT, shippingReturns TEXT, images TEXT, routineStep TEXT, sizeLabel TEXT, suitableSkinTypes TEXT, suitableConditions TEXT, targets TEXT, catalogRole TEXT, supplier TEXT, createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS auth_users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, passwordHash TEXT NOT NULL, firstName TEXT NOT NULL, lastName TEXT NOT NULL, phone TEXT NOT NULL, phoneNormalized TEXT, isActive INTEGER NOT NULL DEFAULT 1, createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, lastLoginAt TIMESTAMPTZ)`,
     `CREATE TABLE IF NOT EXISTS customers (id TEXT PRIMARY KEY, authUserId TEXT UNIQUE REFERENCES auth_users(id), email TEXT NOT NULL UNIQUE, firstName TEXT NOT NULL, lastName TEXT NOT NULL, phone TEXT NOT NULL, phoneNormalized TEXT, firstPurchaseAt TIMESTAMPTZ, lastPurchaseAt TIMESTAMPTZ, orderCount INTEGER NOT NULL DEFAULT 0, totalPurchased NUMERIC NOT NULL DEFAULT 0, latestAddress TEXT, city TEXT, department TEXT, country TEXT DEFAULT 'Colombia', status TEXT NOT NULL DEFAULT 'active', notes TEXT NOT NULL DEFAULT '', createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, updatedAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)`,
     `CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, userId TEXT REFERENCES auth_users(id), customerId TEXT, status TEXT NOT NULL DEFAULT 'Pagado', total NUMERIC NOT NULL, subtotal NUMERIC, shippingTotal NUMERIC, discountTotal NUMERIC, paymentFee NUMERIC, shippingCost NUMERIC, refundedTotal NUMERIC DEFAULT 0, shippingAddress TEXT NOT NULL, shippingProvider TEXT, trackingNumber TEXT, createdAt TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP)`,
@@ -74,6 +74,17 @@ const initDb = async () => {
   await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS suitableSkinTypes TEXT');
   await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS suitableConditions TEXT');
   await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS targets TEXT');
+  await pool.query('ALTER TABLE products ADD COLUMN IF NOT EXISTS catalogRole TEXT');
+  await pool.query(`DO $$ BEGIN
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_constraint
+      WHERE conname = 'products_catalog_role_check'
+        AND conrelid = 'products'::regclass
+    ) THEN
+      ALTER TABLE products ADD CONSTRAINT products_catalog_role_check
+        CHECK (catalogRole IS NULL OR catalogRole IN ('CATALOG', 'DEV_FIXTURE'));
+    END IF;
+  END $$`);
   await pool.query('ALTER TABLE products ALTER COLUMN price DROP NOT NULL');
 };
 
