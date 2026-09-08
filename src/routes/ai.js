@@ -3,9 +3,14 @@ const { AI_LIMITS } = require('../services/ai/constants');
 const { AIServiceError } = require('../services/ai/errors');
 const { createAIService } = require('../services/ai/aiService');
 const { createRateLimiter } = require('../services/ai/rateLimiter');
+const { createCandidateService } = require('../services/ai/candidates/candidateService');
+const { createFinalProductRepository } = require('../services/ai/candidates/finalProductRepository');
 
 const router = express.Router();
-const service = createAIService();
+const service = createAIService({
+  candidateService: createCandidateService(),
+  finalProductRepository: createFinalProductRepository(),
+});
 const allowRequest = createRateLimiter({ windowMs: AI_LIMITS.rateWindowMs, maxRequests: AI_LIMITS.rateMaxRequests });
 
 router.post('/adviser', async (req, res) => {

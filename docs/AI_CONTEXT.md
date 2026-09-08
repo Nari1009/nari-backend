@@ -70,7 +70,7 @@ Implemented in progress:
 - `src/services/ai/safety.js` handles cautious medical escalation and privileged-instruction boundaries.
 - `src/services/ai/rateLimiter.js` provides a bounded in-memory route limiter.
 
-The response is Backend-controlled and never proxies raw provider objects. R11D candidate data remains internal; the public response still does not expose final Product recommendations. Conversation state is request-scoped only; no DB persistence exists.
+The response is Backend-controlled and never proxies raw provider objects. R11D candidate data remains internal; any public recommendation card is constructed only after selected-ID validation and final DB re-fetch. No live provider key is configured in this environment. Conversation state is request-scoped only; no DB persistence exists.
 
 ## CANONICAL PRODUCT TAXONOMY
 
@@ -158,8 +158,8 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 ## NOT IMPLEMENTED YET
 
 - Client chat UI.
-- Full recommendation engine.
-- Routine builder.
+- Full routine builder.
+- Later comparison, compatibility, budget and existing-Product flows.
 - Chat UI.
 - Recommendation engine.
 - Routine builder.
@@ -169,4 +169,4 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base and R11D deterministic candidate discovery are complete. No additional DEV DB or Product metadata writes were made by Codex. No final LLM Product reasoning or external official-source retrieval exists.
+R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base is complete. R11D points 6–8 are complete; routine construction and later comparison/compatibility/budget/existing-Product flows remain pending. No additional DEV DB or Product metadata writes are made by Codex. No live provider request, external official-source retrieval or permanent conversation history exists.

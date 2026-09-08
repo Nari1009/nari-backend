@@ -2,7 +2,7 @@
 
 ## STATUS
 
-- Implementation: COMPLETE.
+- Implementation: Candidate search COMPLETE; Part 2 controlled reasoning/re-fetch COMPLETE.
 - Human DEV catalog classification: VERIFIED — 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL.
 - Codex DEV DB writes: NO.
 - PROD accessed or modified: NO.
@@ -47,4 +47,4 @@ Candidate metadata includes only Product ID, name, routine step, size label and 
 
 ## LIMITS
 
-Candidate results are internal. R11C public responses remain controlled and do not expose final Product recommendations. No OpenAI call, external retrieval, Product mutation, conversation persistence or DEV write was performed. R11D is complete; no later numbered phase is approved.
+Candidate results are internal. R11C public responses remain controlled and do not expose final Product recommendations. Part 2 controlled provider reasoning and final DB re-fetch are complete; routine construction and compare/compatibility/budget/existing-Product flows remain pending. No external retrieval, Product mutation, conversation persistence or DEV write is performed. R11D remains in progress; no later numbered phase is approved.

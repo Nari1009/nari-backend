@@ -248,4 +248,18 @@ SUMMARY:
 - Added intent policy, maximum-five cap, stable ordering and a private candidate projection.
 - Integrated candidate discovery internally with R11C without changing the public response or invoking an LLM.
 
-STATE AFTER: R11D candidate engine is complete. Tests use controlled fixtures; live DEV verification is HUMAN VERIFIED, not Codex-executed. No additional DEV writes, PROD access, final recommendation or external retrieval occurred.
+STATE AFTER: R11D candidate search is complete and remains the foundation for the next controlled reasoning/re-fetch work. Live DEV verification is HUMAN VERIFIED, not Codex-executed. No additional DEV writes, PROD access, final recommendation or external retrieval occurred.
+
+## DATE UNKNOWN — R11D Part 2 Controlled Reasoning and Validation
+
+TYPE: BACKEND AI VALIDATION CHECKPOINT
+
+SUMMARY:
+
+- Added a strict provider reasoning contract with a maximum of three selected Product IDs and one concise reason per selected Product.
+- Passed at most five safe deterministic candidates to the provider; private fields and `catalogRole` are excluded.
+- Validated selected IDs as a subset of the candidate set and rejected invented, duplicate or malformed selections.
+- Re-fetched selected Products from PostgreSQL and revalidated catalog role, active status and positive stock before building public recommendation cards.
+- Removed Products invalidated by a race condition without replacement; all-invalid selections return a safe non-recommendation.
+
+STATE AFTER: R11D deterministic search, controlled LLM reasoning and Backend validation/re-fetch are complete. Routine construction and later comparison/compatibility/budget/existing-Product flows remain pending. No DB schema change, DEV write, PROD access, live provider request or external retrieval occurred.

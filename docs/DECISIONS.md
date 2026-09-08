@@ -203,7 +203,7 @@ Only decisions supported by available project instructions or code are recorded 
 - **Area:** R11D catalog eligibility
 - **Decision:** Product rows use nullable `catalogRole` values `CATALOG` or `DEV_FIXTURE`. Only `CATALOG` is eligible for future AI candidate discovery; `NULL` and `DEV_FIXTURE` are ineligible.
 - **Rationale:** DEV/test fixtures must not leak into customer-facing recommendations, and unclassified Products must fail closed rather than defaulting to the catalog.
-- **Status:** IMPLEMENTED; DEV classification PENDING
+- **Status:** IMPLEMENTED; DEV classification HUMAN VERIFIED
 - **Source class:** R11D implementation and migration. The DEV database write was not verified because the Codex environment could not resolve the DEV host.
 
 ## DEC-024 — R11D Candidate Selection Is Deterministic and Internal
@@ -212,7 +212,7 @@ Only decisions supported by available project instructions or code are recorded 
 - **Area:** R11D candidate discovery
 - **Decision:** Candidate discovery uses explicit Product rows, `catalogRole = CATALOG`, active status and positive stock. Routine-step conflicts are hard exclusions; known skin-type conflicts are hard exclusions; NULL remains unknown; [] remains field-specific neutral. Results are capped at five and ordered by score, confidence and Product ID.
 - **Rationale:** The Backend must constrain the candidate set before any future LLM reasoning, without fabricating Products or treating unresolved metadata as incompatibility.
-- **Status:** IMPLEMENTED / IN REVIEW
+- **Status:** IMPLEMENTED
 - **Source class:** R11D implementation and focused tests.
 
 ## DEC-025 — R11D Budget Semantics Are Deferred
@@ -223,3 +223,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Avoid silently applying an ambiguous budget interpretation.
 - **Status:** VERIFIED_DECISION
 - **Source class:** R11D user instruction and current R11C contract.
+
+## DEC-026 — R11D Provider Selection Is Bounded and Revalidated
+
+- **Date:** 2026-09-08
+- **Area:** R11D controlled reasoning
+- **Decision:** The provider may reason only over the deterministic candidate set, receives at most five safe candidate projections, and may select at most three unique Product IDs. Selected IDs must be an exact subset of the candidate IDs; invented, duplicate or malformed IDs fail closed. Backend must re-fetch selected Products and revalidate `catalogRole = CATALOG`, active status and positive stock before constructing public recommendation cards. Provider-selected commercial fields are rejected and never become source of truth. No replacement Product is fabricated when a selected Product disappears.
+- **Rationale:** Keep the LLM advisory and bounded while the Backend remains authoritative for Product identity, sellability and commercial truth.
+- **Status:** IMPLEMENTED
+- **Source class:** R11D Part 2 implementation, tests and current user instruction.
