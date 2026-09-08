@@ -113,6 +113,7 @@ const scoreCandidate = ({ product, requestedRoutineStep, profile }) => {
 
   return {
     productId: product.id,
+    price: Number(product.price),
     score,
     confidence,
     matchedCriteria,

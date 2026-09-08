@@ -33,6 +33,15 @@ const createRoutinePlan = (profile = {}) => {
   };
 };
 
+const createBasicRoutinePlan = () => ({
+  morning: uniqueSteps(CORE_MORNING_STEPS),
+  evening: uniqueSteps(CORE_EVENING_STEPS),
+  requiredMorning: [...CORE_MORNING_STEPS],
+  requiredEvening: [...CORE_EVENING_STEPS],
+  optionalMorning: [],
+  optionalEvening: [],
+});
+
 const planSteps = (plan) => uniqueSteps([...(plan?.morning || []), ...(plan?.evening || [])]);
 
 module.exports = {
@@ -42,6 +51,7 @@ module.exports = {
   MAX_ROUTINE_PRODUCTS,
   SERUM_TARGETS,
   createRoutinePlan,
+  createBasicRoutinePlan,
   hasUsefulProfile,
   planSteps,
 };

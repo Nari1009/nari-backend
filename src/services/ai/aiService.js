@@ -16,7 +16,7 @@ const publicReasoningResponse = ({ intent, reasoning, recommendations = [] }) =>
   recommendations,
 });
 
-const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null } = {}) => ({
+const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null } = {}) => ({
   async advise(input) {
     const request = validateRequest(input);
     assertNoPrivilegedInstruction(request);
@@ -30,6 +30,9 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
       throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
     }
     const validated = validateProviderOutput(output);
+    if (point10Service && point10Service.supports(validated.intent, validated.profile)) {
+      return point10Service.handle({ request, interpretation: validated, provider });
+    }
     if (validated.mode !== 'RECOMMENDATION') {
       return { ...validated, recommendations: [] };
     }

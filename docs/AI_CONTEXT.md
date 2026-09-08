@@ -149,7 +149,7 @@ R11B2.6D reviewed 20 real Products:
 
 The internal `catalogRole` boundary is implemented in `src/services/ai/candidates/catalogEligibility.js` and migration `migrations/20260912_r11d_catalog_role.sql`. Human verification established 20 `CATALOG`, 5 `DEV_FIXTURE` and 0 NULL in DEV. Only `CATALOG` rows with active status and positive stock are eligible; `DEV_FIXTURE` and `NULL` fail closed. The public Product projection excludes this operational field.
 
-The deterministic engine is split across `candidateRepository.js`, `candidateScoring.js` and `candidateService.js`. It supports `PRODUCT_SELECTION` and step-specific `BUILD_ROUTINE` discovery only. It uses weights of 40 for routine-step match, 20 for skin-type match, 12 for condition match, 10 per requested-target overlap, and a 2-point uncertainty penalty. Routine conflicts and known skin-type conflicts exclude candidates. Results require a minimum score of 10, are capped at five, and sort by score, confidence and Product ID. Budget filtering is deferred because R11C does not define budget scope.
+The deterministic engine is split across `candidateRepository.js`, `candidateScoring.js` and `candidateService.js`. It supports `PRODUCT_SELECTION` and step-specific `BUILD_ROUTINE` discovery. It uses weights of 40 for routine-step match, 20 for skin-type match, 12 for condition match, 10 per requested-target overlap, and a 2-point uncertainty penalty. Routine conflicts and known skin-type conflicts exclude candidates. Results require a minimum score of 10, are capped at five, and sort by score, confidence and Product ID. Point 10 adds deterministic Product resolution, bounded comparison, structural-only compatibility, total-COP budget optimization and existing-Product completion; formula-level compatibility remains unknown when approved Product data is insufficient.
 
 ## SOURCE OF TRUTH
 
@@ -158,17 +158,12 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 ## NOT IMPLEMENTED YET
 
 - Client chat UI.
-- Full routine builder.
-- Later comparison, compatibility, budget and existing-Product flows.
-- Chat UI.
-- Recommendation engine.
-- Routine builder.
-- Canonical Client consumption.
+- Client chat UI and canonical Client consumption.
 - Conversation database.
 - Embeddings/vector database.
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base is complete. R11D points 6–9 are complete; later comparison/compatibility/budget/existing-Product flows remain pending. No additional DEV DB or Product metadata writes are made by Codex. No live provider request, external official-source retrieval or permanent conversation history exists.
+R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base is complete. R11D points 6–10 are complete and R11D is closed. No additional DEV DB or Product metadata writes are made by Codex. No live provider request, external official-source retrieval or permanent conversation history exists. R11E is not started.
 
-R11D point 9 adds a bounded V1 routine builder. The Backend plans AM `CLEANSER`, `MOISTURIZER`, `SUNSCREEN` and PM `CLEANSER`, `MOISTURIZER`; `SERUM` is optional in PM when canonical targets justify treatment and is conservatively rejected from AM until trusted Product-specific usage/compatibility knowledge exists. Each step searches its own deterministic candidate group, capped at five. Provider-selected IDs must belong to the exact step group, routine steps/order are validated against the canonical taxonomy, Products may be reused AM/PM, and unique final Products are re-fetched and revalidated from DB. Missing required core Products prevent the routine from being represented as complete; missing optional Products are omitted. Point 10 compatibility, budget, comparison and existing-Product logic remains pending.
+R11D point 9 adds a bounded V1 routine builder. The Backend plans AM `CLEANSER`, `MOISTURIZER`, `SUNSCREEN` and PM `CLEANSER`, `MOISTURIZER`; `SERUM` is optional in PM when canonical targets justify treatment and is conservatively rejected from AM until trusted Product-specific usage/compatibility knowledge exists. Each step searches its own deterministic candidate group, capped at five. Provider-selected IDs must belong to the exact step group, routine steps/order are validated against the canonical taxonomy, Products may be reused AM/PM, and unique final Products are re-fetched and revalidated from DB. Missing required core Products prevent the routine from being represented as complete; missing optional Products are omitted. Point 10 now adds deterministic Product resolution, structural-only compatibility, bounded comparison, total-COP budget accounting and existing-Product completion; formula compatibility, external knowledge and later refinements remain pending.

@@ -39,7 +39,7 @@ Current active release: **R11 — NARI AI**.
 
 ## CURRENT CHECKPOINT
 
-**R11D — DETERMINISTIC CATALOG CANDIDATE ENGINE** is in progress. Deterministic candidate search, controlled LLM reasoning, Backend validation/re-fetch and V1 routine construction are complete; later comparison/compatibility/budget/existing-Product flows remain pending. The catalog/fixture boundary is human-verified in DEV; no live DB connection is used by this work. R11C is complete; R11B remains closed.
+**R11D — DETERMINISTIC CATALOG CANDIDATE ENGINE** is complete. Candidate search, controlled reasoning, Backend validation/re-fetch, V1 routine construction and point-10 compare/compatibility/budget/existing-Product flows are implemented and tested. The catalog/fixture boundary is human-verified in DEV; no live DB connection is used by this work. R11C is complete; R11B remains closed. R11E is not started.
 
 - Products reviewed: 20/20 real catalog Products.
 - READY: 12.
@@ -64,6 +64,7 @@ Read next:
 10. [`docs/checkpoints/R11D_CANDIDATE_ENGINE.md`](checkpoints/R11D_CANDIDATE_ENGINE.md)
 11. [`docs/checkpoints/R11D_CONTROLLED_LLM_REASONING.md`](checkpoints/R11D_CONTROLLED_LLM_REASONING.md)
 12. [`docs/checkpoints/R11D_ROUTINE_BUILDING.md`](checkpoints/R11D_ROUTINE_BUILDING.md)
+13. [`docs/checkpoints/R11D_POINT10_COMPARE_COMPATIBILITY_BUDGET_EXISTING.md`](checkpoints/R11D_POINT10_COMPARE_COMPATIBILITY_BUDGET_EXISTING.md)
 
 ## IMPLEMENTATION SNAPSHOT
 
@@ -71,11 +72,11 @@ Read next:
 - **Admin:** Existing authenticated Product CRUD and CMS administration implemented. The verified R11B Admin implementation contains the canonical NARI AI Product editor with explicit reviewed/unreviewed states; live DEV UI verification passed and temporary fixture changes were restored.
 - **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist. R11C provides the adviser base; R11D provides fail-closed catalog eligibility, deterministic candidate scoring, controlled provider handoff, selected-ID validation, final commercial re-fetch and bounded AM/PM routine construction.
 - **Database:** DEV has human-verified `catalogRole`: 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL. The migration remains in the repository for other environments; Codex did not execute it.
-- **NARI AI:** R11C adviser foundation and R11D points 6–9 are complete; point 10 remains pending. No live provider key is configured.
+- **NARI AI:** R11C adviser foundation and all R11D points 6–10 are complete. No live provider key is configured.
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D is complete and R11B is closed. R11C Backend AI Base is complete. R11D points 6–9 are complete; point 10 remains pending. DEV classification is human-verified as 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL; Codex made no additional DEV writes.
+R11B2.6D is complete and R11B is closed. R11C Backend AI Base is complete. R11D points 6–10 are complete and R11D is closed. DEV classification is human-verified as 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL; Codex made no additional DEV writes.
 
 R11B2 technical closure is complete and recorded in `docs/checkpoints/R11B2_READY_DEV_WRITE.md`: 12 approved Products were written and 8 PARTIAL Products were preserved. R11B Admin maintenance is recorded in `docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`; live DEV verification passed. The DB Product row remains the sole persisted Product-specific canonical metadata source, with Admin as the human editing surface. No reliable next numbered phase was recovered. Human approval is required before further mutation or development.
 
@@ -86,8 +87,10 @@ Do not record or assume R11B2.7 as started, completed, approved or established r
 - Legacy seed/import mechanisms can mutate Product metadata if explicitly executed.
 - Eight PARTIAL Products still have unresolved canonical dimensions.
 - The Admin canonical metadata editor has been exercised against DEV; temporary fixture edits were restored and independently verified.
-- Full NARI AI routine/recommendation flows are not complete; provider reasoning currently requires a configured provider and remains under review.
-- R11 remains in progress; R11C is complete and R11D is in progress.
+- Live OpenAI is not connected or tested; provider tests use fake providers.
+- Client chat, permanent conversation history, external official-source knowledge, embeddings and vector storage are not implemented.
+- Formula/active compatibility remains limited or unknown without trusted Product-specific knowledge.
+- R11 remains in progress; R11D is complete and R11E is not started.
 
 ## CONTINUATION PROTOCOL
 

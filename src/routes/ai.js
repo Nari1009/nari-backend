@@ -6,14 +6,19 @@ const { createRateLimiter } = require('../services/ai/rateLimiter');
 const { createCandidateService } = require('../services/ai/candidates/candidateService');
 const { createFinalProductRepository } = require('../services/ai/candidates/finalProductRepository');
 const { createRoutineService } = require('../services/ai/routines/routineService');
+const { createProductResolver } = require('../services/ai/productResolver');
+const { createPoint10Service } = require('../services/ai/point10Service');
 
 const router = express.Router();
 const candidateService = createCandidateService();
 const finalProductRepository = createFinalProductRepository();
+const productResolver = createProductResolver();
+const point10Service = createPoint10Service({ resolver: productResolver, candidateService, finalProductRepository });
 const service = createAIService({
   candidateService,
   finalProductRepository,
   routineService: createRoutineService({ candidateService, finalProductRepository }),
+  point10Service,
 });
 const allowRequest = createRateLimiter({ windowMs: AI_LIMITS.rateWindowMs, maxRequests: AI_LIMITS.rateMaxRequests });
 

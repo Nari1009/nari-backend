@@ -215,14 +215,14 @@ Only decisions supported by available project instructions or code are recorded 
 - **Status:** IMPLEMENTED
 - **Source class:** R11D implementation and focused tests.
 
-## DEC-025 — R11D Budget Semantics Are Deferred
+## DEC-025 — R11D Budget Semantics Are Explicit for Point 10
 
 - **Date:** 2026-09-08
 - **Area:** R11D budget handling
-- **Decision:** R11D does not filter candidates by budget because the transient R11C budget field does not distinguish per-Product from total-routine semantics. Current DB price remains the only valid commercial price source for a future explicit budget contract.
-- **Rationale:** Avoid silently applying an ambiguous budget interpretation.
-- **Status:** VERIFIED_DECISION
-- **Source class:** R11D user instruction and current R11C contract.
+- **Decision:** Point 10 interprets an explicit budget as the maximum total current selling price in COP for unique Products still needed. Owned Products cost zero toward that purchase total; reused Products count once; the Backend re-fetches and rechecks final DB prices before returning a within-budget routine.
+- **Rationale:** The interpretation is now explicit and bounded to the point-10 routine flow; provider-supplied prices and purchase costs remain outside the contract.
+- **Status:** IMPLEMENTED
+- **Source class:** R11D point-10 implementation, tests and current user instruction.
 
 ## DEC-026 — R11D Provider Selection Is Bounded and Revalidated
 
@@ -241,3 +241,30 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Keep beginner routines bounded and understandable while preserving Backend authority over steps, candidate membership and commercial truth. The PM-only treatment default avoids implying unsupported AM usage guidance; advanced compatibility, budget, comparison and existing-Product logic remain deferred.
 - **Status:** IMPLEMENTED
 - **Source class:** R11D Part 3 implementation, tests and current user instruction.
+
+## DEC-028 — R11D Product References Resolve Deterministically Before Provider Reasoning
+
+- **Date:** 2026-09-08
+- **Area:** R11D point 10 Product identity
+- **Decision:** Compare, compatibility and existing-Product flows resolve bounded Product references through exact ID, normalized slug/name or deterministic unambiguous partial matching. Only `CATALOG` rows may resolve as real NARI Products; ambiguous or unresolved references produce `FOLLOW_UP`.
+- **Rationale:** The provider may explain or reason, but it cannot establish Product identity or silently choose an ambiguous catalog row.
+- **Status:** IMPLEMENTED
+- **Source class:** R11D Part 4 implementation, tests and current user instruction.
+
+## DEC-029 — R11D Compatibility Is Structural-Only Until Trusted Formula Knowledge Exists
+
+- **Date:** 2026-09-08
+- **Area:** R11D point 10 compatibility
+- **Decision:** V1 may validate canonical routine-step order, same-step conflicts and morning/evening placement. Formula-level active compatibility remains `UNKNOWN`; the provider cannot assert interaction safety, irritation certainty, frequency or waiting times.
+- **Rationale:** Current approved Product metadata does not provide complete structured formula/use knowledge, and external official-source retrieval is not implemented.
+- **Status:** IMPLEMENTED
+- **Source class:** R11D Part 4 implementation, tests and current user instruction.
+
+## DEC-030 — R11D Budget and Owned-Product Accounting Use Separate Purchase Truth
+
+- **Date:** 2026-09-08
+- **Area:** R11D point 10 budget and existing Products
+- **Decision:** `BUDGET_ROUTINE` treats budget as a maximum total purchase price in COP for unique Products still needed. Current DB selling price is authoritative; reused and owned Products count once and owned Products do not count toward purchase total. Owned real `CATALOG` Products may fill their canonical routine step regardless of current stock, while only current eligible Products may be recommended for purchase.
+- **Rationale:** Personal ownership and current NARI availability are distinct states. The Backend must not force repurchase or claim an out-of-stock owned Product is unavailable to the user.
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Source class:** R11D Part 4 implementation, tests and current user instruction.

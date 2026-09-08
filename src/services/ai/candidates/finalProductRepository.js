@@ -11,6 +11,7 @@ const FINAL_PRODUCT_SELECT = `
 
 const createFinalProductRepository = ({ query } = {}) => ({
   async findCurrentEligibleProducts(ids) {
+    if (!Array.isArray(ids) || ids.length === 0) return [];
     const execute = query || ((sql, params) => require('../../../db/init').all(sql, params));
     const placeholders = ids.map(() => '?').join(',');
     const sql = FINAL_PRODUCT_SELECT.replace('__IDS__', placeholders);

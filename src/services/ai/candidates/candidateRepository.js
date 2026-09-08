@@ -1,5 +1,5 @@
 const CANDIDATE_PRODUCT_SELECT = `
-  SELECT id, name, status, stock,
+  SELECT id, name, price, status, stock,
          catalogRole AS "catalogRole",
          routineStep AS "routineStep",
          sizeLabel AS "sizeLabel",

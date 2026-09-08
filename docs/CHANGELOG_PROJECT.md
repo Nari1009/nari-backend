@@ -278,3 +278,17 @@ SUMMARY:
 - Re-fetched every unique selected Product and refused to present a complete routine when a required Product became unavailable.
 
 STATE AFTER: R11D points 6–9 are complete. Point 10 comparison, compatibility, budget and existing-Product flows remain pending. No DB schema change, DEV write, PROD access, live provider request or external retrieval occurred.
+
+## DATE UNKNOWN — R11D Part 4 Compare, Compatibility, Budget and Existing Products
+
+TYPE: BACKEND AI POINT-10 CHECKPOINT
+
+SUMMARY:
+
+- Added deterministic bounded Product resolution using exact IDs, normalized names/slugs and ambiguity-safe follow-up behavior; `DEV_FIXTURE` rows never resolve as real NARI Products.
+- Added bounded comparison over two resolved Products with profile-aware canonical evidence and explicit uncertainty for `NULL` versus `[]`.
+- Added structural compatibility analysis with canonical routine ordering and safe `UNKNOWN` formula-level compatibility; no unsupported active claims, frequencies or waiting times.
+- Added deterministic total-purchase budget handling in COP, counting unique Products once and using current DB selling prices.
+- Added existing-Product completion using transient `knownProducts`, owned-vs-purchase separation and stock-independent owned Product recognition.
+
+STATE AFTER: R11D points 6–10 are complete and R11D is closed. No DB schema change, DEV write, PROD access, live provider request or external retrieval occurred. R11E is not started; R11 remains in progress.

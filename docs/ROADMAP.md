@@ -181,11 +181,11 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 
 ## CURRENT ROADMAP FRONTIER
 
-Last verified phase: **R11D — Deterministic Catalog Candidate Selection**.
+Last verified phase: **R11D — Deterministic Catalog Candidate Selection and Recommendation Flows**.
 
 Next verified phase: **UNKNOWN / NOT YET APPROVED**.
 
-R11 remains in progress. R11C is complete and R11D is in progress; no later numbered phase is approved.
+R11 remains in progress. R11C and R11D are complete; R11E is not started and no later numbered phase is approved.
 
 No R11B2.6E or R11B2.7 is recorded as established work.
 
@@ -201,8 +201,8 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 
 ## R11D — Deterministic Catalog Candidate Selection
 
-- **Status:** IN_PROGRESS
+- **Status:** COMPLETE
 - **Purpose:** Use the real NARI Product catalog and canonical Product metadata to select eligible candidates before any future LLM reasoning.
 - **What was done:** Added the nullable, controlled `catalogRole` schema boundary, fail-closed eligibility helper, explicit Product repository query, deterministic scoring, intent policy, confidence/reason fields, maximum-five cap and private-field-safe candidate projection. Human verification established 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL in DEV.
 - **What was not done:** No live DEV query was executed by Codex, no additional DEV writes were made, and no final LLM recommendation or external knowledge retrieval exists.
-- **Result:** Deterministic candidate search, controlled LLM reasoning, Backend validation/re-fetch and V1 routine construction are complete. Compare/compatibility/budget/existing-Product flows remain pending. No live provider key or request is configured.
+- **Result:** Points 6–10 are complete: deterministic candidate search, controlled provider reasoning, Backend validation/re-fetch, V1 routine construction, comparison, structural compatibility, total-COP budget routines and existing-Product completion. No live provider key or request is configured. R11E is not started.
