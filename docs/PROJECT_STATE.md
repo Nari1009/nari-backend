@@ -16,7 +16,7 @@ NARI is a Colombian K-beauty e-commerce project with separate Backend, Client an
 
 | Repository | Local path | Remote | Branch / HEAD | Worktree status |
 |---|---|---|---|---|
-| Backend | `/Users/luis/Documents/Codex/2026-08-24/nari-backend` | `https://github.com/Nari1009/nari-backend.git` | `dev` / `e466534080c7c7c4014047f16a864c97278d22c5` | **Dirty**: pre-existing R11B2 foundation, migration, tests, scripts and snapshots are uncommitted. Do not discard. |
+| Backend | `/Users/luis/Documents/Codex/2026-08-24/nari-backend` | `https://github.com/Nari1009/nari-backend.git` | `dev` / R11B2 closure commit | R11B2 durable package versioned here; generated temporary artifacts ignored. |
 | Client | `/Users/luis/Documents/Codex/2026-08-24/quiero-que-construyas-la-p-gina` | `https://github.com/Nari1009/nari-frontend.git` | `dev` / `5eb649167ebe3ff0b777dda87d1e4268f03fbbee` | Clean at inspection. |
 | Admin (safe audit checkout) | `/Users/luis/Documents/Codex/nari-admin-clone-I15V58` | **LOCAL PATH**: `/Users/luis/Documents/Codex/nari-admin-customer-status-dev` | detached HEAD / `dddd444c57cca10207379c44fdd1bbd647dc9d67` | Clean, read-only audit checkout. |
 
@@ -55,35 +55,35 @@ Read next:
 3. [`docs/PROJECT_HISTORY.md`](PROJECT_HISTORY.md)
 4. [`docs/AI_CONTEXT.md`](AI_CONTEXT.md)
 5. [`docs/checkpoints/R11B2.6D.md`](checkpoints/R11B2.6D.md)
+6. [`docs/checkpoints/R11B2_READY_DEV_WRITE.md`](checkpoints/R11B2_READY_DEV_WRITE.md)
 
 ## IMPLEMENTATION SNAPSHOT
 
 - **Client:** Existing storefront, Home CMS, Contacto, Footer, Product browsing, filters, cart, checkout and account flows implemented. NARI AI UI and canonical metadata consumption are not implemented.
 - **Admin:** Existing authenticated Product CRUD and CMS administration implemented. Canonical Product metadata controls are not implemented in the frontend.
 - **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist in the current uncommitted R11B2 foundation work. No AI runtime exists.
-- **Database:** Product schema contains `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets` in DEV according to manually verified migration reports. Values remain uncurated.
+- **Database:** Product schema contains `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets` in DEV. The 12 approved READY Products now contain reviewed canonical values; 8 PARTIAL Products remain unresolved and untouched.
 - **NARI AI:** Designed/audited only; no provider, chat route, recommendation engine, routine builder, embeddings or conversation storage.
 
 ## CURRENT STOPPING POINT
 
 R11B2.6D is complete.
 
-No reliable next phase was recovered. No Product canonical metadata has been written. Human approval is required before the next mutation or development phase.
+R11B2 technical closure is complete and recorded in `docs/checkpoints/R11B2_READY_DEV_WRITE.md`: 12 approved Products were written and 8 PARTIAL Products were preserved. No reliable next phase was recovered. Human approval is required before further mutation or development.
 
 Do not record or assume R11B2.7 as started, completed, approved or established roadmap work.
 
 ## CURRENT RISKS
 
-- Backend has pre-existing uncommitted R11B2 foundation changes.
 - Legacy seed/import mechanisms can mutate Product metadata if explicitly executed.
-- New canonical metadata has not yet been persisted.
+- Eight PARTIAL Products still have unresolved canonical dimensions.
 - Admin does not expose canonical metadata controls.
 - NARI AI runtime and recommendation engine do not exist.
 
 ## CONTINUATION PROTOCOL
 
 1. Read `PROJECT_STATE.md`.
-2. Read `DECISIONS.md`, `ROADMAP.md`, `PROJECT_HISTORY.md`, then the module-specific files listed above.
+2. Read `DECISIONS.md`, `ROADMAP.md`, `PROJECT_HISTORY.md`, then the module-specific files and latest checkpoint listed above.
 3. Inspect current Git and worktree state.
 4. Compare documentation against repository state.
 5. Report discrepancies before modifying anything.

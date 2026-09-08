@@ -107,7 +107,6 @@ Only decisions supported by available project instructions or code are recorded 
 - Exact future AI API and structured response contract.
 - Deterministic recommendation scoring/ranking.
 - Anonymous session identifier strategy.
-- Whether to write the 12 READY Products first or wait for all 20.
 - Future Admin controls for canonical fields and `sizeLabel`.
 - Future Client presentation/use of canonical metadata.
 
@@ -161,3 +160,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Prevent future sessions from treating reconstructed history or prompts as implementation evidence.
 - **Status:** VERIFIED_DECISION
 - **Source class:** Current user instruction and continuity documentation protocol.
+
+## DEC-019 — Approved READY Metadata May Be Written Independently of PARTIAL Rows
+
+- **Date:** 2026-09-08
+- **Area:** R11B2 curation
+- **Decision:** Only the 12 Products marked READY in the reviewed R11B2.6D worksheet may receive canonical metadata. The 8 PARTIAL Products remain untouched until their unresolved fields are approved.
+- **Rationale:** Preserve the NULL-versus-empty semantics and prevent uncertain suitability claims from entering Product rows.
+- **Status:** VERIFIED_IMPLEMENTATION
+- **Source class:** Approved R11B2.6D curation instructions and DEV post-write verification.

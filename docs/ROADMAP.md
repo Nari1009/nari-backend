@@ -111,11 +111,11 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 
 ## R11B2 — Catalog Metadata Foundation
 
-- **Status:** IN_PROGRESS
+- **Status:** DONE
 - **Purpose:** Establish safe Product metadata foundations for future deterministic recommendation retrieval.
 - **What was done:** Verified catalog snapshots, safe catalog-only DEV clone, additive schema foundations and canonical validators.
-- **What was not done:** Canonical Product values remain uncurated and unwritten.
-- **Result:** 20 real Products are available in DEV with five preserved fixtures.
+- **What was not done:** Eight PARTIAL Products remain unresolved; no AI runtime or Client/Admin canonical UI was implemented.
+- **Result:** R11B2 technical foundation is closed. 20 real Products are available in DEV with five preserved fixtures; the 12 approved READY Products have canonical metadata in DEV and the 8 PARTIAL Products remain intentionally unresolved.
 
 ## R11B2.3 — Product Metadata Dependency Audit
 
@@ -178,3 +178,5 @@ Last verified phase: **R11B2.6D**.
 Next verified phase: **UNKNOWN / NOT YET APPROVED**.
 
 No R11B2.6E or R11B2.7 is recorded as established work.
+
+The controlled DEV write is an operational checkpoint under R11B2, not a new numbered phase. See `docs/checkpoints/R11B2_READY_DEV_WRITE.md`.

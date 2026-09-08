@@ -1,0 +1,4 @@
+ALTER TABLE public.products
+  ADD COLUMN IF NOT EXISTS suitableSkinTypes TEXT NULL,
+  ADD COLUMN IF NOT EXISTS suitableConditions TEXT NULL,
+  ADD COLUMN IF NOT EXISTS targets TEXT NULL;

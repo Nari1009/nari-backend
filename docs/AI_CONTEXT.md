@@ -44,7 +44,7 @@ Relevant paths:
 - `migrations/20260908_r11b2_product_ai_metadata.sql` — `routineStep`, `sizeLabel`.
 - `migrations/20260909_r11b2_canonical_recommendation_metadata.sql` — canonical recommendation fields.
 
-Status: catalog foundation implemented; AI runtime absent.
+Status: R11B2 catalog foundation technically closed; AI runtime absent.
 
 ### Client
 
@@ -56,7 +56,7 @@ The Admin frontend supports legacy Product metadata. It does not yet expose cano
 
 ### Database
 
-DEV contains 25 Products: 20 real catalog Products and 5 preserved fixtures. Canonical fields exist but no canonical Product values have been written.
+DEV contains 25 Products: 20 real catalog Products and 5 preserved fixtures. Canonical fields exist; reviewed values have now been written for the 12 READY real Products, while the 8 PARTIAL real Products remain unresolved and untouched.
 
 ## CANONICAL PRODUCT TAXONOMY
 
@@ -93,7 +93,7 @@ R11B2.6D reviewed 20 real Products:
 - READY: 12.
 - PARTIAL: 8.
 - BLOCKED: 0.
-- **NO canonical curation values have been written.**
+- **At the R11B2.6D checkpoint, no canonical curation values had been written.** The subsequent controlled DEV write populated only the 12 READY Products. See `docs/checkpoints/R11B2_READY_DEV_WRITE.md` for the verified post-write state.
 
 ### READY
 
@@ -150,4 +150,4 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D is complete. Next phase: **NOT YET APPROVED**. Do not infer or create R11B2.7.
+R11B2.6D and the controlled READY DEV write are complete. R11B2 is technically closed. Next phase: **NOT YET APPROVED**. Do not infer or create R11B2.7 or any other new numbered phase.

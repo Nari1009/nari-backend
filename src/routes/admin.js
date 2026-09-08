@@ -14,6 +14,14 @@ const { uploadProductImage } = require('../services/storage');
 const { getAnalytics } = require('../services/analyticsService');
 const { getSetting, updateSetting, validSections } = require('./settings');
 const { ContractValidationError } = require('../services/settingsContract');
+const {
+  ProductMetadataValidationError,
+  validateRoutineStep,
+  validateSizeLabel,
+  validateSuitableSkinTypes,
+  validateSuitableConditions,
+  validateTargets,
+} = require('../domain/productTaxonomy');
 const router = express.Router();
 const serializeList = (value) => {
   if (Array.isArray(value)) return JSON.stringify(value);
@@ -24,7 +32,8 @@ const serializeList = (value) => {
   }
   return JSON.stringify(Array.isArray(parsed) ? parsed : value.split('\n').map((item) => item.trim()).filter(Boolean));
 };
-const listColumns = new Set(['skinTypes', 'concerns', 'ingredients', 'featuredIngredients', 'benefits', 'howToUse', 'images']);
+const serializeCanonicalList = (value) => (value === null || value === undefined ? value : JSON.stringify(value));
+const listColumns = new Set(['skinTypes', 'concerns', 'ingredients', 'featuredIngredients', 'benefits', 'howToUse', 'images', 'suitableSkinTypes', 'suitableConditions', 'targets']);
 // DEV/mock: una orden no cancelada representa una venta registrada; el pago real queda pendiente de paymentStatus.
 const validSaleStatuses = ['Pendiente', 'Preparando', 'Enviado', 'Entregado'];
 const saleStatusSql = `(${validSaleStatuses.map(() => '?').join(',')})`;
@@ -488,11 +497,27 @@ router.delete('/customers/:id', async (req, res) => {
 router.patch('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, brand, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier } = req.body;
+    const { name, brand, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets } = req.body;
 
     const product = await get('SELECT * FROM products WHERE id = ?', [id]);
     if (!product) {
       return res.status(404).json({ error: 'Product not found' });
+    }
+
+    let validatedRoutineStep;
+    let validatedSizeLabel;
+    let validatedSuitableSkinTypes;
+    let validatedSuitableConditions;
+    let validatedTargets;
+    try {
+      validatedRoutineStep = validateRoutineStep(routineStep);
+      validatedSizeLabel = validateSizeLabel(sizeLabel);
+      validatedSuitableSkinTypes = validateSuitableSkinTypes(suitableSkinTypes);
+      validatedSuitableConditions = validateSuitableConditions(suitableConditions);
+      validatedTargets = validateTargets(targets);
+    } catch (error) {
+      if (error instanceof ProductMetadataValidationError) return res.status(400).json({ error: error.message });
+      throw error;
     }
 
     if (stock !== undefined && (!Number.isInteger(stock) || stock < 0)) {
@@ -512,8 +537,13 @@ router.patch('/products/:id', async (req, res) => {
     if (category !== undefined) { updates.push('category = ?'); values.push(category); }
     if (status !== undefined) { updates.push('status = ?'); values.push(status); }
     if (description !== undefined) { updates.push('description = ?'); values.push(description); }
+    if (routineStep !== undefined) { updates.push('routineStep = ?'); values.push(validatedRoutineStep); }
+    if (sizeLabel !== undefined) { updates.push('sizeLabel = ?'); values.push(validatedSizeLabel); }
     for (const [column, value] of Object.entries({ sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier })) {
       if (value !== undefined) { updates.push(`${column} = ?`); values.push(listColumns.has(column) ? serializeList(value) : value); }
+    }
+    for (const [column, value] of Object.entries({ suitableSkinTypes: validatedSuitableSkinTypes, suitableConditions: validatedSuitableConditions, targets: validatedTargets })) {
+      if (value !== undefined) { updates.push(`${column} = ?`); values.push(serializeCanonicalList(value)); }
     }
 
     if (updates.length === 0) {
@@ -592,10 +622,26 @@ router.patch('/products/:id/stock', async (req, res) => {
 });
 
 router.post('/products', async (req, res) => {
-  const { id, brand, name, price, cost, stock, minimumStock = 3, category, status = 'active', description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier } = req.body;
+  const { id, brand, name, price, cost, stock, minimumStock = 3, category, status = 'active', description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets } = req.body;
 
   if (!id || !brand || !name || price === undefined || !category) {
     return res.status(400).json({ error: 'Missing required fields: id, brand, name, price, category' });
+  }
+
+  let validatedRoutineStep;
+  let validatedSizeLabel;
+  let validatedSuitableSkinTypes;
+  let validatedSuitableConditions;
+  let validatedTargets;
+  try {
+    validatedRoutineStep = validateRoutineStep(routineStep);
+    validatedSizeLabel = validateSizeLabel(sizeLabel);
+    validatedSuitableSkinTypes = validateSuitableSkinTypes(suitableSkinTypes);
+    validatedSuitableConditions = validateSuitableConditions(suitableConditions);
+    validatedTargets = validateTargets(targets);
+  } catch (error) {
+    if (error instanceof ProductMetadataValidationError) return res.status(400).json({ error: error.message });
+    throw error;
   }
 
   const slug = `${brand}-${name}`
@@ -611,9 +657,9 @@ router.post('/products', async (req, res) => {
   }
 
   await run(
-    `INSERT INTO products (id, brand, name, slug, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    [id, brand, name, slug, price, cost || 0, stock || 0, Number.isInteger(minimumStock) && minimumStock >= 0 ? minimumStock : 3, category, status, description || '', sku || '', compareAtPrice ?? null, serializeList(skinTypes), serializeList(concerns), serializeList(ingredients), audience || '', skinBenefits || '', serializeList(featuredIngredients), fullIngredients || '', productInfo || '', shippingReturns || '', serializeList(benefits), serializeList(howToUse), precautions || '', serializeList(images), supplier || null]
+    `INSERT INTO products (id, brand, name, slug, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets, supplier, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [id, brand, name, slug, price, cost || 0, stock || 0, Number.isInteger(minimumStock) && minimumStock >= 0 ? minimumStock : 3, category, status, description || '', sku || '', compareAtPrice ?? null, serializeList(skinTypes), serializeList(concerns), serializeList(ingredients), audience || '', skinBenefits || '', serializeList(featuredIngredients), fullIngredients || '', productInfo || '', shippingReturns || '', serializeList(benefits), serializeList(howToUse), precautions || '', serializeList(images), validatedRoutineStep ?? null, validatedSizeLabel ?? null, serializeCanonicalList(validatedSuitableSkinTypes) ?? null, serializeCanonicalList(validatedSuitableConditions) ?? null, serializeCanonicalList(validatedTargets) ?? null, supplier || null]
   );
 
   await rememberCatalogOption('brand', brand);

@@ -26,6 +26,11 @@ test('public product projection keeps storefront fields and excludes operational
     slug: 'test-product',
     price: 100000,
     stock: 4,
+    routineStep: 'SERUM',
+    sizeLabel: '30 ml',
+    suitableSkinTypes: '["OILY","COMBINATION"]',
+    suitableConditions: '["SENSITIVE"]',
+    targets: '["HYDRATION"]',
     skinTypes: '["seca"]',
     reviewCount: 3,
     cost: 25000,
@@ -41,6 +46,11 @@ test('public product projection keeps storefront fields and excludes operational
   assert.equal(projected.price, 100000);
   assert.equal(projected.stock, 4);
   assert.equal(projected.reviewCount, 3);
+  assert.equal(projected.routineStep, 'SERUM');
+  assert.equal(projected.sizeLabel, '30 ml');
+  assert.equal(projected.suitableSkinTypes, '["OILY","COMBINATION"]');
+  assert.equal(projected.suitableConditions, '["SENSITIVE"]');
+  assert.equal(projected.targets, '["HYDRATION"]');
   assert.equal('cost' in projected, false);
   assert.equal('supplier' in projected, false);
   assert.equal('minimumStock' in projected, false);
@@ -59,6 +69,11 @@ test('public projection is explicit and future columns are not exposed automatic
   assert.equal(PUBLIC_PRODUCT_KEYS.includes('minimumStock'), false);
   assert.equal(PUBLIC_PRODUCT_KEYS.includes('sku'), false);
   assert.equal(PUBLIC_PRODUCT_KEYS.includes('updatedAt'), false);
+  assert.equal(PUBLIC_PRODUCT_KEYS.includes('routineStep'), true);
+  assert.equal(PUBLIC_PRODUCT_KEYS.includes('sizeLabel'), true);
+  assert.equal(PUBLIC_PRODUCT_KEYS.includes('suitableSkinTypes'), true);
+  assert.equal(PUBLIC_PRODUCT_KEYS.includes('suitableConditions'), true);
+  assert.equal(PUBLIC_PRODUCT_KEYS.includes('targets'), true);
 });
 
 test('public product routes use the explicit projection for list and detail', () => {
@@ -71,4 +86,20 @@ test('Admin product routes retain their operational product query path', () => {
   assert.match(adminRouteSource, /cost/);
   assert.match(adminRouteSource, /supplier/);
   assert.match(adminRouteSource, /minimumStock/);
+  assert.match(adminRouteSource, /validateRoutineStep/);
+  assert.match(adminRouteSource, /validateSizeLabel/);
+  assert.match(adminRouteSource, /routineStep/);
+  assert.match(adminRouteSource, /sizeLabel/);
+  assert.match(adminRouteSource, /validateSuitableSkinTypes/);
+  assert.match(adminRouteSource, /validateSuitableConditions/);
+  assert.match(adminRouteSource, /validateTargets/);
+  assert.match(adminRouteSource, /Object\.entries\(\{ suitableSkinTypes:/);
+  assert.match(adminRouteSource, /Object\.entries\(\{ suitableSkinTypes:.*suitableConditions:.*targets:/s);
+});
+
+test('canonical recommendation fields have distinct PATCH semantics', () => {
+  assert.match(adminRouteSource, /if \(value !== undefined\).*serializeCanonicalList\(value\)/s);
+  assert.match(adminRouteSource, /serializeCanonicalList\(validatedSuitableSkinTypes\)/);
+  assert.match(adminRouteSource, /serializeCanonicalList\(validatedSuitableConditions\)/);
+  assert.match(adminRouteSource, /serializeCanonicalList\(validatedTargets\)/);
 });
