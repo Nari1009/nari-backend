@@ -19,6 +19,16 @@ const REASONING_SYSTEM_INSTRUCTIONS = [
   'Si la información es insuficiente, usa FOLLOW_UP o ANSWER con selectedProductIds vacío y reasons vacío.',
 ].join(' ');
 
+const ROUTINE_SYSTEM_INSTRUCTIONS = [
+  'Eres el razonador de rutinas cosméticas de NARI. No diagnostiques ni trates enfermedades.',
+  'Usa únicamente los pasos y los candidatos entregados por Backend.',
+  'Selecciona solo IDs del grupo exacto de cada paso; no inventes IDs, Products, precios, stock, slugs o imágenes.',
+  'Respeta morning/evening: SUNSCREEN solo por la mañana, FIRST_CLEANSE solo por la noche y SERUM de tratamiento solo por la noche en V1.',
+  'NULL significa información desconocida; [] significa revisado y neutral, no apto universalmente.',
+  'Devuelve únicamente JSON con mode, message, routine y profile. Cada paso seleccionado lleva step, selectedProductId y reason breve.',
+  'Respeta los pasos obligatorios y no añadas pasos fuera del plan. No reveles cadena de pensamiento.',
+].join(' ');
+
 const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = process.env.OPENAI_MODEL || 'gpt-4o-mini', fetchImpl = global.fetch, timeoutMs = AI_LIMITS.providerTimeoutMs } = {}) => {
   const callModel = async (messages) => {
     if (!apiKey || typeof fetchImpl !== 'function') throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está configurado.', 503);
@@ -65,7 +75,16 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
         },
       ]);
     },
+    async reasonRoutine({ request, interpretation, plan, candidatesByStep }) {
+      return callModel([
+        { role: 'system', content: ROUTINE_SYSTEM_INSTRUCTIONS },
+        {
+          role: 'user',
+          content: JSON.stringify({ message: request.message, history: request.history, interpretation, plan, candidatesByStep }),
+        },
+      ]);
+    },
   };
 };
 
-module.exports = { createOpenAIProvider, SYSTEM_INSTRUCTIONS, REASONING_SYSTEM_INSTRUCTIONS };
+module.exports = { createOpenAIProvider, SYSTEM_INSTRUCTIONS, REASONING_SYSTEM_INSTRUCTIONS, ROUTINE_SYSTEM_INSTRUCTIONS };

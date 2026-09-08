@@ -1,5 +1,6 @@
 const FINAL_PRODUCT_SELECT = `
   SELECT id, name, slug, price, images,
+         routineStep AS "routineStep",
          catalogRole AS "catalogRole",
          status, stock
   FROM products

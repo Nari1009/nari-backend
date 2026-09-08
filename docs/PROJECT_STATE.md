@@ -39,7 +39,7 @@ Current active release: **R11 — NARI AI**.
 
 ## CURRENT CHECKPOINT
 
-**R11D — DETERMINISTIC CATALOG CANDIDATE ENGINE** is in progress. Deterministic candidate search, controlled LLM reasoning and Backend validation/re-fetch are complete; routine construction and later comparison/compatibility/budget/existing-Product flows remain pending. The catalog/fixture boundary is human-verified in DEV; no live DB connection is used by this work. R11C is complete; R11B remains closed.
+**R11D — DETERMINISTIC CATALOG CANDIDATE ENGINE** is in progress. Deterministic candidate search, controlled LLM reasoning, Backend validation/re-fetch and V1 routine construction are complete; later comparison/compatibility/budget/existing-Product flows remain pending. The catalog/fixture boundary is human-verified in DEV; no live DB connection is used by this work. R11C is complete; R11B remains closed.
 
 - Products reviewed: 20/20 real catalog Products.
 - READY: 12.
@@ -62,18 +62,20 @@ Read next:
 8. [`docs/checkpoints/R11C_BACKEND_AI_BASE.md`](checkpoints/R11C_BACKEND_AI_BASE.md)
 9. [`docs/checkpoints/R11D_CATALOG_FIXTURE_BOUNDARY.md`](checkpoints/R11D_CATALOG_FIXTURE_BOUNDARY.md)
 10. [`docs/checkpoints/R11D_CANDIDATE_ENGINE.md`](checkpoints/R11D_CANDIDATE_ENGINE.md)
+11. [`docs/checkpoints/R11D_CONTROLLED_LLM_REASONING.md`](checkpoints/R11D_CONTROLLED_LLM_REASONING.md)
+12. [`docs/checkpoints/R11D_ROUTINE_BUILDING.md`](checkpoints/R11D_ROUTINE_BUILDING.md)
 
 ## IMPLEMENTATION SNAPSHOT
 
 - **Client:** Existing storefront, Home CMS, Contacto, Footer, Product browsing, filters, cart, checkout and account flows implemented. NARI AI UI and canonical metadata consumption are not implemented.
 - **Admin:** Existing authenticated Product CRUD and CMS administration implemented. The verified R11B Admin implementation contains the canonical NARI AI Product editor with explicit reviewed/unreviewed states; live DEV UI verification passed and temporary fixture changes were restored.
-- **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist. R11C provides the adviser base; R11D provides fail-closed catalog eligibility, deterministic candidate scoring, controlled provider handoff, selected-ID validation and final commercial re-fetch.
+- **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist. R11C provides the adviser base; R11D provides fail-closed catalog eligibility, deterministic candidate scoring, controlled provider handoff, selected-ID validation, final commercial re-fetch and bounded AM/PM routine construction.
 - **Database:** DEV has human-verified `catalogRole`: 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL. The migration remains in the repository for other environments; Codex did not execute it.
-- **NARI AI:** R11C adviser foundation and R11D points 6–8 are complete; routine construction and later flows remain pending. No live provider key is configured.
+- **NARI AI:** R11C adviser foundation and R11D points 6–9 are complete; point 10 remains pending. No live provider key is configured.
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D is complete and R11B is closed. R11C Backend AI Base is complete. R11D points 6–8 are complete; routine construction and later comparison/compatibility/budget/existing-Product flows remain pending. DEV classification is human-verified as 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL; Codex made no additional DEV writes.
+R11B2.6D is complete and R11B is closed. R11C Backend AI Base is complete. R11D points 6–9 are complete; point 10 remains pending. DEV classification is human-verified as 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL; Codex made no additional DEV writes.
 
 R11B2 technical closure is complete and recorded in `docs/checkpoints/R11B2_READY_DEV_WRITE.md`: 12 approved Products were written and 8 PARTIAL Products were preserved. R11B Admin maintenance is recorded in `docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`; live DEV verification passed. The DB Product row remains the sole persisted Product-specific canonical metadata source, with Admin as the human editing surface. No reliable next numbered phase was recovered. Human approval is required before further mutation or development.
 

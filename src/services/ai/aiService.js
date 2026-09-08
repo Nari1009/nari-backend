@@ -16,7 +16,7 @@ const publicReasoningResponse = ({ intent, reasoning, recommendations = [] }) =>
   recommendations,
 });
 
-const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null } = {}) => ({
+const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null } = {}) => ({
   async advise(input) {
     const request = validateRequest(input);
     assertNoPrivilegedInstruction(request);
@@ -32,6 +32,9 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
     const validated = validateProviderOutput(output);
     if (validated.mode !== 'RECOMMENDATION') {
       return { ...validated, recommendations: [] };
+    }
+    if (validated.intent === 'BUILD_ROUTINE' && routineService && typeof provider.reasonRoutine === 'function') {
+      return routineService.build({ request, interpretation: validated, provider });
     }
     if (!candidateService || !finalProductRepository || typeof provider.reasonAmongCandidates !== 'function') {
       return {

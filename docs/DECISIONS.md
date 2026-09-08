@@ -232,3 +232,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Keep the LLM advisory and bounded while the Backend remains authoritative for Product identity, sellability and commercial truth.
 - **Status:** IMPLEMENTED
 - **Source class:** R11D Part 2 implementation, tests and current user instruction.
+
+## DEC-027 — R11D V1 Routine Planning Is Simple and Backend-Controlled
+
+- **Date:** 2026-09-08
+- **Area:** R11D routine construction
+- **Decision:** V1 routine planning uses AM `CLEANSER`, `MOISTURIZER`, `SUNSCREEN` and PM `CLEANSER`, `MOISTURIZER` as required core steps. `SERUM` may be added to PM only when canonical targets justify treatment, and treatment `SERUM` is conservatively rejected from AM until trusted Product-specific usage/compatibility knowledge exists. Optional toner, essence, eye care and first cleanse are not forced. Each step gets its own deterministic candidate group; the provider cannot cross-select IDs between step groups. Products may be reused AM/PM, but final public recommendations contain unique DB-backed Products. A required step that becomes unavailable prevents the routine from being presented as complete; no replacement is fabricated.
+- **Rationale:** Keep beginner routines bounded and understandable while preserving Backend authority over steps, candidate membership and commercial truth. The PM-only treatment default avoids implying unsupported AM usage guidance; advanced compatibility, budget, comparison and existing-Product logic remain deferred.
+- **Status:** IMPLEMENTED
+- **Source class:** R11D Part 3 implementation, tests and current user instruction.

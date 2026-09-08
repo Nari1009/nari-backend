@@ -263,3 +263,18 @@ SUMMARY:
 - Removed Products invalidated by a race condition without replacement; all-invalid selections return a safe non-recommendation.
 
 STATE AFTER: R11D deterministic search, controlled LLM reasoning and Backend validation/re-fetch are complete. Routine construction and later comparison/compatibility/budget/existing-Product flows remain pending. No DB schema change, DEV write, PROD access, live provider request or external retrieval occurred.
+
+## DATE UNKNOWN — R11D Part 3 Full Routine Building
+
+TYPE: BACKEND AI ROUTINE CHECKPOINT
+
+SUMMARY:
+
+- Added deterministic V1 routine planning with bounded AM/PM core steps.
+- Restricted optional treatment `SERUM` to PM in V1 until trusted Product-specific usage/compatibility knowledge exists.
+- Added per-step candidate groups and exact step-to-Product ID validation.
+- Added routine provider contract, canonical order validation, morning/evening safety rules and maximum unique Product limits.
+- Allowed legitimate Product reuse between AM and PM while returning unique public Product recommendations.
+- Re-fetched every unique selected Product and refused to present a complete routine when a required Product became unavailable.
+
+STATE AFTER: R11D points 6–9 are complete. Point 10 comparison, compatibility, budget and existing-Product flows remain pending. No DB schema change, DEV write, PROD access, live provider request or external retrieval occurred.
