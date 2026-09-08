@@ -39,7 +39,7 @@ Current active release: **R11 — NARI AI**.
 
 ## CURRENT CHECKPOINT
 
-**R11B — ADMIN CANONICAL METADATA EDITOR** is implemented, live-verified against DEV, and technically closed. The preceding **R11B2.6D — FINAL NULL VS EMPTY CURATION REVIEW** is complete.
+**R11C — BACKEND AI BASE** is complete as a Backend foundation. R11B remains closed; the preceding **R11B2.6D — FINAL NULL VS EMPTY CURATION REVIEW** is complete.
 
 - Products reviewed: 20/20 real catalog Products.
 - READY: 12.
@@ -59,18 +59,19 @@ Read next:
 5. [`docs/checkpoints/R11B2.6D.md`](checkpoints/R11B2.6D.md)
 6. [`docs/checkpoints/R11B2_READY_DEV_WRITE.md`](checkpoints/R11B2_READY_DEV_WRITE.md)
 7. [`docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`](checkpoints/R11B_ADMIN_CANONICAL_METADATA.md)
+8. [`docs/checkpoints/R11C_BACKEND_AI_BASE.md`](checkpoints/R11C_BACKEND_AI_BASE.md)
 
 ## IMPLEMENTATION SNAPSHOT
 
 - **Client:** Existing storefront, Home CMS, Contacto, Footer, Product browsing, filters, cart, checkout and account flows implemented. NARI AI UI and canonical metadata consumption are not implemented.
 - **Admin:** Existing authenticated Product CRUD and CMS administration implemented. The verified R11B Admin implementation contains the canonical NARI AI Product editor with explicit reviewed/unreviewed states; live DEV UI verification passed and temporary fixture changes were restored.
-- **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist in the current uncommitted R11B2 foundation work. No AI runtime exists.
+- **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist. R11C adds the provider-neutral `/api/ai/adviser` contract, transient intent/profile orchestration, safety, limits and controlled provider failure handling. No deterministic catalog recommendation engine exists yet.
 - **Database:** Product schema contains `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets` in DEV. The 12 approved READY Products now contain reviewed canonical values; 8 PARTIAL Products remain unresolved and untouched.
 - **NARI AI:** Designed/audited only; no provider, chat route, recommendation engine, routine builder, embeddings or conversation storage.
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D is complete. R11B is now complete: the Admin canonical metadata editor was implemented, live-verified against DEV, semantically integrated onto current Admin `origin/dev`, published as `2598c39`, and its temporary test state was restored.
+R11B2.6D is complete and R11B is closed. R11C Backend AI Base is complete: the adviser contract, provider abstraction, transient profile validation, safety boundary and deterministic orchestration shell are implemented. Catalog candidate selection and full AI product recommendations are not implemented. No DB or Product metadata was modified. R11D is not started.
 
 R11B2 technical closure is complete and recorded in `docs/checkpoints/R11B2_READY_DEV_WRITE.md`: 12 approved Products were written and 8 PARTIAL Products were preserved. R11B Admin maintenance is recorded in `docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`; live DEV verification passed. The DB Product row remains the sole persisted Product-specific canonical metadata source, with Admin as the human editing surface. No reliable next numbered phase was recovered. Human approval is required before further mutation or development.
 
@@ -82,7 +83,7 @@ Do not record or assume R11B2.7 as started, completed, approved or established r
 - Eight PARTIAL Products still have unresolved canonical dimensions.
 - The Admin canonical metadata editor has been exercised against DEV; temporary fixture edits were restored and independently verified.
 - NARI AI runtime and recommendation engine do not exist.
-- R11 remains in progress; R11C is not started and no next numbered phase is approved.
+- R11 remains in progress; R11C is complete and R11D is not started.
 
 ## CONTINUATION PROTOCOL
 

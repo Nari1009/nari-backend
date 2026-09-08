@@ -44,7 +44,7 @@ Relevant paths:
 - `migrations/20260908_r11b2_product_ai_metadata.sql` — `routineStep`, `sizeLabel`.
 - `migrations/20260909_r11b2_canonical_recommendation_metadata.sql` — canonical recommendation fields.
 
-Status: R11B2 catalog foundation technically closed; AI runtime absent.
+Status: R11B2 catalog foundation and R11B Admin maintenance are closed. R11C Backend AI Base is complete; catalog recommendation runtime is absent.
 
 ### Client
 
@@ -57,6 +57,20 @@ The Admin frontend supports canonical Product metadata editing in Admin DEV `ori
 ### Database
 
 DEV contains 25 Products: 20 real catalog Products and 5 preserved fixtures. Canonical fields exist; reviewed values have now been written for the 12 READY real Products, while the 8 PARTIAL real Products remain unresolved and untouched.
+
+### R11C Backend AI Base
+
+Implemented in progress:
+
+- `src/routes/ai.js` mounted at `POST /api/ai/adviser`.
+- `src/services/ai/contract.js` validates bounded client requests and strict provider output.
+- `src/services/ai/aiService.js` orchestrates transient interpretation without querying the catalog or writing Product data.
+- `src/services/ai/providers/aiProvider.js` defines the provider-neutral boundary.
+- `src/services/ai/providers/openaiProvider.js` is an optional HTTP adapter using `OPENAI_API_KEY` only when configured; no key is stored or required for tests.
+- `src/services/ai/safety.js` handles cautious medical escalation and privileged-instruction boundaries.
+- `src/services/ai/rateLimiter.js` provides a bounded in-memory route limiter.
+
+The response is Backend-controlled and never proxies raw provider objects. Recommendation mode returns an empty recommendation list with a controlled pending message until R11D exists. Conversation state is request-scoped only; no DB persistence exists.
 
 ## CANONICAL PRODUCT TAXONOMY
 
@@ -129,7 +143,7 @@ R11B2.6D reviewed 20 real Products:
 | Backend | Validation, persistence and safe public projection exist |
 | Admin | Canonical Product metadata editor implemented and live-verified; no Product-specific hardcodes |
 | Client | Legacy Product display/filtering exists; canonical consumption absent |
-| AI engine | Does not exist |
+| AI engine | R11C transient adviser base exists; catalog selection and recommendation runtime do not exist |
 
 ## SOURCE OF TRUTH
 
@@ -137,8 +151,10 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 
 ## NOT IMPLEMENTED YET
 
-- AI chat route.
-- LLM provider integration.
+- Client chat UI.
+- Catalog candidate selection.
+- Full recommendation engine.
+- Routine builder.
 - Chat UI.
 - Recommendation engine.
 - Routine builder.
@@ -149,4 +165,4 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11 remains in progress; R11C is not started. Next phase: **NOT YET APPROVED**. Do not infer or create R11B2.7, R11C, or any other new numbered phase.
+R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base is complete; R11D candidate selection is planned but not started. No DB or Product metadata was modified by R11C. Do not begin R11D without review and approval.

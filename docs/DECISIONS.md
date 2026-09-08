@@ -169,3 +169,30 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Preserve the NULL-versus-empty semantics and prevent uncertain suitability claims from entering Product rows.
 - **Status:** VERIFIED_IMPLEMENTATION
 - **Source class:** Approved R11B2.6D curation instructions and DEV post-write verification.
+
+## DEC-020 — All AI Traffic Goes Through the Backend
+
+- **Date:** 2026-09-08
+- **Area:** R11C AI architecture
+- **Decision:** The Client must not communicate directly with an LLM provider. AI requests go through the Backend adviser route.
+- **Rationale:** Keep provider credentials, safety policy, validation and orchestration server-side.
+- **Status:** VERIFIED_DECISION / VERIFIED_IMPLEMENTATION
+- **Source class:** R11C user instruction and `server.js`/`src/routes/ai.js`.
+
+## DEC-021 — R11C AI State Is Transient
+
+- **Date:** 2026-09-08
+- **Area:** R11C persistence
+- **Decision:** R11C does not persist conversation history, AI profiles, embeddings or AI-specific database rows.
+- **Rationale:** Establish the contract and safety shell before persistence or recommendation infrastructure.
+- **Status:** VERIFIED_IMPLEMENTATION
+- **Source class:** R11C implementation and tests.
+
+## DEC-022 — R11C Does Not Select Catalog Candidates
+
+- **Date:** 2026-09-08
+- **Area:** Recommendation architecture
+- **Decision:** R11C may interpret intent and ask follow-up questions, but deterministic catalog candidate selection is deferred to R11D. Recommendation responses remain empty and controlled.
+- **Rationale:** Prevent fabricated Products and preserve the planned Backend eligibility boundary.
+- **Status:** VERIFIED_DECISION / VERIFIED_IMPLEMENTATION
+- **Source class:** R11C user instruction and `src/services/ai/aiService.js`.

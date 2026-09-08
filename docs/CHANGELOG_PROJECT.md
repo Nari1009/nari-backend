@@ -209,3 +209,17 @@ SUMMARY:
 - Backend regression tests and Admin production build passed.
 
 STATE AFTER: Controlled live DEV UI verification passed using a preserved fixture; all temporary values were restored exactly. The implementation was then semantically integrated onto current Admin `origin/dev` and published as `2598c39`. No curation values were added to real Products by this task. R11B is now closed, R11 remains in progress, R11C is not started, and PROD remains untouched.
+
+## 2026-09-08 — R11C Backend AI Base
+
+TYPE: BACKEND AI FOUNDATION
+
+SUMMARY:
+
+- Added the provider-neutral `POST /api/ai/adviser` contract.
+- Added bounded request/history validation, canonical transient profile validation and controlled intent/mode output.
+- Added optional provider wiring, fake-provider testability, medical safety escalation, prompt-injection boundaries, timeout/error mapping and in-memory rate limiting.
+- Kept recommendations empty and catalog access out of scope for R11C.
+- Added 11 focused AI base tests; the complete Backend suite passed 49 tests.
+
+STATE AFTER: R11C Backend AI Base is complete. No database, Product metadata, PROD environment, Client or Admin changes were made. R11D deterministic catalog candidate selection is planned but not started.

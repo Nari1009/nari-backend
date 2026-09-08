@@ -33,6 +33,7 @@ const shippingRouter = require('./src/routes/shipping');
 const paymentWebhookRouter = require('./src/routes/paymentWebhook');
 const reviewsRouter = require('./src/routes/reviews');
 const cartRouter = require('./src/routes/cart');
+const aiRouter = require('./src/routes/ai');
 const { processAbandonedCarts } = require('./src/services/abandonedCarts');
 
 app.use('/api/products', productsRouter);
@@ -44,6 +45,7 @@ app.use('/api/shipping', shippingRouter);
 app.use('/api/payments', paymentWebhookRouter);
 app.use('/api/reviews', reviewsRouter);
 app.use('/api/cart', cartRouter);
+app.use('/api/ai', aiRouter);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

@@ -185,8 +185,22 @@ Last verified phase: **R11B — Admin Canonical Metadata Editor**.
 
 Next verified phase: **UNKNOWN / NOT YET APPROVED**.
 
-R11 remains in progress. R11C is not started. No numbered successor phase is approved.
+R11 remains in progress. R11C Backend AI Base is in progress. R11D is planned but not started; no later numbered phase is approved.
 
 No R11B2.6E or R11B2.7 is recorded as established work.
 
 The controlled DEV write is an operational checkpoint under R11B2, not a new numbered phase. See `docs/checkpoints/R11B2_READY_DEV_WRITE.md`. The latest R11B implementation checkpoint is `docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`.
+
+## R11C — Backend AI Base
+
+- **Status:** IN_PROGRESS
+- **Purpose:** Establish the secure Backend-only NARI AI adviser contract, provider abstraction, transient intent/profile interpretation, safety boundary, limits and deterministic orchestration shell.
+- **What was done:** Added `POST /api/ai/adviser`, controlled request/response validation, canonical taxonomy reuse, provider-neutral service boundaries, optional OpenAI HTTP adapter, fake-provider testability, medical escalation, prompt-injection boundaries, bounded history/message limits and in-memory rate limiting.
+- **What was not done:** No catalog candidate search, recommendation engine, routine builder, Client chat UI, persistent conversation history, embeddings, vector DB, external product retrieval or Product DB mutation.
+- **Result:** Backend AI base tests and the existing regression suite pass. R11C is complete. No catalog selection, permanent conversation history, external official-source retrieval or Product mutation was implemented.
+
+## R11D — Deterministic Catalog Candidate Selection
+
+- **Status:** PLANNED
+- **Purpose:** Use the real NARI Product catalog and canonical Product metadata to select eligible candidates before any future LLM reasoning.
+- **What was not done:** No R11D implementation has started.
