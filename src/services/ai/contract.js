@@ -97,14 +97,16 @@ const validateProfile = (value) => {
 
 const validateProviderOutput = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI no es válida.', 502);
-  if (ownKeys(value).some((key) => !['intent', 'mode', 'message', 'profile', 'productReferences'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene campos no permitidos.', 502);
+  if (ownKeys(value).some((key) => !['intent', 'mode', 'message', 'profile', 'productReferences', 'scope'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene campos no permitidos.', 502);
   if (!AI_INTENTS.includes(value.intent)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un intent no permitido.', 502);
   if (!AI_MODES.includes(value.mode)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un modo no permitido.', 502);
   const message = providerString(value.message, 'message', AI_LIMITS.responseMessage);
   if (!message) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI requiere un mensaje.', 502);
   const productReferences = value.productReferences === undefined ? [] : value.productReferences;
   if (!Array.isArray(productReferences) || productReferences.length > AI_LIMITS.productReferences || productReferences.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > AI_LIMITS.productReference)) throw new AIServiceError('INVALID_AI_RESPONSE', 'Las referencias de Products no son válidas.', 502);
-  return { intent: value.intent, mode: value.mode, message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()) };
+  const scope = value.scope === undefined ? 'IN_SCOPE' : value.scope;
+  if (!['IN_SCOPE', 'OUT_OF_SCOPE'].includes(scope)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un scope no permitido.', 502);
+  return { intent: value.intent, mode: value.mode, message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()), scope };
 };
 
 module.exports = { validateRequest, validateProviderOutput, validateProfile };

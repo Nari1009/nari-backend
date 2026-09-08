@@ -292,3 +292,17 @@ SUMMARY:
 - Added existing-Product completion using transient `knownProducts`, owned-vs-purchase separation and stock-independent owned Product recognition.
 
 STATE AFTER: R11D points 6–10 are complete and R11D is closed. No DB schema change, DEV write, PROD access, live provider request or external retrieval occurred. R11E is not started; R11 remains in progress.
+
+## 2026-09-08 — Post-R11D Real OpenAI DEV Integration Gate
+
+TYPE: BACKEND PROVIDER INTEGRATION
+
+SUMMARY:
+
+- Moved the existing provider adapter to the OpenAI Responses API with bounded JSON output and `store:false`.
+- Added explicit `OPENAI_ENABLED`, `OPENAI_API_KEY` and configurable `OPENAI_MODEL` configuration; no secret values are stored or logged.
+- Added Backend-controlled `IN_SCOPE` / `OUT_OF_SCOPE` behavior and a safe domain redirection.
+- Added an opt-in `npm run ai:dev:openai` harness with a production guard and no database access.
+- Kept automated tests network-free through fake providers; web search and external manufacturer retrieval remain disabled.
+
+STATE AFTER: Real OpenAI integration is IMPLEMENTED / VALIDATED and the gate is CLOSED. DEV model `gpt-5.6-luna` passed 3/3 real cases; automated tests passed 117/117. Structured Outputs is enabled for interpretation. Web search is OFF, external Product knowledge is NOT IMPLEMENTED, Client chat is NOT STARTED, R11D remains complete, R11E is not started, and PROD remains untouched.

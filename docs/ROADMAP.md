@@ -185,7 +185,7 @@ Last verified phase: **R11D — Deterministic Catalog Candidate Selection and Re
 
 Next verified phase: **UNKNOWN / NOT YET APPROVED**.
 
-R11 remains in progress. R11C and R11D are complete; R11E is not started and no later numbered phase is approved.
+R11 remains in progress. R11C and R11D are complete. The post-R11D real OpenAI DEV integration gate is validated; R11E is not started and no later numbered phase is approved.
 
 No R11B2.6E or R11B2.7 is recorded as established work.
 
@@ -205,4 +205,13 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 - **Purpose:** Use the real NARI Product catalog and canonical Product metadata to select eligible candidates before any future LLM reasoning.
 - **What was done:** Added the nullable, controlled `catalogRole` schema boundary, fail-closed eligibility helper, explicit Product repository query, deterministic scoring, intent policy, confidence/reason fields, maximum-five cap and private-field-safe candidate projection. Human verification established 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL in DEV.
 - **What was not done:** No live DEV query was executed by Codex, no additional DEV writes were made, and no final LLM recommendation or external knowledge retrieval exists.
-- **Result:** Points 6–10 are complete: deterministic candidate search, controlled provider reasoning, Backend validation/re-fetch, V1 routine construction, comparison, structural compatibility, total-COP budget routines and existing-Product completion. No live provider key or request is configured. R11E is not started.
+- **Result:** Points 6–10 are complete: deterministic candidate search, controlled provider reasoning, Backend validation/re-fetch, V1 routine construction, comparison, structural compatibility, total-COP budget routines and existing-Product completion. R11E is not started.
+
+### Post-R11D — Real OpenAI DEV Integration Gate
+
+- **Status:** VALIDATED / CLOSED
+- **Scope:** Connect the existing provider abstraction to the OpenAI Responses API without changing Client, catalog truth, safety, or R11D eligibility boundaries.
+- **Configuration:** `OPENAI_ENABLED=true`, local `OPENAI_API_KEY` and `OPENAI_MODEL=gpt-5.6-luna` in DEV.
+- **Implementation:** OpenAI Responses API with Structured Outputs; `store:false`, bounded output, timeout/error mapping and Backend validation.
+- **Safety:** Web search OFF, external Product knowledge NOT IMPLEMENTED, Client chat NOT STARTED, no database writes and PROD untouched.
+- **Testing:** `npm run ai:dev:openai` — 3/3 real cases PASS; `node --test` — 117/117 PASS; `git diff --check` — PASS. Automated tests remain network-free.

@@ -25,6 +25,7 @@ const AI_LIMITS = Object.freeze({
   productReferences: 20,
   productReference: 160,
   providerTimeoutMs: 8000,
+  providerMaxOutputTokens: 1200,
   rateWindowMs: 60_000,
   rateMaxRequests: 20,
 });

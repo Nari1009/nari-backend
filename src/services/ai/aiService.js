@@ -30,6 +30,15 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
       throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
     }
     const validated = validateProviderOutput(output);
+    if (validated.scope === 'OUT_OF_SCOPE') {
+      return {
+        intent: 'UNKNOWN',
+        mode: 'ANSWER',
+        message: 'Puedo ayudarte únicamente con cuidado cosmético de la piel, Products de NARI y rutinas de skincare. ¿Qué necesitas saber sobre esos temas?',
+        profile: validated.profile,
+        recommendations: [],
+      };
+    }
     if (point10Service && point10Service.supports(validated.intent, validated.profile)) {
       return point10Service.handle({ request, interpretation: validated, provider });
     }

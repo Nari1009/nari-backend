@@ -50,6 +50,8 @@ test('provider output accepts only controlled intents, modes and profile taxonom
   assert.throws(() => validateProviderOutput({ intent: 'BUILD_ROUTINE', mode: 'ANSWER', message: 'x' }), /perfil/);
   assert.throws(() => validateProviderOutput(providerOutput({ profile: { ...profile, skinType: 'SENSITIVE' } })), /tipo de piel/);
   assert.throws(() => validateProviderOutput(providerOutput({ profile: { ...profile, targets: ['DEHYDRATED'] } })), /targets/);
+  assert.equal(validateProviderOutput(providerOutput({ scope: 'OUT_OF_SCOPE' })).scope, 'OUT_OF_SCOPE');
+  assert.throws(() => validateProviderOutput(providerOutput({ scope: 'PRIVILEGED' })), /scope/);
 });
 
 test('profile null and empty lists remain distinct', () => {
@@ -64,6 +66,15 @@ test('fake provider produces a controlled transient adviser response without rec
   assert.equal(result.intent, 'BUILD_ROUTINE');
   assert.equal(result.mode, 'FOLLOW_UP');
   assert.deepEqual(result.recommendations, []);
+});
+
+test('out-of-scope provider classification receives a Backend-controlled redirection', async () => {
+  const service = createAIService({ provider: { interpretConversation: async () => providerOutput({ scope: 'OUT_OF_SCOPE', intent: 'UNKNOWN', mode: 'ANSWER', message: 'La capital es París.' }) } });
+  const result = await service.advise({ message: '¿Cuál es la capital de Francia?' });
+  assert.equal(result.intent, 'UNKNOWN');
+  assert.equal(result.mode, 'ANSWER');
+  assert.match(result.message, /únicamente con cuidado cosmético/i);
+  assert.doesNotMatch(result.message, /París/);
 });
 
 test('recommendation mode is represented but cannot fabricate catalog products in R11C', async () => {

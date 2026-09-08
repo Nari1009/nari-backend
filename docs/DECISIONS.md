@@ -268,3 +268,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Personal ownership and current NARI availability are distinct states. The Backend must not force repurchase or claim an out-of-stock owned Product is unavailable to the user.
 - **Status:** IMPLEMENTED / IN REVIEW
 - **Source class:** R11D Part 4 implementation, tests and current user instruction.
+
+## DEC-031 — Real OpenAI Is an Opt-In DEV Provider Behind Existing Boundaries
+
+- **Date:** 2026-09-08
+- **Area:** Post-R11D provider integration
+- **Decision:** The existing provider abstraction may call the OpenAI Responses API only when `OPENAI_ENABLED=true` and `OPENAI_API_KEY` is present. The current DEV model is `gpt-5.6-luna`. Interpretation uses Structured Outputs with the canonical NARI schema; requests use bounded output, `store:false` and the existing timeout/error handling. Backend contracts, safety checks, candidate restrictions and DB commercial truth remain authoritative.
+- **Rationale:** Enable real-model validation without making automated tests network-dependent or allowing the provider to become a source of Product truth. Web search and external manufacturer retrieval remain disabled.
+- **Status:** IMPLEMENTED / VALIDATED — 3/3 real DEV cases PASS; 117/117 automated tests PASS.
+- **Source class:** Official OpenAI documentation, provider implementation and network-free tests.

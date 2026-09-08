@@ -100,6 +100,14 @@
 - **References:** `docs/AI_CONTEXT.md` and `docs/checkpoints/R11B2.6D.md`.
 - **Confidence:** HIGH for the current state.
 
+## POST-R11D — REAL OPENAI DEV INTEGRATION GATE
+
+- **Date:** 2026-09-08.
+- **What was done:** Validated the real OpenAI Responses API provider in DEV with `OPENAI_MODEL=gpt-5.6-luna`. Interpretation uses Structured Outputs; the provider extracts Responses API text safely and retains Backend contract, safety and commercial-truth validation.
+- **Verification:** `npm run ai:dev:openai` passed 3/3 real cases; `node --test` passed 117/117; `git diff --check` passed.
+- **Boundaries:** Web search is OFF; external Product knowledge/retrieval is NOT IMPLEMENTED; Client chat is NOT STARTED. No DB writes, PROD access or deployment occurred. `OPENAI_API_KEY` was not committed.
+- **State:** Gate CLOSED and validated. R11D remains complete; R11E is not started.
+
 ## MAJOR ARCHITECTURAL EVOLUTION
 
 1. Separate Backend, Client and Admin repositories grew from initial storefront scaffolding into a full commerce system.

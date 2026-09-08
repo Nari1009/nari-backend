@@ -178,17 +178,37 @@ test('OpenAI adapter normalizes structured JSON and uses a bounded timeout witho
   let requestBody;
   const provider = createOpenAIProvider({
     apiKey: 'test-only-key',
+    enabled: true,
     timeoutMs: 50,
-    fetchImpl: async (_url, options) => {
+    fetchImpl: async (url, options) => {
+      assert.equal(url, 'https://api.openai.com/v1/responses');
       requestBody = JSON.parse(options.body);
-      return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ mode: 'FOLLOW_UP', message: '¿Qué buscas?', selectedProductIds: [], reasons: [], profile: profile() }) } }] }) };
+      return { ok: true, json: async () => ({ output_text: JSON.stringify({ mode: 'FOLLOW_UP', message: '¿Qué buscas?', selectedProductIds: [], reasons: [], profile: profile() }) }) };
     },
   });
   const result = await provider.reasonAmongCandidates({ request: { message: 'x', history: [] }, interpretation: { intent: 'PRODUCT_SELECTION', profile: profile() }, candidates: [candidate('p-1')] });
   assert.equal(result.mode, 'FOLLOW_UP');
-  assert.equal(requestBody.messages[0].role, 'system');
-  assert.match(requestBody.messages[0].content, /solo puedes seleccionar/i);
+  assert.equal(requestBody.input[0].role, 'system');
+  assert.match(requestBody.input[0].content, /solo puedes seleccionar/i);
+  assert.equal(requestBody.store, false);
+  assert.equal(requestBody.text.format.type, 'json_object');
 
-  const timeoutProvider = createOpenAIProvider({ apiKey: 'test-only-key', timeoutMs: 5, fetchImpl: (_url, options) => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => { const error = new Error('aborted'); error.name = 'AbortError'; reject(error); })) });
+  const nestedOutputProvider = createOpenAIProvider({
+    apiKey: 'test-only-key',
+    enabled: true,
+    fetchImpl: async () => ({ ok: true, json: async () => ({ output: [
+      { type: 'reasoning', content: [] },
+      { type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ mode: 'FOLLOW_UP', message: '¿Qué buscas?', selectedProductIds: [], reasons: [], profile: profile() }) }] },
+    ] }) }),
+  });
+  const nestedResult = await nestedOutputProvider.reasonAmongCandidates({ request: { message: 'x', history: [] }, interpretation: { intent: 'PRODUCT_SELECTION', profile: profile() }, candidates: [candidate('p-1')] });
+  assert.equal(nestedResult.mode, 'FOLLOW_UP');
+
+  const timeoutProvider = createOpenAIProvider({ apiKey: 'test-only-key', enabled: true, timeoutMs: 5, fetchImpl: (_url, options) => new Promise((resolve, reject) => options.signal.addEventListener('abort', () => { const error = new Error('aborted'); error.name = 'AbortError'; reject(error); })) });
   await assert.rejects(() => timeoutProvider.interpretConversation({ message: 'x', history: [] }), (error) => error.code === 'AI_TIMEOUT');
+});
+
+test('OpenAI adapter is disabled without explicit DEV enablement or a key', async () => {
+  const provider = createOpenAIProvider({ enabled: false, apiKey: 'test-only-key', fetchImpl: async () => { throw new Error('network must not be called'); } });
+  await assert.rejects(() => provider.interpretConversation({ message: 'x', history: [] }), (error) => error.code === 'AI_UNAVAILABLE');
 });

@@ -39,7 +39,7 @@ Current active release: **R11 — NARI AI**.
 
 ## CURRENT CHECKPOINT
 
-**R11D — DETERMINISTIC CATALOG CANDIDATE ENGINE** is complete. Candidate search, controlled reasoning, Backend validation/re-fetch, V1 routine construction and point-10 compare/compatibility/budget/existing-Product flows are implemented and tested. The catalog/fixture boundary is human-verified in DEV; no live DB connection is used by this work. R11C is complete; R11B remains closed. R11E is not started.
+**R11D — DETERMINISTIC CATALOG CANDIDATE ENGINE** is complete. Candidate search, controlled reasoning, Backend validation/re-fetch, V1 routine construction and point-10 compare/compatibility/budget/existing-Product flows are implemented and tested. The post-R11D real OpenAI DEV integration gate is validated with the Responses API and Structured Outputs using `gpt-5.6-luna`. The catalog/fixture boundary is human-verified in DEV; no live DB connection is used by this work. R11C is complete; R11B remains closed. R11E is not started.
 
 - Products reviewed: 20/20 real catalog Products.
 - READY: 12.
@@ -72,7 +72,8 @@ Read next:
 - **Admin:** Existing authenticated Product CRUD and CMS administration implemented. The verified R11B Admin implementation contains the canonical NARI AI Product editor with explicit reviewed/unreviewed states; live DEV UI verification passed and temporary fixture changes were restored.
 - **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist. R11C provides the adviser base; R11D provides fail-closed catalog eligibility, deterministic candidate scoring, controlled provider handoff, selected-ID validation, final commercial re-fetch and bounded AM/PM routine construction.
 - **Database:** DEV has human-verified `catalogRole`: 20 `CATALOG`, 5 `DEV_FIXTURE`, 0 NULL. The migration remains in the repository for other environments; Codex did not execute it.
-- **NARI AI:** R11C adviser foundation and all R11D points 6–10 are complete. No live provider key is configured.
+- **NARI AI:** R11C adviser foundation and all R11D points 6–10 are complete. The real DEV provider gate is validated with `gpt-5.6-luna`.
+- **Real OpenAI DEV integration:** Responses API adapter with Structured Outputs is validated through the opt-in no-DB harness: 3/3 real cases PASS. Automated tests remain fake-provider and network-free; 117/117 tests PASS.
 
 ## CURRENT STOPPING POINT
 
@@ -87,8 +88,11 @@ Do not record or assume R11B2.7 as started, completed, approved or established r
 - Legacy seed/import mechanisms can mutate Product metadata if explicitly executed.
 - Eight PARTIAL Products still have unresolved canonical dimensions.
 - The Admin canonical metadata editor has been exercised against DEV; temporary fixture edits were restored and independently verified.
-- Live OpenAI is not connected or tested; provider tests use fake providers.
-- Client chat, permanent conversation history, external official-source knowledge, embeddings and vector storage are not implemented.
+- Live OpenAI DEV validation is complete; provider tests remain fake-provider and network-free.
+- The real provider uses the Responses API with Structured Outputs, `store:false`, bounded output and `OPENAI_MODEL=gpt-5.6-luna` in the current DEV environment.
+- OpenAI web search is OFF; external Product knowledge/retrieval is NOT IMPLEMENTED.
+- Client chat is NOT STARTED. Permanent conversation history, embeddings and vector storage are not implemented.
+- PROD was untouched by the integration validation.
 - Formula/active compatibility remains limited or unknown without trusted Product-specific knowledge.
 - R11 remains in progress; R11D is complete and R11E is not started.
 
