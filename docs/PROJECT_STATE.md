@@ -18,7 +18,7 @@ NARI is a Colombian K-beauty e-commerce project with separate Backend, Client an
 |---|---|---|---|---|
 | Backend | `/Users/luis/Documents/Codex/2026-08-24/nari-backend` | `https://github.com/Nari1009/nari-backend.git` | `dev` / R11B2 closure commit | R11B2 durable package versioned here; generated temporary artifacts ignored. |
 | Client | `/Users/luis/Documents/Codex/2026-08-24/quiero-que-construyas-la-p-gina` | `https://github.com/Nari1009/nari-frontend.git` | `dev` / `5eb649167ebe3ff0b777dda87d1e4268f03fbbee` | Clean at inspection. |
-| Admin (safe audit checkout) | `/Users/luis/Documents/Codex/nari-admin-clone-I15V58` | **LOCAL PATH**: `/Users/luis/Documents/Codex/nari-admin-customer-status-dev` | detached HEAD / `dddd444c57cca10207379c44fdd1bbd647dc9d67` | Clean, read-only audit checkout. |
+| Admin (verified implementation checkout) | `/Users/luis/Documents/Codex/nari-admin-clone-I15V58` | **LOCAL PATH**: `/Users/luis/Documents/Codex/nari-admin-customer-status-dev` | detached HEAD / `dddd444c57cca10207379c44fdd1bbd647dc9d67` | Source of the verified R11B implementation; packaging target is the original Admin branch. |
 
 The original Admin checkout `/Users/luis/Documents/Codex/2026-08-24/nari-admin` has unrelated dirty work in `src/pages/OrderDetail.tsx`, `src/pages/Orders.tsx` and `src/services/orderService.ts`. It must not be reset, stashed, cleaned, overwritten or committed.
 
@@ -37,13 +37,13 @@ Current active release: **R11 — NARI AI**.
 
 ## CURRENT CHECKPOINT
 
-**R11B2.6D — FINAL NULL VS EMPTY CURATION REVIEW** is complete.
+**R11B — ADMIN CANONICAL METADATA EDITOR** is implemented, live-verified against DEV, and technically closed. The preceding **R11B2.6D — FINAL NULL VS EMPTY CURATION REVIEW** is complete.
 
 - Products reviewed: 20/20 real catalog Products.
 - READY: 12.
 - PARTIAL: 8.
 - BLOCKED: 0.
-- Canonical Product metadata written: NO.
+- Canonical Product metadata written: 12 READY Products in DEV; 8 PARTIAL Products remain untouched.
 - PROD accessed during curation: NO.
 
 ## ACTIVE MODULE CONTEXT
@@ -56,20 +56,21 @@ Read next:
 4. [`docs/AI_CONTEXT.md`](AI_CONTEXT.md)
 5. [`docs/checkpoints/R11B2.6D.md`](checkpoints/R11B2.6D.md)
 6. [`docs/checkpoints/R11B2_READY_DEV_WRITE.md`](checkpoints/R11B2_READY_DEV_WRITE.md)
+7. [`docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`](checkpoints/R11B_ADMIN_CANONICAL_METADATA.md)
 
 ## IMPLEMENTATION SNAPSHOT
 
 - **Client:** Existing storefront, Home CMS, Contacto, Footer, Product browsing, filters, cart, checkout and account flows implemented. NARI AI UI and canonical metadata consumption are not implemented.
-- **Admin:** Existing authenticated Product CRUD and CMS administration implemented. Canonical Product metadata controls are not implemented in the frontend.
+- **Admin:** Existing authenticated Product CRUD and CMS administration implemented. The verified R11B Admin implementation contains the canonical NARI AI Product editor with explicit reviewed/unreviewed states; live DEV UI verification passed and temporary fixture changes were restored.
 - **Backend:** Product APIs, explicit public projection, canonical taxonomy validators and persistence support exist in the current uncommitted R11B2 foundation work. No AI runtime exists.
 - **Database:** Product schema contains `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets` in DEV. The 12 approved READY Products now contain reviewed canonical values; 8 PARTIAL Products remain unresolved and untouched.
 - **NARI AI:** Designed/audited only; no provider, chat route, recommendation engine, routine builder, embeddings or conversation storage.
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D is complete.
+R11B2.6D is complete. R11B is now complete: the Admin canonical metadata editor was implemented, live-verified against DEV, and its temporary test state was restored.
 
-R11B2 technical closure is complete and recorded in `docs/checkpoints/R11B2_READY_DEV_WRITE.md`: 12 approved Products were written and 8 PARTIAL Products were preserved. No reliable next phase was recovered. Human approval is required before further mutation or development.
+R11B2 technical closure is complete and recorded in `docs/checkpoints/R11B2_READY_DEV_WRITE.md`: 12 approved Products were written and 8 PARTIAL Products were preserved. R11B Admin maintenance is recorded in `docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`; live DEV verification passed. The DB Product row remains the sole persisted Product-specific canonical metadata source, with Admin as the human editing surface. No reliable next numbered phase was recovered. Human approval is required before further mutation or development.
 
 Do not record or assume R11B2.7 as started, completed, approved or established roadmap work.
 
@@ -77,8 +78,9 @@ Do not record or assume R11B2.7 as started, completed, approved or established r
 
 - Legacy seed/import mechanisms can mutate Product metadata if explicitly executed.
 - Eight PARTIAL Products still have unresolved canonical dimensions.
-- Admin does not expose canonical metadata controls.
+- The Admin canonical metadata editor has been exercised against DEV; temporary fixture edits were restored and independently verified.
 - NARI AI runtime and recommendation engine do not exist.
+- R11 remains in progress; R11C is not started and no next numbered phase is approved.
 
 ## CONTINUATION PROTOCOL
 

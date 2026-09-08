@@ -171,12 +171,22 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 - **What was not done:** No Product updates, migration, Admin UI, Client UI or AI implementation.
 - **Result:** 12 READY, 8 PARTIAL, 0 BLOCKED.
 
+## R11B — Admin Canonical Metadata Editor
+
+- **Status:** DONE / CLOSED
+- **Purpose:** Provide safe Admin maintenance controls for canonical Product recommendation metadata without hardcoding Product-specific values.
+- **What was done:** Added Admin Product-form controls for `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets`, with Spanish display labels and explicit `Sin revisar` versus `Revisado` handling for `NULL` versus `[]`.
+- **What was not done:** No Client changes, AI runtime, Product research or automatic completion of PARTIAL Products.
+- **Result:** Admin production build, Backend regression tests and controlled live DEV UI round trips passed; temporary fixture state was restored exactly. R11B is closed. The 12 READY Products remain intact, the 8 PARTIAL Products remain intentionally unresolved, and the Product row is the sole persisted Product-specific source of truth.
+
 ## CURRENT ROADMAP FRONTIER
 
-Last verified phase: **R11B2.6D**.
+Last verified phase: **R11B — Admin Canonical Metadata Editor**.
 
 Next verified phase: **UNKNOWN / NOT YET APPROVED**.
 
+R11 remains in progress. R11C is not started. No numbered successor phase is approved.
+
 No R11B2.6E or R11B2.7 is recorded as established work.
 
-The controlled DEV write is an operational checkpoint under R11B2, not a new numbered phase. See `docs/checkpoints/R11B2_READY_DEV_WRITE.md`.
+The controlled DEV write is an operational checkpoint under R11B2, not a new numbered phase. See `docs/checkpoints/R11B2_READY_DEV_WRITE.md`. The latest R11B implementation checkpoint is `docs/checkpoints/R11B_ADMIN_CANONICAL_METADATA.md`.

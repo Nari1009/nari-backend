@@ -196,3 +196,16 @@ SUMMARY:
 - PROD was not accessed.
 
 STATE AFTER: R11B2 technical foundation is closed. Reviewed canonical metadata exists for 12 real DEV Products; 8 PARTIAL Products remain intentionally unresolved. One-time migration, clone, export, verification and replay tools were removed before versioning; generated artifacts were removed and `tmp/` is ignored. No later numbered phase is established.
+
+## 2026-09-08 — R11B Admin Canonical Metadata Editor
+
+TYPE: ADMIN MAINTENANCE IMPLEMENTATION
+
+SUMMARY:
+
+- Added canonical NARI AI Product metadata controls to the clean Admin Product form.
+- Preserved `NULL` versus `[]` semantics through explicit unreviewed/reviewed controls.
+- Kept taxonomy labels/options in Admin only; Product-specific values remain in the Backend database contract.
+- Backend regression tests and Admin production build passed.
+
+STATE AFTER: Controlled live DEV UI verification passed using a preserved fixture; all temporary values were restored exactly. No curation values were added to real Products by this task. R11B is now closed, R11 remains in progress, R11C is not started, and PROD remains untouched.

@@ -52,7 +52,7 @@ The Client uses legacy Product metadata for storefront display, filtering and se
 
 ### Admin
 
-The Admin frontend supports legacy Product metadata. It does not yet expose canonical metadata controls or `sizeLabel` editing.
+The Admin frontend now supports canonical Product metadata editing in the verified implementation checkout at `/Users/luis/Documents/Codex/nari-admin-clone-I15V58/src/components/ProductForm.tsx`, with taxonomy labels/options in `src/data/canonicalProductMetadata.ts`. It exposes `routineStep`, `sizeLabel`, `suitableSkinTypes`, `suitableConditions` and `targets`; array fields preserve `NULL` (Sin revisar), `[]` (Revisado sin valores) and non-empty selections. Backend validation remains authoritative. Controlled live DEV UI verification passed and temporary fixture state was restored. R11B is closed; Admin is the human editing surface and the DB Product row remains the sole persisted Product-specific source of truth.
 
 ### Database
 
@@ -127,7 +127,7 @@ R11B2.6D reviewed 20 real Products:
 |---|---|
 | Product schema | Canonical columns exist in DEV; values uncurated |
 | Backend | Validation, persistence and safe public projection exist |
-| Admin | Legacy Product editing exists; canonical controls absent |
+| Admin | Canonical Product metadata editor implemented and live-verified; no Product-specific hardcodes |
 | Client | Legacy Product display/filtering exists; canonical consumption absent |
 | AI engine | Does not exist |
 
@@ -142,7 +142,6 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 - Chat UI.
 - Recommendation engine.
 - Routine builder.
-- Canonical Admin controls.
 - Canonical Client consumption.
 - AI tests.
 - Conversation database.
@@ -150,4 +149,4 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D and the controlled READY DEV write are complete. R11B2 is technically closed. Next phase: **NOT YET APPROVED**. Do not infer or create R11B2.7 or any other new numbered phase.
+R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11 remains in progress; R11C is not started. Next phase: **NOT YET APPROVED**. Do not infer or create R11B2.7, R11C, or any other new numbered phase.
