@@ -139,6 +139,10 @@ test('provider instructions preserve progressive context for short replies', () 
   assert.match(SYSTEM_INSTRUCTIONS, /no reinicies el perfil/i);
 });
 
+test('provider customer message cannot narrate internal orchestration state', () => {
+  assert.throws(() => validateProviderOutput(providerOutput({ message: 'Queda registrado como producto verificado.' })), /lenguaje interno/i);
+});
+
 test('out-of-scope provider classification receives a Backend-controlled redirection', async () => {
   const service = createAIService({ provider: { interpretConversation: async () => providerOutput({ scope: 'OUT_OF_SCOPE', intent: 'UNKNOWN', mode: 'ANSWER', message: 'La capital es París.' }) } });
   const result = await service.advise({ message: '¿Cuál es la capital de Francia?' });

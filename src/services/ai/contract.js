@@ -35,6 +35,12 @@ const providerString = (value, field, max) => {
   return result;
 };
 
+const assertCustomerFacingMessage = (message) => {
+  const internalStatePattern = /(unresolvedOwnedProducts|ownedRoutineSteps|knownProducts|catalogRole|recommendation readiness|recommendation readiness|\bcandidatos?\b|\bscores?\b|queda registrado|producto verificado|clasificación provisional|identidad como producto nari)/i;
+  if (internalStatePattern.test(message)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene lenguaje interno no permitido.', 502);
+  return message;
+};
+
 const uniqueCanonicalList = (value, allowed, field, { nullable = true } = {}) => {
   if (value === undefined) return nullable ? null : undefined;
   if (value === null) return nullable ? null : fail(`${field} no puede ser null.`);
@@ -108,7 +114,7 @@ const validateProviderOutput = (value) => {
   if (ownKeys(value).some((key) => !['intent', 'mode', 'message', 'profile', 'productReferences', 'scope', 'nextAction', 'requestedRoutineStep'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene campos no permitidos.', 502);
   if (!AI_INTENTS.includes(value.intent)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un intent no permitido.', 502);
   if (!AI_MODES.includes(value.mode)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un modo no permitido.', 502);
-  const message = providerString(value.message, 'message', AI_LIMITS.responseMessage);
+  const message = assertCustomerFacingMessage(providerString(value.message, 'message', AI_LIMITS.responseMessage));
   if (!message) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI requiere un mensaje.', 502);
   const productReferences = value.productReferences === undefined ? [] : value.productReferences;
   if (!Array.isArray(productReferences) || productReferences.length > AI_LIMITS.productReferences || productReferences.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > AI_LIMITS.productReference)) throw new AIServiceError('INVALID_AI_RESPONSE', 'Las referencias de Products no son válidas.', 502);
