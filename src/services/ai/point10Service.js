@@ -3,6 +3,7 @@ const { isRecommendationEligibleProduct } = require('./candidates/catalogEligibi
 const { toProviderCandidate } = require('./candidates/candidateProviderProjection');
 const { toPublicRecommendationProduct, toPublicRecommendations } = require('./recommendationProjection');
 const { createRoutinePlan, createBasicRoutinePlan, CORE_MORNING_STEPS, CORE_EVENING_STEPS, planSteps } = require('./routines/routinePlan');
+const { customerRoutineStepLabel } = require('./routines/customerLabels');
 const { orderIndex, validateBudgetOutput, validateCompareOutput, validateCompatibilityOutput, validateOwnedOutput } = require('./point10Contract');
 
 const MAX_COMPARE_PRODUCTS = 2;
@@ -32,7 +33,7 @@ const parseBudget = (value) => {
 const validBudget = (value) => Number.isFinite(value) && value > 0 && value <= MAX_BUDGET_COP;
 const resolveOrFollowUp = async (resolver, references, max, intent, profile, label) => {
   const result = await resolver.resolveReferences(references, { max });
-  if (result.status === 'AMBIGUOUS') return { response: genericFollowUp(intent, profile, `No pude distinguir con seguridad ${label}. ¿Puedes indicar el nombre exacto o el Product ID?`) };
+  if (result.status === 'AMBIGUOUS') return { response: genericFollowUp(intent, profile, `No pude distinguir con seguridad ${label}. ¿Puedes indicar el nombre exacto o el identificador del producto?`) };
   if (result.status !== 'RESOLVED') return { response: genericFollowUp(intent, profile, `No pude encontrar con seguridad ${label} en el catálogo de NARI.`) };
   return { products: result.products };
 };
@@ -63,9 +64,9 @@ const createPoint10Service = ({ resolver, candidateService, finalProductReposito
   },
   async compare({ request, interpretation, provider }) {
     const refs = interpretation.productReferences?.length ? interpretation.productReferences : (interpretation.profile.knownProducts || []);
-    const resolved = await resolveOrFollowUp(resolver, refs, MAX_COMPARE_PRODUCTS, interpretation.intent, interpretation.profile, 'los dos Products que quieres comparar');
+    const resolved = await resolveOrFollowUp(resolver, refs, MAX_COMPARE_PRODUCTS, interpretation.intent, interpretation.profile, 'los dos productos que quieres comparar');
     if (resolved.response) return resolved.response;
-    if (resolved.products.length !== 2) return genericFollowUp(interpretation.intent, interpretation.profile, '¿Qué dos Products quieres comparar?');
+    if (resolved.products.length !== 2) return genericFollowUp(interpretation.intent, interpretation.profile, '¿Qué dos productos quieres comparar?');
     const products = resolved.products;
     if (typeof provider.reasonComparison !== 'function') throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
     const output = validateCompareOutput(await provider.reasonComparison({ request, interpretation, products: products.map(safeProduct) }), { productIds: productIds(products) });
@@ -76,15 +77,15 @@ const createPoint10Service = ({ resolver, candidateService, finalProductReposito
   },
   async compatibility({ request, interpretation, provider }) {
     const refs = interpretation.productReferences?.length ? interpretation.productReferences : (interpretation.profile.knownProducts || []);
-    const resolved = await resolveOrFollowUp(resolver, refs, MAX_COMPATIBILITY_PRODUCTS, interpretation.intent, interpretation.profile, 'los dos Products que quieres combinar');
+    const resolved = await resolveOrFollowUp(resolver, refs, MAX_COMPATIBILITY_PRODUCTS, interpretation.intent, interpretation.profile, 'los dos productos que quieres combinar');
     if (resolved.response) return resolved.response;
-    if (resolved.products.length !== 2) return genericFollowUp(interpretation.intent, interpretation.profile, '¿Qué dos Products quieres combinar?');
+    if (resolved.products.length !== 2) return genericFollowUp(interpretation.intent, interpretation.profile, '¿Qué dos productos quieres combinar?');
     const products = resolved.products;
     if (typeof provider.reasonCompatibility !== 'function') throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
     const output = validateCompatibilityOutput(await provider.reasonCompatibility({ request, interpretation, products: products.map(safeProduct) }), { productIds: productIds(products) });
     const status = structuralCompatibility(products, output.compatibility.period, output.compatibility.orderProductIds);
     const compatibility = { ...output.compatibility, structuralStatus: status, formulaLevel: 'UNKNOWN', summary: 'Puedo confirmar únicamente el orden estructural; la compatibilidad de fórmula o activos no está confirmada con datos oficiales del catálogo.', products: products.map(safeProduct) };
-    return { intent: interpretation.intent, mode: output.mode, message: 'Puedo revisar el orden y el uso estructural de estos Products, pero la compatibilidad de fórmula o activos no está confirmada con datos oficiales del catálogo.', profile: output.profile, compatibility, recommendations: [] };
+    return { intent: interpretation.intent, mode: output.mode, message: 'Puedo revisar el orden y el uso estructural de estos productos, pero la compatibilidad de fórmula o activos no está confirmada con datos oficiales del catálogo.', profile: output.profile, compatibility, recommendations: [] };
   },
   async budgetRoutine({ request, interpretation }) {
     const budget = parseBudget(interpretation.profile.budget);
@@ -94,8 +95,8 @@ const createPoint10Service = ({ resolver, candidateService, finalProductReposito
     const ownedResult = interpretation.profile.knownProducts?.length
       ? await resolver.resolveReferences(interpretation.profile.knownProducts, { max: 20 })
       : { status: 'RESOLVED', products: [] };
-    if (ownedResult.status === 'AMBIGUOUS' || ownedResult.status === 'NOT_FOUND' || ownedResult.status === 'INVALID') return genericFollowUp(interpretation.intent, interpretation.profile, 'No pude resolver con seguridad todos tus Products conocidos para calcular el presupuesto.');
-    if (ownedResult.products.some((product) => !product.routineStep)) return genericFollowUp(interpretation.intent, interpretation.profile, 'Uno de tus Products conocidos no tiene un paso de rutina confirmado.');
+    if (ownedResult.status === 'AMBIGUOUS' || ownedResult.status === 'NOT_FOUND' || ownedResult.status === 'INVALID') return genericFollowUp(interpretation.intent, interpretation.profile, 'No pude resolver con seguridad todos tus productos conocidos para calcular el presupuesto.');
+    if (ownedResult.products.some((product) => !product.routineStep)) return genericFollowUp(interpretation.intent, interpretation.profile, 'Uno de tus productos conocidos no tiene un paso de rutina confirmado.');
     const owned = ownedResult.products;
     const ownedSteps = new Set(owned.map((product) => product.routineStep));
     const groups = {};
@@ -123,9 +124,9 @@ const createPoint10Service = ({ resolver, candidateService, finalProductReposito
     const ids = chosen.unique.map((candidate) => String(candidate.productId));
     const rows = await finalProductRepository.findCurrentEligibleProducts(ids);
     const byId = finalEligibleMap(rows);
-    if (ids.some((id) => !byId.has(id))) return safeAnswer(interpretation.intent, interpretation.profile, 'Un Product necesario dejó de estar disponible y la rutina no puede confirmarse dentro del presupuesto.', { budget: { limit: budget, total: null, currency: 'COP', withinBudget: false } });
+    if (ids.some((id) => !byId.has(id))) return safeAnswer(interpretation.intent, interpretation.profile, 'Un producto necesario dejó de estar disponible y la rutina no puede confirmarse dentro del presupuesto.', { budget: { limit: budget, total: null, currency: 'COP', withinBudget: false } });
     const finalPricesValid = ids.every((id) => Number.isFinite(Number(byId.get(id).price)) && Number(byId.get(id).price) > 0);
-    if (!finalPricesValid) return safeAnswer(interpretation.intent, interpretation.profile, 'No pude confirmar precios válidos para todos los Products de la rutina.', { budget: { limit: budget, total: null, currency: 'COP', withinBudget: false } });
+    if (!finalPricesValid) return safeAnswer(interpretation.intent, interpretation.profile, 'No pude confirmar precios válidos para todos los productos de la rutina.', { budget: { limit: budget, total: null, currency: 'COP', withinBudget: false } });
     const finalTotal = ids.reduce((sum, id) => sum + Number(byId.get(id).price), 0);
     if (finalTotal > budget) return safeAnswer(interpretation.intent, interpretation.profile, 'El precio actual del catálogo supera el presupuesto indicado; no presentaré una rutina incompleta.', { budget: { limit: budget, total: finalTotal, currency: 'COP', withinBudget: false } });
     const selectedByStep = new Map();
@@ -137,9 +138,9 @@ const createPoint10Service = ({ resolver, candidateService, finalProductReposito
   },
   async existingProducts({ interpretation }) {
     const ownedResult = await resolver.resolveReferences(interpretation.profile.knownProducts || [], { max: 20 });
-    if (ownedResult.status === 'AMBIGUOUS') return genericFollowUp(interpretation.intent, interpretation.profile, 'No pude distinguir con seguridad uno de tus Products. ¿Puedes indicar el nombre exacto o el Product ID?');
-    if (ownedResult.status !== 'RESOLVED') return genericFollowUp(interpretation.intent, interpretation.profile, 'No pude resolver con seguridad todos los Products que ya tienes en el catálogo de NARI.');
-    if (ownedResult.products.some((product) => !product.routineStep)) return genericFollowUp(interpretation.intent, interpretation.profile, 'Uno de tus Products no tiene un paso de rutina confirmado; necesito ese dato antes de completar la rutina.');
+    if (ownedResult.status === 'AMBIGUOUS') return genericFollowUp(interpretation.intent, interpretation.profile, 'No pude distinguir con seguridad uno de tus productos. ¿Puedes indicar el nombre exacto o el identificador del producto?');
+    if (ownedResult.status !== 'RESOLVED') return genericFollowUp(interpretation.intent, interpretation.profile, 'No pude resolver con seguridad todos los productos que ya tienes en el catálogo de NARI.');
+    if (ownedResult.products.some((product) => !product.routineStep)) return genericFollowUp(interpretation.intent, interpretation.profile, 'Uno de tus productos no tiene un paso de rutina confirmado; necesito ese dato antes de completar la rutina.');
     const plan = createRoutinePlan(interpretation.profile) || createBasicRoutinePlan();
     const owned = ownedResult.products;
     const ownedSteps = new Set(owned.map((product) => product.routineStep));
@@ -148,18 +149,18 @@ const createPoint10Service = ({ resolver, candidateService, finalProductReposito
     for (const step of missingSteps) {
       const result = await candidateService.search({ intent: 'BUILD_ROUTINE', profile: interpretation.profile, requestedRoutineStep: step });
       const best = result.candidates.slice(0, 5)[0];
-      if (!best && (plan.requiredMorning.includes(step) || plan.requiredEvening.includes(step))) return safeAnswer(interpretation.intent, interpretation.profile, `No pude confirmar un Product para el paso ${step} que todavía necesitas.`, { routine: null, productsToBuy: [] });
+      if (!best && (plan.requiredMorning.includes(step) || plan.requiredEvening.includes(step))) return safeAnswer(interpretation.intent, interpretation.profile, `No pude confirmar un ${customerRoutineStepLabel(step)} que todavía necesitas.`, { routine: null, productsToBuy: [] });
       if (best) selectedByStep.set(step, best.metadata ? { ...best.metadata, id: best.productId } : best);
     }
     const purchaseIds = [...selectedByStep.values()].map((product) => String(product.id));
     const rows = await finalProductRepository.findCurrentEligibleProducts(purchaseIds);
     const purchaseById = finalEligibleMap(rows);
-    if (purchaseIds.some((id) => !purchaseById.has(id))) return safeAnswer(interpretation.intent, interpretation.profile, 'Un Product necesario para completar la rutina ya no está disponible. No inventaré un reemplazo.', { routine: null, productsToBuy: [] });
+    if (purchaseIds.some((id) => !purchaseById.has(id))) return safeAnswer(interpretation.intent, interpretation.profile, 'Un producto necesario para completar la rutina ya no está disponible. No inventaré un reemplazo.', { routine: null, productsToBuy: [] });
     const finalSelected = new Map([...selectedByStep].map(([step, product]) => [step, purchaseById.get(String(product.id))]));
     const sourceById = new Map(owned.map((product) => [String(product.id), 'OWNED']).concat(purchaseIds.map((id) => [id, 'RECOMMENDED'])));
     const routine = deterministicRoutine({ plan, owned, selectedByStep: finalSelected, sourceById });
-    const recommendations = toPublicRecommendations({ selectedProducts: purchaseIds.map((id) => purchaseById.get(id)), reasons: purchaseIds.map((id) => ({ productId: id, reason: 'Completa un paso que no estaba cubierto por tus Products.' })) });
-    return { intent: interpretation.intent, mode: 'RECOMMENDATION', message: 'He mantenido tus Products y solo añadí los que faltaban para la rutina.', profile: interpretation.profile, routine, recommendations, productsToBuy: recommendations };
+    const recommendations = toPublicRecommendations({ selectedProducts: purchaseIds.map((id) => purchaseById.get(id)), reasons: purchaseIds.map((id) => ({ productId: id, reason: 'Completa un paso que no estaba cubierto por tus productos.' })) });
+    return { intent: interpretation.intent, mode: 'RECOMMENDATION', message: 'He mantenido tus productos y solo añadí los que faltaban para la rutina.', profile: interpretation.profile, routine, recommendations, productsToBuy: recommendations };
   },
 });
 

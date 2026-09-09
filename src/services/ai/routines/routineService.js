@@ -4,6 +4,7 @@ const { toProviderCandidates } = require('../candidates/candidateProviderProject
 const { toPublicRecommendations } = require('../recommendationProjection');
 const { createRoutinePlan, MAX_ROUTINE_PRODUCTS, planSteps } = require('./routinePlan');
 const { validateRoutineProviderOutput } = require('./routineContract');
+const { customerRoutineStepLabel } = require('./customerLabels');
 
 const unavailableResponse = ({ intent, profile, message, mode = 'ANSWER' }) => ({
   intent,
@@ -26,7 +27,7 @@ const createRoutineService = ({ candidateService, finalProductRepository } = {})
       const limitedCandidates = result.candidates.slice(0, 5);
       if (limitedCandidates.length > 0) candidatesByStep[step] = limitedCandidates;
       if ((plan.requiredMorning.includes(step) || plan.requiredEvening.includes(step)) && limitedCandidates.length === 0) {
-        return unavailableResponse({ intent: interpretation.intent, profile: interpretation.profile, message: `No pude confirmar un Product disponible para el paso ${step}. La rutina no se presenta como completa.` });
+        return unavailableResponse({ intent: interpretation.intent, profile: interpretation.profile, message: `No encontré en este momento un ${customerRoutineStepLabel(step)} disponible en Nari que pueda recomendarte con suficiente confianza. Podemos ajustar la recomendación antes de completar la rutina.` });
       }
     }
 
@@ -56,7 +57,7 @@ const createRoutineService = ({ candidateService, finalProductRepository } = {})
     const morning = validated.routine.morning.filter((item) => validForStep(item));
     const evening = validated.routine.evening.filter((item) => validForStep(item));
     if (plan.requiredMorning.some((step) => !morning.some((item) => item.step === step)) || plan.requiredEvening.some((step) => !evening.some((item) => item.step === step))) {
-      return unavailableResponse({ intent: interpretation.intent, profile: validated.profile, message: 'Uno de los Products necesarios dejó de estar disponible. La rutina no se presenta como completa.' });
+      return unavailableResponse({ intent: interpretation.intent, profile: validated.profile, message: 'Uno de los productos necesarios dejó de estar disponible. La rutina no se presenta como completa y no inventaré un reemplazo.' });
     }
     const finalRoutine = {
       morning: morning.map(({ step, selectedProductId }) => ({ step, productId: selectedProductId })),

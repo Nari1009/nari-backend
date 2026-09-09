@@ -277,3 +277,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Enable real-model validation without making automated tests network-dependent or allowing the provider to become a source of Product truth. Web search and external manufacturer retrieval remain disabled.
 - **Status:** IMPLEMENTED / VALIDATED — 3/3 real DEV cases PASS; 117/117 automated tests PASS.
 - **Source class:** Official OpenAI documentation, provider implementation and network-free tests.
+
+## DEC-032 — R11E Client Presents Backend-Controlled AI Responses
+
+- **Date:** 2026-09-08
+- **Area:** R11E Client chat
+- **Decision:** The primary Client experience is a branded global floating NARI AI entry point across storefront pages, opening a premium advisor panel and calling only `POST /api/ai/adviser`. The shared `/nari-ai` route may remain as a secondary direct route, but is not a primary navigation destination; checkout/payment flows hide the entry point. The Client renders Backend-provided recommendation projections and optional routine, comparison, compatibility and budget structures; it does not call OpenAI, infer Product truth, recalculate commercial data or persist permanent conversation history. Active state is per-tab in memory, preserved through normal SPA navigation, manually resettable and expired after 30 minutes without NARI AI interaction.
+- **Rationale:** The Backend remains responsible for scope, safety, catalog eligibility, Product identity, current price/availability and provider validation. R11F remains the future phase for durable bounded conversation history.
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Source class:** R11E Client implementation, build review and current user instruction.

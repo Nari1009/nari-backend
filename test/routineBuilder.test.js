@@ -63,6 +63,15 @@ test('BUILD_ROUTINE with insufficient profile returns FOLLOW_UP', async () => {
   assert.equal(result.routine, null);
 });
 
+test('required-step fallback uses natural customer language instead of internal engine terms', async () => {
+  const service = createHarness({ candidatesByStep: { MOISTURIZER: [candidate('moisturizer', 'MOISTURIZER')], SUNSCREEN: [candidate('sunscreen', 'SUNSCREEN')] }, routineOutput: completeRoutine(), rows: baseRows() });
+  const result = await service.advise({ message: 'Quiero una rutina sencilla' });
+  assert.equal(result.mode, 'ANSWER');
+  assert.match(result.message, /limpiador/i);
+  assert.doesNotMatch(result.message, /CLEANSER|Product|candidato|catalogRole|score/i);
+  assert.deepEqual(result.recommendations, []);
+});
+
 test('enough profile produces a bounded basic AM/PM routine', async () => {
   const service = createHarness({ candidatesByStep: baseCandidates(), routineOutput: completeRoutine(), rows: baseRows() });
   const result = await service.advise({ message: 'Quiero una rutina sencilla' });

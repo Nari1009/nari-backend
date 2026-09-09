@@ -108,6 +108,22 @@ test('partial Product remains a candidate when other evidence is strong', async 
   assert.deepEqual(result.candidates[0].unknownCriteria, ['SKIN_TYPE']);
 });
 
+test('canonical oily-skin cleanser evidence remains eligible for a cleanser request', async () => {
+  const result = await search([product({
+    id: 'canonical-cleanser',
+    routineStep: 'CLEANSER',
+    suitableSkinTypes: JSON.stringify(['OILY', 'DRY', 'COMBINATION', 'NORMAL']),
+    suitableConditions: '[]',
+    targets: JSON.stringify(['EXCESS_OIL', 'PORES', 'TEXTURE']),
+  })], {
+    requestedRoutineStep: 'CLEANSER',
+    profile: profile({ skinType: 'OILY', conditions: null, targets: null }),
+  });
+  assert.equal(result.candidates.length, 1);
+  assert.equal(result.candidates[0].score, 60);
+  assert.deepEqual(result.candidates[0].conflicts, []);
+});
+
 test('maximum is five, fewer candidates are allowed, and zero is allowed', async () => {
   const products = Array.from({ length: 8 }, (_, index) => product({ id: `p-${index}` }));
   const five = await search(products);

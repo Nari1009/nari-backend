@@ -34,7 +34,7 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
       return {
         intent: 'UNKNOWN',
         mode: 'ANSWER',
-        message: 'Puedo ayudarte únicamente con cuidado cosmético de la piel, Products de NARI y rutinas de skincare. ¿Qué necesitas saber sobre esos temas?',
+        message: 'Puedo ayudarte únicamente con cuidado cosmético de la piel, productos de NARI y rutinas de skincare. ¿Qué necesitas saber sobre esos temas?',
         profile: validated.profile,
         recommendations: [],
       };
@@ -65,7 +65,7 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
       return {
         ...validated,
         mode: 'ANSWER',
-        message: 'No encontré candidatos de catálogo suficientemente compatibles para esta solicitud.',
+        message: 'No encontré un producto de NARI que pueda recomendarte con suficiente confianza en este momento. Podemos ajustar lo que buscas.',
         recommendations: [],
       };
     }
@@ -93,7 +93,7 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
         intent: validated.intent,
         reasoning: {
           mode: 'ANSWER',
-          message: 'Los candidatos seleccionados ya no están disponibles para confirmación.',
+          message: 'Los productos seleccionados ya no están disponibles para confirmación.',
           profile: reasoning.profile,
         },
       });

@@ -305,4 +305,31 @@ SUMMARY:
 - Added an opt-in `npm run ai:dev:openai` harness with a production guard and no database access.
 - Kept automated tests network-free through fake providers; web search and external manufacturer retrieval remain disabled.
 
-STATE AFTER: Real OpenAI integration is IMPLEMENTED / VALIDATED and the gate is CLOSED. DEV model `gpt-5.6-luna` passed 3/3 real cases; automated tests passed 117/117. Structured Outputs is enabled for interpretation. Web search is OFF, external Product knowledge is NOT IMPLEMENTED, Client chat is NOT STARTED, R11D remains complete, R11E is not started, and PROD remains untouched.
+STATE AFTER: Real OpenAI integration is IMPLEMENTED / VALIDATED and the gate is CLOSED. DEV model `gpt-5.6-luna` passed 3/3 real cases; automated tests passed 117/117. Structured Outputs is enabled for interpretation. Web search is OFF, external Product knowledge is NOT IMPLEMENTED, Client chat is implemented/in review at `/nari-ai`, permanent history is not implemented, and PROD remains untouched.
+
+## 2026-09-08 — R11E Client Chat Implementation
+
+TYPE: CLIENT AI SURFACE
+
+SUMMARY:
+
+- Added the primary NARI AI experience as a branded global floating advisor across storefront pages, with a refined pill launcher, desktop side panel, mobile near-full-screen panel and per-tab temporary state; the shared `/nari-ai` route remains secondary and is not a primary navigation entry.
+- Added a typed Client adviser service that sends bounded temporary history to `POST /api/ai/adviser` and maps safe public errors without exposing provider details.
+- Added optional quick actions, accessible free-form input, loading/error states, retry, trusted Product cards, routine presentation and structured comparison/compatibility/budget views.
+- Kept OpenAI, catalog logic, commercial truth, safety decisions and Product mutation exclusively in Backend.
+
+STATE AFTER: R11E is IMPLEMENTED / IN REVIEW. Production build and TypeScript validation pass; repository lint has pre-existing failures outside the R11E files and local visual runtime QA remains pending because the restricted environment could not bind the development server port. No Client secret, permanent history, web search, external Product retrieval or PROD access was used.
+
+## 2026-09-08 — R11E DEV Conversation QA Round 2
+
+TYPE: BACKEND QA FIXES / CLIENT VISUAL FIXES PENDING DEPLOYMENT
+
+SUMMARY:
+
+- Preserved the successful real DEV Client → Backend → OpenAI provider path.
+- Tightened provider guidance to avoid repetitive questionnaires, avoid presenting an improvised skin-type test as diagnostic, and handle painful or persistent breakouts cautiously without diagnosis.
+- Replaced routine no-candidate customer copy that exposed `Product` and `CLEANSER` with natural Spanish labels.
+- Added a deterministic regression proving canonical oily-skin cleanser evidence remains eligible for a cleanser request under the existing catalog rules.
+- Added a regression for the natural-language required-step fallback.
+
+STATE AFTER: Backend focused tests pass. Live DEV read-only verification could not run because DNS resolution for the DEV Render host was unavailable in this environment; no DEV writes or PROD access occurred. R11E remains IN REVIEW — DEV QA.

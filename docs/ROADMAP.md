@@ -181,11 +181,11 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 
 ## CURRENT ROADMAP FRONTIER
 
-Last verified phase: **R11D — Deterministic Catalog Candidate Selection and Recommendation Flows**.
+Last verified phase: **R11E — Client Chat Implementation (implemented/in review)**.
 
 Next verified phase: **UNKNOWN / NOT YET APPROVED**.
 
-R11 remains in progress. R11C and R11D are complete. The post-R11D real OpenAI DEV integration gate is validated; R11E is not started and no later numbered phase is approved.
+R11 remains in progress. R11C and R11D are complete. The post-R11D real OpenAI DEV integration gate is validated. R11E Client chat is implemented/in review; no later numbered phase is approved.
 
 No R11B2.6E or R11B2.7 is recorded as established work.
 
@@ -215,3 +215,11 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 - **Implementation:** OpenAI Responses API with Structured Outputs; `store:false`, bounded output, timeout/error mapping and Backend validation.
 - **Safety:** Web search OFF, external Product knowledge NOT IMPLEMENTED, Client chat NOT STARTED, no database writes and PROD untouched.
 - **Testing:** `npm run ai:dev:openai` — 3/3 real cases PASS; `node --test` — 117/117 PASS; `git diff --check` — PASS. Automated tests remain network-free.
+
+### R11E — Client Chat Implementation
+
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Scope:** Add the first customer-facing NARI AI chat surface without moving catalog, safety or commercial authority into the Client.
+- **Implementation:** Branded global floating NARI AI advisor across storefront pages, with a refined pill launcher, desktop side panel, mobile near-full-screen panel, free-form input, three subtle optional conversation starters, temporary bounded per-tab state, 30-minute inactivity expiry, manual “Nueva conversación”, trusted Backend recommendation cards and structured routine/compare/compatibility/budget rendering. The shared `/nari-ai` route remains secondary and is not a primary navigation destination; checkout/payment flows hide the entry point.
+- **Boundary:** Client calls only `POST /api/ai/adviser`; no OpenAI SDK/key, Product mutation, cart authority, web search, external Product retrieval or permanent conversation persistence.
+- **Verification:** Production build and TypeScript validation pass. Repository lint remains blocked by pre-existing errors outside R11E; local visual runtime QA was not run because the restricted environment could not bind the dev server port.

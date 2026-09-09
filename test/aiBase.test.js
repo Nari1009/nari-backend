@@ -9,7 +9,7 @@ const { AIServiceError } = require('../src/services/ai/errors');
 const { assessSafety } = require('../src/services/ai/safety');
 const { createRateLimiter } = require('../src/services/ai/rateLimiter');
 const { AI_INTENTS, AI_MODES } = require('../src/services/ai/constants');
-const { SYSTEM_INSTRUCTIONS } = require('../src/services/ai/providers/openaiProvider');
+const { SYSTEM_INSTRUCTIONS, REASONING_SYSTEM_INSTRUCTIONS, ROUTINE_SYSTEM_INSTRUCTIONS } = require('../src/services/ai/providers/openaiProvider');
 
 const profile = {
   skinType: 'OILY',
@@ -52,6 +52,15 @@ test('provider output accepts only controlled intents, modes and profile taxonom
   assert.throws(() => validateProviderOutput(providerOutput({ profile: { ...profile, targets: ['DEHYDRATED'] } })), /targets/);
   assert.equal(validateProviderOutput(providerOutput({ scope: 'OUT_OF_SCOPE' })).scope, 'OUT_OF_SCOPE');
   assert.throws(() => validateProviderOutput(providerOutput({ scope: 'PRIVILEGED' })), /scope/);
+});
+
+test('provider instructions favor concise progressive follow-up and preserve uncertainty', () => {
+  assert.match(SYSTEM_INSTRUCTIONS, /como máximo una pregunta breve/i);
+  assert.match(SYSTEM_INSTRUCTIONS, /30-60 minutos/i);
+  assert.match(SYSTEM_INSTRUCTIONS, /sin diagnosticar/i);
+  assert.match(REASONING_SYSTEM_INSTRUCTIONS, /en español/i);
+  assert.match(ROUTINE_SYSTEM_INSTRUCTIONS, /CLEANSER/i);
+  assert.match(ROUTINE_SYSTEM_INSTRUCTIONS, /no.*enums/i);
 });
 
 test('profile null and empty lists remain distinct', () => {
