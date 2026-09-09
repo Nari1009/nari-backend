@@ -7,6 +7,7 @@ const { createOpenAIProvider } = require('./providers/openaiProvider');
 const { isRecommendationEligibleProduct } = require('./candidates/catalogEligibility');
 const { toProviderCandidates } = require('./candidates/candidateProviderProjection');
 const { toPublicRecommendations } = require('./recommendationProjection');
+const { isRoutineRecommendationReady, routineReadinessQuestion } = require('./routineReadiness');
 
 const publicReasoningResponse = ({ intent, reasoning, recommendations = [] }) => ({
   intent,
@@ -38,6 +39,9 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
         profile: validated.profile,
         recommendations: [],
       };
+    }
+    if (validated.intent === 'BUILD_ROUTINE' && validated.mode === 'RECOMMENDATION' && !isRoutineRecommendationReady(validated.profile)) {
+      return { ...validated, mode: 'FOLLOW_UP', message: routineReadinessQuestion(), routine: null, routineComplete: false, recommendations: [] };
     }
     if (point10Service && point10Service.supports(validated.intent, validated.profile)) {
       return point10Service.handle({ request, interpretation: validated, provider });

@@ -347,3 +347,16 @@ SUMMARY:
 - Added regression coverage for external sunscreen context and transient profile validation.
 
 STATE AFTER: Backend focused regression passes. R11E remains IN REVIEW — DEV QA. PROD remains untouched.
+
+## 2026-09-08 — R11E DEV Conversation QA Round 5
+
+TYPE: CONVERSATIONAL ORCHESTRATION
+
+SUMMARY:
+
+- Added a recommendation-readiness gate so a `BUILD_ROUTINE` request with no meaningful profile signal asks one concise follow-up before deterministic catalog search.
+- Preserved progressive profile interpretation and short-reply context guidance in provider instructions; the deterministic routine engine no longer controls whether the conversation is ready to recommend.
+- Allowed truthful partial routine progress when a required step has no eligible candidate but another step can still be validated. The response exposes only customer-facing missing-step labels and marks `routineComplete: false`; no replacement is fabricated.
+- Added a read-only, explicitly guarded DEV cleanser diagnostic script that reports eligibility, canonical metadata, scoring and exclusion information without writing to a database.
+
+STATE AFTER: R11E remains IN REVIEW — DEV QA. Live DEV catalog diagnostics were not executed by Codex; no DEV writes or PROD access occurred.

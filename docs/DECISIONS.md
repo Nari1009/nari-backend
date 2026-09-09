@@ -295,3 +295,13 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Customers may already use Products NARI does not sell. Conversation should continue naturally while commercial truth, purchase eligibility and formula compatibility remain Backend-controlled and NARI-only.
 - **Status:** IMPLEMENTED / IN REVIEW
 - **Source class:** R11E DEV Conversation QA Round 4 implementation and tests.
+
+## DEC-034 — Conversation Readiness Precedes Deterministic Routine Search
+
+- **Date:** 2026-09-08
+- **Area:** R11E conversational orchestration
+- **Decision:** `BUILD_ROUTINE` expresses the user's goal but does not by itself authorize catalog search. Before deterministic routine construction, the Backend requires a minimally useful transient profile signal such as skin type, a canonical condition/target or a verified owned Product. If that signal is absent, it returns one concise follow-up and does not invoke candidate search. Profile facts are accumulated through bounded conversation context; brief replies update existing context rather than restarting it.
+- **Decision:** If a planned required step has no eligible candidate, the Backend preserves truthful partial progress when another planned step can be validated. The provider receives only available step groups plus `missingRequiredSteps`; the public response sets `routineComplete: false`, lists customer-facing missing steps and never presents the partial routine as complete or fabricates a replacement.
+- **Rationale:** The conversational layer decides when a recommendation attempt is useful; the deterministic layer decides which Products are eligible after that gate. This prevents catalog failures from becoming the conversation manager while preserving commercial and structural truth.
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Source class:** R11E DEV Conversation QA Round 5 implementation and tests.

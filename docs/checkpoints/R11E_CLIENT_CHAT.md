@@ -51,6 +51,16 @@ The real DEV provider path was confirmed operational by owner testing. This revi
 
 R11E remains IN REVIEW — DEV QA.
 
+## DEV CONVERSATION QA ROUND 5 — ORCHESTRATION
+
+The conversation layer now has an explicit readiness boundary before routine catalog search. A `BUILD_ROUTINE` intent is treated as the customer's goal, not proof that enough information is available. When the transient profile has no skin type, canonical condition/target or verified owned Product signal, the Backend returns one concise profile question and does not invoke deterministic candidate search. Provider instructions preserve facts across bounded history and interpret brief replies such as “sí”, “listo”, “eso” and “creo que grasa” in context.
+
+Routine construction remains Backend-controlled after readiness. If a required step has no eligible candidate but other planned steps do, the provider sees only the available bounded step groups and an internal missing-step list. Validated partial progress may be returned with `routineComplete: false` and customer-facing labels such as “limpiador”; the response never claims completeness or invents a replacement. If no usable step remains, the existing safe non-recommendation response is retained.
+
+The DEV cleanser investigation is supported by `npm run ai:diagnose:dev:cleanser`, guarded by `NARI_ALLOW_DEV_READONLY_DIAGNOSTIC=YES` and `DEV_DATABASE_URL`. It is read-only, rejects generic/PROD database variables and emits no private commercial fields beyond the diagnostic fields needed to explain eligibility and scoring. Codex did not execute it because the DEV host was not resolvable in the available environment.
+
+R11E remains IN REVIEW — DEV QA.
+
 ## DEV CONVERSATION QA ROUND 4
 
 Verified NARI-owned Products and user-reported external Products are now separate transient concepts.

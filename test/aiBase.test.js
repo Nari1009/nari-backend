@@ -84,6 +84,31 @@ test('fake provider produces a controlled transient adviser response without rec
   assert.deepEqual(result.recommendations, []);
 });
 
+test('BUILD_ROUTINE waits for recommendation readiness before deterministic catalog search', async () => {
+  let searched = false;
+  let routineReasoning = false;
+  const service = createAIService({
+    provider: {
+      interpretConversation: async () => providerOutput({
+        mode: 'RECOMMENDATION',
+        profile: { ...profile, skinType: null, conditions: [], targets: [], knownProducts: [], unresolvedOwnedProducts: ['protector externo'], ownedRoutineSteps: ['SUNSCREEN'] },
+      }),
+      reasonRoutine: async () => { routineReasoning = true; return {}; },
+    },
+    candidateService: { search: async () => { searched = true; return { searched: true, candidates: [] }; } },
+  });
+  const result = await service.advise({ message: 'Quiero empezar una rutina y ya uso protector solar.' });
+  assert.equal(result.mode, 'FOLLOW_UP');
+  assert.match(result.message, /cómo sientes normalmente tu piel/i);
+  assert.equal(searched, false);
+  assert.equal(routineReasoning, false);
+});
+
+test('provider instructions preserve progressive context for short replies', () => {
+  assert.match(SYSTEM_INSTRUCTIONS, /respuestas breves.*sí.*listo.*eso.*grasa/i);
+  assert.match(SYSTEM_INSTRUCTIONS, /no reinicies el perfil/i);
+});
+
 test('out-of-scope provider classification receives a Backend-controlled redirection', async () => {
   const service = createAIService({ provider: { interpretConversation: async () => providerOutput({ scope: 'OUT_OF_SCOPE', intent: 'UNKNOWN', mode: 'ANSWER', message: 'La capital es París.' }) } });
   const result = await service.advise({ message: '¿Cuál es la capital de Francia?' });

@@ -64,12 +64,24 @@ test('BUILD_ROUTINE with insufficient profile returns FOLLOW_UP', async () => {
 });
 
 test('required-step fallback uses natural customer language instead of internal engine terms', async () => {
-  const service = createHarness({ candidatesByStep: { MOISTURIZER: [candidate('moisturizer', 'MOISTURIZER')], SUNSCREEN: [candidate('sunscreen', 'SUNSCREEN')] }, routineOutput: completeRoutine(), rows: baseRows() });
+  const service = createHarness({
+    candidatesByStep: { MOISTURIZER: [candidate('moisturizer', 'MOISTURIZER')], SUNSCREEN: [candidate('sunscreen', 'SUNSCREEN')] },
+    routineOutput: () => ({
+      mode: 'RECOMMENDATION',
+      message: 'Puedo avanzar con parte de la rutina.',
+      profile: profile(),
+      routine: {
+        morning: [{ step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Hidratación.' }, { step: 'SUNSCREEN', selectedProductId: 'sunscreen', reason: 'Protección.' }],
+        evening: [{ step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Hidratación.' }],
+      },
+    }),
+    rows: baseRows(),
+  });
   const result = await service.advise({ message: 'Quiero una rutina sencilla' });
-  assert.equal(result.mode, 'ANSWER');
+  assert.equal(result.mode, 'RECOMMENDATION');
   assert.match(result.message, /limpiador/i);
   assert.doesNotMatch(result.message, /CLEANSER|Product|candidato|catalogRole|score/i);
-  assert.deepEqual(result.recommendations, []);
+  assert.equal(result.routineComplete, false);
 });
 
 test('enough profile produces a bounded basic AM/PM routine', async () => {
@@ -218,6 +230,33 @@ test('missing optional serum does not invalidate the core routine', async () => 
   const result = await service.advise({ message: 'Rutina' });
   assert.equal(result.mode, 'RECOMMENDATION');
   assert.equal(result.routine.evening.some((item) => item.step === 'SERUM'), false);
+});
+
+test('a missing required step preserves truthful partial routine progress', async () => {
+  let providerInput;
+  const service = createHarness({
+    profileValue: profile({ skinType: 'OILY', targets: [], ownedRoutineSteps: ['SUNSCREEN'] }),
+    candidatesByStep: { MOISTURIZER: [candidate('moisturizer', 'MOISTURIZER')] },
+    routineOutput: () => ({
+      mode: 'RECOMMENDATION',
+      message: 'Puedes empezar con hidratación.',
+      profile: profile({ skinType: 'OILY', targets: [], ownedRoutineSteps: ['SUNSCREEN'] }),
+      routine: {
+        morning: [{ step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Aporta hidratación.' }],
+        evening: [{ step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Acompaña la rutina.' }],
+      },
+    }),
+    rows: [row('moisturizer', 'MOISTURIZER')],
+    onRoutineInput: (input) => { providerInput = input; },
+  });
+  const result = await service.advise({ message: 'Quiero una rutina sencilla para piel grasa.' });
+  assert.equal(result.mode, 'RECOMMENDATION');
+  assert.equal(result.routineComplete, false);
+  assert.deepEqual(result.missingSteps, ['limpiador']);
+  assert.match(result.message, /no puedo confirmarla completa/i);
+  assert.deepEqual(result.recommendations.map((item) => item.product.id), ['moisturizer']);
+  assert.deepEqual(providerInput.plan.missingRequiredSteps, ['CLEANSER']);
+  assert.equal(providerInput.plan.morning.includes('CLEANSER'), false);
 });
 
 test('final DB truth is used and invalidated Products do not receive replacements', async () => {
