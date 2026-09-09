@@ -191,7 +191,8 @@ test('OpenAI adapter normalizes structured JSON and uses a bounded timeout witho
   assert.equal(requestBody.input[0].role, 'system');
   assert.match(requestBody.input[0].content, /solo puedes seleccionar/i);
   assert.equal(requestBody.store, false);
-  assert.equal(requestBody.text.format.type, 'json_object');
+  assert.equal(requestBody.text.format.type, 'json_schema');
+  assert.equal(requestBody.text.format.name, 'nari_candidate_reasoning');
 
   const nestedOutputProvider = createOpenAIProvider({
     apiKey: 'test-only-key',

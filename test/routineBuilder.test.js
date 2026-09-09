@@ -92,6 +92,36 @@ test('enough profile produces a bounded basic AM/PM routine', async () => {
   assert.equal(result.recommendations.length, 3);
 });
 
+test('realistic second-turn OILY history completes through routine validation without exposing private fields', async () => {
+  const oilyProfile = profile({ skinType: 'OILY', targets: [], conditions: [], unresolvedOwnedProducts: ['bloqueador externo'], ownedRoutineSteps: ['SUNSCREEN'] });
+  const service = createHarness({
+    profileValue: oilyProfile,
+    candidatesByStep: baseCandidates(),
+    routineOutput: completeRoutine({
+      overrides: {
+        profile: oilyProfile,
+        routine: {
+          morning: [{ step: 'CLEANSER', selectedProductId: 'cleanser', reason: 'Limpieza.' }, { step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Hidratación.' }],
+          evening: [{ step: 'CLEANSER', selectedProductId: 'cleanser', reason: 'Limpieza.' }, { step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Hidratación.' }],
+        },
+      },
+    }),
+    rows: baseRows(),
+  });
+  const history = [
+    { role: 'user', content: 'hola, no se nada de skincare, quiero empezar a cuidar mi piel, ahora solo uso un bloqueador de mixsoon el centella sun cream creo, de resto mas nada' },
+    { role: 'assistant', content: '¡Hola! Podemos empezar con una rutina sencilla y gradual. Para orientarla mejor, ¿cómo suele sentirse tu piel durante el día: grasa, seca, mixta o sensible/irritable?' },
+  ];
+  for (const message of ['mas grasa', 'perfecto, mas grasa y como te dije quiero empezar a cuidarla']) {
+    const result = await service.advise({ message, history });
+    assert.equal(result.profile.skinType, 'OILY');
+    assert.ok(['ANSWER', 'FOLLOW_UP', 'RECOMMENDATION'].includes(result.mode));
+    assert.ok(Array.isArray(result.recommendations));
+    assert.ok(result.recommendations.every((item) => !('catalogRole' in item.product) && !('supplier' in item.product) && !('cost' in item.product)));
+    assert.ok(result.recommendations.every((item) => !String(item.product.id).includes('fixture')));
+  }
+});
+
 test('external owned sunscreen is acknowledged as context without becoming a NARI Product', async () => {
   const searchedSteps = [];
   const routineOutput = () => ({

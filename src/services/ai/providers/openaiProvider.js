@@ -50,6 +50,77 @@ const INTERPRETATION_FORMAT = {
   },
 };
 
+const REASONING_FORMAT = {
+  type: 'json_schema',
+  name: 'nari_candidate_reasoning',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      mode: { type: 'string', enum: AI_MODES },
+      message: { type: 'string', minLength: 1, maxLength: AI_LIMITS.responseMessage },
+      selectedProductIds: { type: 'array', items: { type: 'string', minLength: 1, maxLength: 120 }, maxItems: 3 },
+      reasons: {
+        type: 'array',
+        maxItems: 3,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          properties: {
+            productId: { type: 'string', minLength: 1, maxLength: 120 },
+            reason: { type: 'string', minLength: 1, maxLength: AI_LIMITS.reason },
+          },
+          required: ['productId', 'reason'],
+        },
+      },
+      profile: PROFILE_SCHEMA,
+    },
+    required: ['mode', 'message', 'selectedProductIds', 'reasons', 'profile'],
+  },
+};
+
+const ROUTINE_ITEM_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    step: { type: 'string', enum: ROUTINE_STEPS },
+    selectedProductId: { type: 'string', minLength: 1, maxLength: 120 },
+    reason: { type: 'string', minLength: 1, maxLength: AI_LIMITS.reason },
+  },
+  required: ['step', 'selectedProductId', 'reason'],
+};
+
+const ROUTINE_FORMAT = {
+  type: 'json_schema',
+  name: 'nari_routine_reasoning',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      mode: { type: 'string', enum: AI_MODES },
+      message: { type: 'string', minLength: 1, maxLength: AI_LIMITS.responseMessage },
+      routine: {
+        anyOf: [
+          { type: 'null' },
+          {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+              morning: { type: 'array', items: ROUTINE_ITEM_SCHEMA, maxItems: 5 },
+              evening: { type: 'array', items: ROUTINE_ITEM_SCHEMA, maxItems: 5 },
+            },
+            required: ['morning', 'evening'],
+          },
+        ],
+      },
+      profile: PROFILE_SCHEMA,
+    },
+    required: ['mode', 'message', 'routine', 'profile'],
+  },
+};
+
 const SYSTEM_INSTRUCTIONS = [
   'Eres el intérprete cosmético de NARI. Solo atiendes NARI, skincare, rutinas cosméticas, productos de NARI y educación cosmética general.',
   'Si la solicitud no pertenece a ese ámbito, devuelve scope OUT_OF_SCOPE, intent UNKNOWN, mode ANSWER y un breve mensaje de redirección; no respondas la pregunta ajena.',
@@ -132,7 +203,7 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
             candidates,
           }),
         },
-      ]);
+      ], REASONING_FORMAT);
     },
     async reasonRoutine({ request, interpretation, plan, candidatesByStep }) {
       return callModel([
@@ -141,7 +212,7 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
           role: 'user',
           content: JSON.stringify({ message: request.message, history: request.history, interpretation, plan, candidatesByStep }),
         },
-      ]);
+      ], ROUTINE_FORMAT);
     },
     async reasonComparison({ request, interpretation, products }) {
       return callModel([

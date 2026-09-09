@@ -71,6 +71,11 @@ test('profile null and empty lists remain distinct', () => {
   assert.deepEqual(output.profile.targets, []);
 });
 
+test('provider Spanish skin-type labels are normalized to canonical profile values', () => {
+  const output = validateProviderOutput(providerOutput({ profile: { ...profile, skinType: 'grasa' } }));
+  assert.equal(output.profile.skinType, 'OILY');
+});
+
 test('unresolved owned context and user-reported routine steps remain separate from verified Products', () => {
   const output = validateProviderOutput(providerOutput({ profile: { ...profile, unresolvedOwnedProducts: ['bloqueador de marca externa'], ownedRoutineSteps: ['SUNSCREEN'] } }));
   assert.deepEqual(output.profile.knownProducts, []);

@@ -41,6 +41,21 @@ const assertCustomerFacingMessage = (message) => {
   return message;
 };
 
+const normalizeSkinType = (value) => {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== 'string') return value;
+  const normalized = value.trim().toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  return {
+    GRASA: 'OILY',
+    GRASO: 'OILY',
+    SECA: 'DRY',
+    SECO: 'DRY',
+    MIXTA: 'COMBINATION',
+    MIXTO: 'COMBINATION',
+    NORMAL: 'NORMAL',
+  }[normalized] || value;
+};
+
 const uniqueCanonicalList = (value, allowed, field, { nullable = true } = {}) => {
   if (value === undefined) return nullable ? null : undefined;
   if (value === null) return nullable ? null : fail(`${field} no puede ser null.`);
@@ -85,7 +100,7 @@ const validateRequest = (input) => {
 const validateProfile = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AIServiceError('INVALID_AI_RESPONSE', 'El perfil AI no es válido.', 502);
   if (ownKeys(value).some((key) => !PROFILE_KEYS.includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'El perfil AI contiene campos no permitidos.', 502);
-  const skinType = value.skinType === null || value.skinType === undefined ? null : value.skinType;
+  const skinType = normalizeSkinType(value.skinType);
   if (skinType !== null && (typeof skinType !== 'string' || !BASE_SKIN_TYPES.includes(skinType.trim()))) throw new AIServiceError('INVALID_AI_RESPONSE', 'El perfil AI contiene un tipo de piel no permitido.', 502);
   const conditions = uniqueCanonicalList(value.conditions, SKIN_CONDITIONS, 'conditions');
   const targets = uniqueCanonicalList(value.targets, CONCERN_GOALS, 'targets');
