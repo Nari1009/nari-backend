@@ -1,10 +1,10 @@
 const CATALOG_DISCOVERY_SELECT = `
   SELECT id, name, slug, price, images,
-         "routineStep" AS "routineStep",
-         "sizeLabel" AS "sizeLabel",
+         routinestep AS "routineStep",
+         sizelabel AS "sizeLabel",
          status, stock
   FROM products
-  WHERE "catalogRole" = 'CATALOG'
+  WHERE catalogrole = 'CATALOG'
     AND status = 'active'`;
 
 const createCatalogDiscoveryRepository = ({ query } = {}) => ({
@@ -13,7 +13,7 @@ const createCatalogDiscoveryRepository = ({ query } = {}) => ({
     const params = [];
     let sql = CATALOG_DISCOVERY_SELECT;
     if (routineStep) {
-      sql += ' AND "routineStep" = ?';
+      sql += ' AND routinestep = ?';
       params.push(routineStep);
     }
     sql += ' ORDER BY name ASC LIMIT ?';

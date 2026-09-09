@@ -12,7 +12,8 @@
     "normalize:skin-types": "node src/db/seed.js normalize-skin-types",
     "test": "echo \"Error: no test specified\" && exit 1",
     "ai:dev:openai": "node scripts/testOpenAIAdviser.js",
-    "ai:diagnose:dev:cleanser": "node scripts/diagnoseDevCleanserCandidates.js"
+    "ai:diagnose:dev:cleanser": "node scripts/diagnoseDevCleanserCandidates.js",
+    "ai:repair:dev:catalog-role": "node scripts/repairDevCatalogRole.js"
   },
   "keywords": [],
   "author": "",

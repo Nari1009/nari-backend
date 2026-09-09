@@ -29,7 +29,7 @@ const product = (id, routineStep) => ({
 });
 
 test('catalog discovery uses an explicit public query and excludes private fields', () => {
-  assert.match(CATALOG_DISCOVERY_SELECT, /"catalogRole" = 'CATALOG'/i);
+  assert.match(CATALOG_DISCOVERY_SELECT, /catalogrole = 'CATALOG'/i);
   assert.match(CATALOG_DISCOVERY_SELECT, /status = 'active'/i);
   assert.doesNotMatch(CATALOG_DISCOVERY_SELECT, /SELECT \*/i);
   assert.doesNotMatch(CATALOG_DISCOVERY_SELECT, /supplier|cost|margin/i);
@@ -64,7 +64,7 @@ test('broad catalog discovery returns bounded DB-backed public Products without 
 test('category catalog discovery filters by canonical routine step and does not invoke recommendation reasoning', async () => {
   let reasoned = false;
   const repository = createCatalogDiscoveryRepository({ query: async (sql, params) => {
-    assert.match(sql, /"routineStep" = \?/i);
+    assert.match(sql, /routinestep = \?/i);
     assert.deepEqual(params, ['SUNSCREEN', 12]);
     return [product('spf', 'SUNSCREEN')];
   } });
