@@ -13,7 +13,7 @@ const AI_INTENTS = Object.freeze([
 ]);
 
 const AI_MODES = Object.freeze(['FOLLOW_UP', 'ANSWER', 'RECOMMENDATION']);
-const AI_NEXT_ACTIONS = Object.freeze(['ASK_FOLLOW_UP', 'ANSWER', 'RECOMMEND']);
+const AI_NEXT_ACTIONS = Object.freeze(['ASK_FOLLOW_UP', 'ANSWER', 'RECOMMEND', 'CATALOG_DISCOVERY']);
 
 const AI_LIMITS = Object.freeze({
   message: 2000,

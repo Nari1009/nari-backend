@@ -17,7 +17,7 @@ const publicReasoningResponse = ({ intent, reasoning, recommendations = [] }) =>
   recommendations,
 });
 
-const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null } = {}) => ({
+const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null, catalogDiscoveryService = null } = {}) => ({
   async advise(input) {
     const request = validateRequest(input);
     assertNoPrivilegedInstruction(request);
@@ -41,6 +41,9 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
       };
     }
     if (validated.nextAction !== 'RECOMMEND') {
+      if (validated.nextAction === 'CATALOG_DISCOVERY' && catalogDiscoveryService) {
+        return catalogDiscoveryService.discover({ intent: validated.intent, profile: validated.profile, requestedRoutineStep: validated.requestedRoutineStep });
+      }
       return {
         ...validated,
         mode: validated.nextAction === 'ASK_FOLLOW_UP' ? 'FOLLOW_UP' : 'ANSWER',

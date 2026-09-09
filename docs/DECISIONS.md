@@ -314,3 +314,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Prevent the deterministic routine engine from becoming the conversation manager. Candidate search answers which Products are eligible after the conversational layer decides that a recommendation attempt is useful.
 - **Status:** IMPLEMENTED / IN REVIEW
 - **Source class:** R11E DEV Conversation QA Round 5 orchestration rework.
+
+## DEC-036 — Catalog Discovery Is a Backend Public-Read Action
+
+- **Date:** 2026-09-08
+- **Area:** R11E catalog discovery
+- **Decision:** Catalog questions use `DISCOVERY` with `nextAction: CATALOG_DISCOVERY`, not personalized recommendation reasoning. Backend reads active `CATALOG` Products through an explicit bounded public projection, optionally filtered by canonical routine step, and returns DB-backed cards without supplier, cost, margin, catalogRole or scoring fields. Profile readiness is not required for discovery. A later personalized question uses `PRODUCT_SELECTION` and the existing deterministic candidate path.
+- **Rationale:** “What exists?” and “what fits me?” are different customer actions. The model must not invent catalog contents or make a broad catalog question depend on a personal profile.
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Source class:** R11E DEV QA Round 6 implementation and tests.

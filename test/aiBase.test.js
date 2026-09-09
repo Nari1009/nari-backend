@@ -61,6 +61,8 @@ test('provider instructions favor concise progressive follow-up and preserve unc
   assert.match(REASONING_SYSTEM_INSTRUCTIONS, /en español/i);
   assert.match(ROUTINE_SYSTEM_INSTRUCTIONS, /CLEANSER/i);
   assert.match(ROUTINE_SYSTEM_INSTRUCTIONS, /no.*enums/i);
+  assert.match(SYSTEM_INSTRUCTIONS, /no narres unresolvedOwnedProducts/i);
+  assert.match(SYSTEM_INSTRUCTIONS, /nextAction CATALOG_DISCOVERY/i);
 });
 
 test('profile null and empty lists remain distinct', () => {

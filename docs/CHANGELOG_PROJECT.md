@@ -373,3 +373,16 @@ SUMMARY:
 - Added contract coverage proving an initial beginner routine request can remain conversational without invoking routine search, while an explicit recommendation action runs only after readiness.
 
 STATE AFTER: R11E remains IN REVIEW — DEV QA. Real DEV replay is still required; no PROD access occurred.
+
+## 2026-09-08 — R11E DEV QA Round 6
+
+TYPE: NATURAL PRESENTATION / CATALOG DISCOVERY
+
+SUMMARY:
+
+- Added explicit `CATALOG_DISCOVERY` action separate from personalized recommendation execution.
+- Added a bounded Backend public catalog query for active `CATALOG` Products, with optional canonical routine-step filtering and safe storefront fields only.
+- Updated provider guidance so current-turn catalog questions can switch away from an earlier routine conversation and direct recommendation questions can use the accumulated profile through `PRODUCT_SELECTION`.
+- Strengthened presentation guidance so transient ownership, readiness and candidate state are not narrated as system terminology.
+
+STATE AFTER: R11E remains IN REVIEW — DEV QA. Live DEV replay and catalog verification remain required; no PROD access occurred.

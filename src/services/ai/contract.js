@@ -105,7 +105,7 @@ const validateProfile = (value) => {
 
 const validateProviderOutput = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI no es válida.', 502);
-  if (ownKeys(value).some((key) => !['intent', 'mode', 'message', 'profile', 'productReferences', 'scope', 'nextAction'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene campos no permitidos.', 502);
+  if (ownKeys(value).some((key) => !['intent', 'mode', 'message', 'profile', 'productReferences', 'scope', 'nextAction', 'requestedRoutineStep'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene campos no permitidos.', 502);
   if (!AI_INTENTS.includes(value.intent)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un intent no permitido.', 502);
   if (!AI_MODES.includes(value.mode)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un modo no permitido.', 502);
   const message = providerString(value.message, 'message', AI_LIMITS.responseMessage);
@@ -117,12 +117,16 @@ const validateProviderOutput = (value) => {
   const nextAction = value.nextAction === undefined
     ? value.mode === 'FOLLOW_UP' ? 'ASK_FOLLOW_UP' : value.mode === 'ANSWER' ? 'ANSWER' : 'RECOMMEND'
     : value.nextAction;
+  const requestedRoutineStep = value.requestedRoutineStep === undefined || value.requestedRoutineStep === null ? null : value.requestedRoutineStep;
+  if (requestedRoutineStep !== null && (typeof requestedRoutineStep !== 'string' || !ROUTINE_STEPS.includes(requestedRoutineStep.trim()))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un paso de catálogo no permitido.', 502);
   if (!AI_NEXT_ACTIONS.includes(nextAction)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene una acción no permitida.', 502);
   if (nextAction === 'ASK_FOLLOW_UP' && value.mode === 'RECOMMENDATION') {
-    return { intent: value.intent, mode: 'FOLLOW_UP', message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()), scope, nextAction };
+    return { intent: value.intent, mode: 'FOLLOW_UP', message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()), scope, nextAction, requestedRoutineStep };
   }
+  if (nextAction === 'CATALOG_DISCOVERY' && value.mode !== 'ANSWER') throw new AIServiceError('INVALID_AI_RESPONSE', 'La acción de descubrimiento requiere un modo de respuesta.', 502);
+  if (nextAction === 'CATALOG_DISCOVERY' && value.intent !== 'DISCOVERY') throw new AIServiceError('INVALID_AI_RESPONSE', 'La acción de descubrimiento requiere el intent DISCOVERY.', 502);
   if (nextAction === 'RECOMMEND' && value.mode === 'FOLLOW_UP') throw new AIServiceError('INVALID_AI_RESPONSE', 'La acción de recomendación requiere un modo válido.', 502);
-  return { intent: value.intent, mode: value.mode, message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()), scope, nextAction };
+  return { intent: value.intent, mode: value.mode, message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()), scope, nextAction, requestedRoutineStep };
 };
 
 module.exports = { validateRequest, validateProviderOutput, validateProfile };

@@ -51,6 +51,14 @@ The real DEV provider path was confirmed operational by owner testing. This revi
 
 R11E remains IN REVIEW — DEV QA.
 
+## DEV CONVERSATION QA ROUND 6 — DISCOVERY AND CONVERGENCE
+
+Provider interpretation now distinguishes personalized recommendation from catalog browsing. `DISCOVERY` with `nextAction: CATALOG_DISCOVERY` reads the real active `CATALOG` Product rows through a bounded explicit public projection. Broad questions may return up to twelve cards; category questions use the canonical routine-step filter. No profile readiness is required for “what does Nari sell?” questions, and no catalog data is sent through provider prose.
+
+Current-turn intent is not locked to the first user goal: a routine conversation can switch to catalog discovery, and a later “which one do you recommend?” can switch to `PRODUCT_SELECTION` using the accumulated profile. Provider instructions require natural customer language rather than narration of unresolved ownership, readiness, candidate scoring or internal catalog state. Once enough context exists, `nextAction: RECOMMEND` allows the existing deterministic routine/product path to run.
+
+R11E remains IN REVIEW — DEV QA.
+
 ## DEV CONVERSATION QA ROUND 5 — TWO-STAGE ORCHESTRATION
 
 The provider interpretation contract now separates `intent` from `nextAction`. `BUILD_ROUTINE` means the customer's goal, not an execution command. Interpretation may return `ASK_FOLLOW_UP` while retaining `BUILD_ROUTINE`; Backend then returns the conversational response without invoking routine planning, candidate search or Product reasoning. Only `nextAction: RECOMMEND`, followed by Backend readiness validation, can enter deterministic routine construction.
