@@ -55,7 +55,7 @@ const deterministicRoutine = ({ plan, owned, selectedByStep, sourceById }) => {
   return { morning: build(plan.morning), evening: build(plan.evening) };
 };
 const createPoint10Service = ({ resolver, candidateService, finalProductRepository } = {}) => ({
-  supports(intent, profile = {}) { return ['COMPARE', 'COMPATIBILITY', 'BUDGET_ROUTINE'].includes(intent) || (intent === 'BUILD_ROUTINE' && Array.isArray(profile.knownProducts) && profile.knownProducts.length > 0); },
+  supports(intent, profile = {}) { return ['COMPARE', 'COMPATIBILITY', 'BUDGET_ROUTINE'].includes(intent) || (intent === 'BUILD_ROUTINE' && Array.isArray(profile.knownProducts) && profile.knownProducts.length > 0 && (!Array.isArray(profile.unresolvedOwnedProducts) || profile.unresolvedOwnedProducts.length === 0)); },
   async handle({ request, interpretation, provider }) {
     if (interpretation.intent === 'COMPARE') return this.compare({ request, interpretation, provider });
     if (interpretation.intent === 'COMPATIBILITY') return this.compatibility({ request, interpretation, provider });

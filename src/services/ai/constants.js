@@ -37,6 +37,8 @@ const PROFILE_KEYS = Object.freeze([
   'budget',
   'routinePreference',
   'knownProducts',
+  'unresolvedOwnedProducts',
+  'ownedRoutineSteps',
 ]);
 
 module.exports = {

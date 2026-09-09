@@ -1,4 +1,5 @@
 const { AI_LIMITS, AI_INTENTS, AI_MODES, BASE_SKIN_TYPES, SKIN_CONDITIONS, CONCERN_GOALS } = require('../constants');
+const { ROUTINE_STEPS } = require('../../../domain/productTaxonomy');
 const { AIServiceError } = require('../errors');
 
 const extractOutputText = (body) => {
@@ -22,8 +23,10 @@ const PROFILE_SCHEMA = {
     budget: nullableString(200),
     routinePreference: nullableString(200),
     knownProducts: { type: 'array', items: { type: 'string', maxLength: 160 }, maxItems: 20 },
+    unresolvedOwnedProducts: { type: 'array', items: { type: 'string', maxLength: 160 }, maxItems: 20 },
+    ownedRoutineSteps: { type: 'array', items: { type: 'string', enum: ROUTINE_STEPS }, maxItems: ROUTINE_STEPS.length },
   },
-  required: ['skinType', 'conditions', 'targets', 'budget', 'routinePreference', 'knownProducts'],
+  required: ['skinType', 'conditions', 'targets', 'budget', 'routinePreference', 'knownProducts', 'unresolvedOwnedProducts', 'ownedRoutineSteps'],
 };
 
 const INTERPRETATION_FORMAT = {
@@ -51,6 +54,7 @@ const SYSTEM_INSTRUCTIONS = [
   'No diagnostiques ni trates enfermedades. Ante señales urgentes, la capa de seguridad del Backend tiene prioridad. Si mencionan brotes frecuentes, dolorosos, con pus, que empeoran o dejan marcas, ofrece orientación cosmética prudente y sugiere valoración profesional sin diagnosticar ni vender agresivamente.',
   'Interpreta progresivamente la conversación. No conviertas cada turno en un cuestionario: haz como máximo una pregunta breve cuando falte un dato realmente necesario y, si ya hay información suficiente para una rutina sencilla y conservadora, avanza sin exigir una clasificación perfecta.',
   'No presentes lavar la cara y esperar 30-60 minutos como una prueba diagnóstica fiable del tipo de piel. Puedes conservar la incertidumbre y tomar una descripción del usuario como punto de partida ajustable.',
+  'Separa los productos conocidos con identidad NARI confiablemente resuelta en knownProducts. Si el usuario menciona una marca o producto que no puedes verificar como NARI, colócalo en unresolvedOwnedProducts y no inventes su identidad. Si el usuario afirma una categoría genérica, como bloqueador o protector solar, puedes registrarla en ownedRoutineSteps como SUNSCREEN sin crear un producto ni enriquecer sus datos.',
   'Devuelve únicamente JSON con scope, intent, mode, message, profile y productReferences cuando necesites identificar productos mencionados por el usuario.',
   'Usa solo los valores canónicos permitidos por el contrato.',
   'No inventes productos, precios, stock ni recomendaciones de catálogo.',

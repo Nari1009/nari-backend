@@ -5,7 +5,7 @@ const { AIServiceError } = require('../src/services/ai/errors');
 const { createRoutinePlan } = require('../src/services/ai/routines/routinePlan');
 const { validateRoutineProviderOutput } = require('../src/services/ai/routines/routineContract');
 
-const profile = (overrides = {}) => ({ skinType: 'DRY', conditions: [], targets: ['HYDRATION'], budget: null, routinePreference: null, knownProducts: [], ...overrides });
+const profile = (overrides = {}) => ({ skinType: 'DRY', conditions: [], targets: ['HYDRATION'], budget: null, routinePreference: null, knownProducts: [], unresolvedOwnedProducts: [], ownedRoutineSteps: [], ...overrides });
 const candidate = (id, step, overrides = {}) => ({
   productId: id,
   metadata: { id, name: `Candidate ${id}`, routineStep: step, sizeLabel: '50 ml', suitableSkinTypes: null, suitableConditions: [], targets: ['HYDRATION'], ...overrides },
@@ -78,6 +78,50 @@ test('enough profile produces a bounded basic AM/PM routine', async () => {
   assert.deepEqual(result.routine.morning.map((item) => item.step), ['CLEANSER', 'MOISTURIZER', 'SUNSCREEN']);
   assert.deepEqual(result.routine.evening.map((item) => item.step), ['CLEANSER', 'MOISTURIZER']);
   assert.equal(result.recommendations.length, 3);
+});
+
+test('external owned sunscreen is acknowledged as context without becoming a NARI Product', async () => {
+  const searchedSteps = [];
+  const routineOutput = () => ({
+    mode: 'RECOMMENDATION',
+    message: 'Rutina sencilla para comenzar.',
+    profile: profile({ unresolvedOwnedProducts: ['bloqueador de marca externa'], ownedRoutineSteps: ['SUNSCREEN'] }),
+    routine: {
+      morning: [
+        { step: 'CLEANSER', selectedProductId: 'cleanser', reason: 'Limpieza suave.' },
+        { step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Apoya la hidratación.' },
+      ],
+      evening: [
+        { step: 'CLEANSER', selectedProductId: 'cleanser', reason: 'Retira impurezas.' },
+        { step: 'MOISTURIZER', selectedProductId: 'moisturizer', reason: 'Completa la rutina.' },
+      ],
+    },
+  });
+  const service = createHarness({
+    profileValue: profile({ unresolvedOwnedProducts: ['bloqueador de marca externa'], ownedRoutineSteps: ['SUNSCREEN'] }),
+    candidatesByStep: { CLEANSER: [candidate('cleanser', 'CLEANSER')], MOISTURIZER: [candidate('moisturizer', 'MOISTURIZER')] },
+    routineOutput,
+    rows: [row('cleanser', 'CLEANSER'), row('moisturizer', 'MOISTURIZER')],
+    onRoutineInput: (input) => searchedSteps.push(...Object.keys(input.candidatesByStep)),
+  });
+  const result = await service.advise({ message: 'Quiero empezar una rutina y ya uso un bloqueador externo.' });
+  assert.equal(result.mode, 'RECOMMENDATION');
+  assert.equal(searchedSteps.includes('SUNSCREEN'), false);
+  assert.equal(result.recommendations.some((item) => item.product.id === 'sunscreen'), false);
+  assert.equal(result.routine.morning.some((item) => item.step === 'SUNSCREEN'), false);
+});
+
+test('external owned item with unknown category does not fabricate a routine step', async () => {
+  const service = createHarness({
+    profileValue: profile({ unresolvedOwnedProducts: ['crema XYZ'], ownedRoutineSteps: [] }),
+    candidatesByStep: baseCandidates(),
+    routineOutput: completeRoutine(),
+    rows: baseRows(),
+  });
+  const result = await service.advise({ message: 'Uso una crema XYZ pero no sé qué es.' });
+  assert.equal(result.mode, 'RECOMMENDATION');
+  assert.equal(result.routine.morning.some((item) => item.productId === 'crema XYZ'), false);
+  assert.equal(result.recommendations.some((item) => item.product.id === 'crema XYZ'), false);
 });
 
 test('SUNSCREEN is morning-only and optional steps are not forced', async () => {

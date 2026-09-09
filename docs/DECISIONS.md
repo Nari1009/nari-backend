@@ -286,3 +286,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** The Backend remains responsible for scope, safety, catalog eligibility, Product identity, current price/availability and provider validation. R11F remains the future phase for durable bounded conversation history.
 - **Status:** IMPLEMENTED / IN REVIEW
 - **Source class:** R11E Client implementation, build review and current user instruction.
+
+## DEC-033 — External Owned Products Are Context, Not Catalog Identity
+
+- **Date:** 2026-09-08
+- **Area:** R11E conversation and routine planning
+- **Decision:** `knownProducts` is reserved for references intended for verified NARI catalog resolution. `unresolvedOwnedProducts` preserves user-reported external or uncertain items without creating Product identity, IDs or metadata. `ownedRoutineSteps` may preserve an explicit generic category such as `SUNSCREEN` for routine coverage only; it never becomes a NARI Product or purchase recommendation.
+- **Rationale:** Customers may already use Products NARI does not sell. Conversation should continue naturally while commercial truth, purchase eligibility and formula compatibility remain Backend-controlled and NARI-only.
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Source class:** R11E DEV Conversation QA Round 4 implementation and tests.

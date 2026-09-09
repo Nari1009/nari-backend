@@ -44,6 +44,20 @@ const createBasicRoutinePlan = () => ({
 
 const planSteps = (plan) => uniqueSteps([...(plan?.morning || []), ...(plan?.evening || [])]);
 
+const applyOwnedRoutineSteps = (plan, ownedRoutineSteps = []) => {
+  const owned = new Set(Array.isArray(ownedRoutineSteps) ? ownedRoutineSteps : []);
+  const removeOwned = (steps) => steps.filter((step) => !owned.has(step));
+  return {
+    ...plan,
+    morning: removeOwned(plan.morning),
+    evening: removeOwned(plan.evening),
+    requiredMorning: removeOwned(plan.requiredMorning),
+    requiredEvening: removeOwned(plan.requiredEvening),
+    optionalMorning: removeOwned(plan.optionalMorning),
+    optionalEvening: removeOwned(plan.optionalEvening),
+  };
+};
+
 module.exports = {
   CORE_EVENING_STEPS,
   CORE_MORNING_STEPS,
@@ -53,5 +67,6 @@ module.exports = {
   createRoutinePlan,
   createBasicRoutinePlan,
   hasUsefulProfile,
+  applyOwnedRoutineSteps,
   planSteps,
 };

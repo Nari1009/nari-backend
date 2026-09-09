@@ -9,7 +9,7 @@ const assessSafety = ({ message, history = [] }) => {
     intent: 'GENERAL_SKINCARE',
     mode: 'ANSWER',
     message: 'NARI brinda orientación cosmética y no puede diagnosticar ni tratar una condición médica. Si tienes síntomas intensos, una reacción importante o afectación de los ojos o la respiración, busca atención médica inmediata. Para síntomas persistentes o preocupantes, consulta a un profesional de salud.',
-    profile: { skinType: null, conditions: null, targets: null, budget: null, routinePreference: null, knownProducts: [] },
+    profile: { skinType: null, conditions: null, targets: null, budget: null, routinePreference: null, knownProducts: [], unresolvedOwnedProducts: [], ownedRoutineSteps: [] },
   };
 };
 

@@ -50,3 +50,16 @@ The real DEV provider path was confirmed operational by owner testing. This revi
 - Live DEV read-only verification was attempted but DNS resolution for `nari-backend-dev.onrender.com` was unavailable in this environment; no DEV write or PROD access occurred.
 
 R11E remains IN REVIEW — DEV QA.
+
+## DEV CONVERSATION QA ROUND 4
+
+Verified NARI-owned Products and user-reported external Products are now separate transient concepts.
+
+- `knownProducts` remains reserved for references intended for verified NARI catalog resolution.
+- `unresolvedOwnedProducts` preserves an external or uncertain user report without creating an identity, Product ID or catalog metadata.
+- `ownedRoutineSteps` records only an explicitly reported generic category, such as `SUNSCREEN` for “uso un bloqueador”; it is not Product metadata and does not create a recommendation card.
+- User-reported routine-step coverage is removed from the purchase routine plan, while missing steps continue through the existing deterministic NARI catalog candidate engine.
+- Verified owned Products continue using the existing R11D.10 resolver and ownership behavior.
+- No formula, price, stock, image, slug, compatibility or availability facts are inferred for unresolved external Products. Nothing is persisted to the database.
+
+R11E remains IN REVIEW — DEV QA.

@@ -69,6 +69,13 @@ test('profile null and empty lists remain distinct', () => {
   assert.deepEqual(output.profile.targets, []);
 });
 
+test('unresolved owned context and user-reported routine steps remain separate from verified Products', () => {
+  const output = validateProviderOutput(providerOutput({ profile: { ...profile, unresolvedOwnedProducts: ['bloqueador de marca externa'], ownedRoutineSteps: ['SUNSCREEN'] } }));
+  assert.deepEqual(output.profile.knownProducts, []);
+  assert.deepEqual(output.profile.unresolvedOwnedProducts, ['bloqueador de marca externa']);
+  assert.deepEqual(output.profile.ownedRoutineSteps, ['SUNSCREEN']);
+});
+
 test('fake provider produces a controlled transient adviser response without recommendations', async () => {
   const service = createAIService({ provider: { interpretConversation: async () => providerOutput() } });
   const result = await service.advise({ message: 'Quiero una rutina sencilla' });

@@ -8,6 +8,7 @@ const {
   PROFILE_KEYS,
 } = require('./constants');
 const { AIServiceError } = require('./errors');
+const { ROUTINE_STEPS } = require('../../domain/productTaxonomy');
 
 const ownKeys = (value) => Object.keys(value);
 const fail = (message, code = 'INVALID_AI_REQUEST') => { throw new AIServiceError(code, message, 400); };
@@ -85,6 +86,10 @@ const validateProfile = (value) => {
   const routinePreference = value.routinePreference === null || value.routinePreference === undefined ? null : providerString(value.routinePreference, 'routinePreference', 200);
   const knownProducts = value.knownProducts === null || value.knownProducts === undefined ? [] : value.knownProducts;
   if (!Array.isArray(knownProducts) || knownProducts.some((item) => typeof item !== 'string' || item.trim().length > 160)) throw new AIServiceError('INVALID_AI_RESPONSE', 'El perfil AI contiene productos conocidos no válidos.', 502);
+  const unresolvedOwnedProducts = value.unresolvedOwnedProducts === null || value.unresolvedOwnedProducts === undefined ? [] : value.unresolvedOwnedProducts;
+  if (!Array.isArray(unresolvedOwnedProducts) || unresolvedOwnedProducts.some((item) => typeof item !== 'string' || item.trim().length > 160)) throw new AIServiceError('INVALID_AI_RESPONSE', 'El perfil AI contiene referencias externas no válidas.', 502);
+  const ownedRoutineSteps = value.ownedRoutineSteps === null || value.ownedRoutineSteps === undefined ? [] : value.ownedRoutineSteps;
+  if (!Array.isArray(ownedRoutineSteps) || ownedRoutineSteps.some((item) => typeof item !== 'string' || !ROUTINE_STEPS.includes(item.trim()))) throw new AIServiceError('INVALID_AI_RESPONSE', 'El perfil AI contiene pasos de rutina reportados no válidos.', 502);
   return {
     skinType: skinType === null ? null : skinType.trim(),
     conditions,
@@ -92,6 +97,8 @@ const validateProfile = (value) => {
     budget,
     routinePreference,
     knownProducts: knownProducts.map((item) => item.trim()).filter(Boolean).slice(0, 20),
+    unresolvedOwnedProducts: unresolvedOwnedProducts.map((item) => item.trim()).filter(Boolean).slice(0, 20),
+    ownedRoutineSteps: [...new Set(ownedRoutineSteps.map((item) => item.trim()))],
   };
 };
 

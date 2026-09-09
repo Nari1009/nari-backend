@@ -2,7 +2,7 @@ const { AIServiceError } = require('../errors');
 const { isRecommendationEligibleProduct } = require('../candidates/catalogEligibility');
 const { toProviderCandidates } = require('../candidates/candidateProviderProjection');
 const { toPublicRecommendations } = require('../recommendationProjection');
-const { createRoutinePlan, MAX_ROUTINE_PRODUCTS, planSteps } = require('./routinePlan');
+const { createRoutinePlan, applyOwnedRoutineSteps, MAX_ROUTINE_PRODUCTS, planSteps } = require('./routinePlan');
 const { validateRoutineProviderOutput } = require('./routineContract');
 const { customerRoutineStepLabel } = require('./customerLabels');
 
@@ -17,7 +17,8 @@ const unavailableResponse = ({ intent, profile, message, mode = 'ANSWER' }) => (
 
 const createRoutineService = ({ candidateService, finalProductRepository } = {}) => ({
   async build({ request, interpretation, provider }) {
-    const plan = createRoutinePlan(interpretation.profile);
+    const basePlan = createRoutinePlan(interpretation.profile);
+    const plan = basePlan ? applyOwnedRoutineSteps(basePlan, interpretation.profile.ownedRoutineSteps) : null;
     if (!plan) return unavailableResponse({ intent: interpretation.intent, profile: interpretation.profile, mode: 'FOLLOW_UP', message: 'Para construir una rutina sencilla necesito conocer un poco más sobre tu piel o tu objetivo principal.' });
     if (typeof provider.reasonRoutine !== 'function') throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
 

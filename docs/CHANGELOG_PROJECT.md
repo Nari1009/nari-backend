@@ -333,3 +333,17 @@ SUMMARY:
 - Added a regression for the natural-language required-step fallback.
 
 STATE AFTER: Backend focused tests pass. Live DEV read-only verification could not run because DNS resolution for the DEV Render host was unavailable in this environment; no DEV writes or PROD access occurred. R11E remains IN REVIEW — DEV QA.
+
+## 2026-09-08 — R11E DEV Conversation QA Round 4
+
+TYPE: EXTERNAL OWNED PRODUCT BOUNDARY
+
+SUMMARY:
+
+- Separated verified NARI-owned references from unresolved or external user-reported Products.
+- Preserved user-reported generic routine steps such as sunscreen without fabricating NARI identity or metadata.
+- Removed reported external routine steps from purchase planning while continuing to search only verified eligible NARI catalog Products for missing steps.
+- Preserved strict verified-owned Product resolution, commercial truth, compatibility uncertainty and no-database-persistence rules.
+- Added regression coverage for external sunscreen context and transient profile validation.
+
+STATE AFTER: Backend focused regression passes. R11E remains IN REVIEW — DEV QA. PROD remains untouched.
