@@ -23,6 +23,8 @@ const AI_LIMITS = Object.freeze({
   responseMessage: 3000,
   reason: 320,
   contextProductId: 120,
+  contextReferenceItems: 8,
+  contextReferenceStep: 40,
   productReferences: 20,
   productReference: 160,
   providerTimeoutMs: 8000,

@@ -88,11 +88,25 @@ const validateRequest = (input) => {
   let context;
   if (input.context !== undefined) {
     if (!input.context || typeof input.context !== 'object' || Array.isArray(input.context)) fail('context debe ser un objeto.');
-    if (ownKeys(input.context).some((key) => key !== 'currentProductId')) fail('context contiene campos no permitidos.');
+    if (ownKeys(input.context).some((key) => !['currentProductId', 'recentRecommendations', 'recentRoutine'].includes(key))) fail('context contiene campos no permitidos.');
     const currentProductId = input.context.currentProductId === null || input.context.currentProductId === undefined
       ? null
       : boundedString(input.context.currentProductId, 'context.currentProductId', AI_LIMITS.contextProductId, { required: true });
+    const validateReferences = (value, field) => {
+      if (value === undefined) return [];
+      if (!Array.isArray(value) || value.length > AI_LIMITS.contextReferenceItems) fail(`${field} no es válido.`);
+      return value.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) fail(`${field}[${index}] no es válido.`);
+        if (ownKeys(item).some((key) => !['productId', 'routineStep'].includes(key))) fail(`${field}[${index}] contiene campos no permitidos.`);
+        const productId = boundedString(item.productId, `${field}[${index}].productId`, AI_LIMITS.contextProductId, { required: true });
+        const routineStep = item.routineStep === null || item.routineStep === undefined ? null : boundedString(item.routineStep, `${field}[${index}].routineStep`, AI_LIMITS.contextReferenceStep, { required: true });
+        if (routineStep !== null && !ROUTINE_STEPS.includes(routineStep)) fail(`${field}[${index}].routineStep no es válido.`);
+        return { productId, routineStep };
+      });
+    };
     context = { currentProductId };
+    if (input.context.recentRecommendations !== undefined) context.recentRecommendations = validateReferences(input.context.recentRecommendations, 'context.recentRecommendations');
+    if (input.context.recentRoutine !== undefined) context.recentRoutine = validateReferences(input.context.recentRoutine, 'context.recentRoutine');
   }
   return { message, history: normalizedHistory, context };
 };

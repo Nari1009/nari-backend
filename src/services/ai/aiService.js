@@ -17,7 +17,21 @@ const publicReasoningResponse = ({ intent, reasoning, recommendations = [] }) =>
   recommendations,
 });
 
-const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null, catalogDiscoveryService = null } = {}) => ({
+const buildReferenceContext = async (request, finalProductRepository) => {
+  if (!finalProductRepository?.findCurrentEligibleProducts) return { recentRecommendations: [], recentRoutine: [] };
+  const references = [...(request.context?.recentRecommendations || []), ...(request.context?.recentRoutine || [])];
+  const ids = [...new Set(references.map((item) => String(item.productId)))].slice(0, 8);
+  if (!ids.length) return { recentRecommendations: [], recentRoutine: [] };
+  const rows = await finalProductRepository.findCurrentEligibleProducts(ids);
+  const byId = new Map(rows.map((row) => [String(row.id), row]));
+  const safe = (items) => items.map((item) => {
+    const row = byId.get(String(item.productId));
+    return row ? { productId: String(row.id), name: row.name, routineStep: row.routineStep || item.routineStep || null } : null;
+  }).filter(Boolean);
+  return { recentRecommendations: safe(request.context?.recentRecommendations || []), recentRoutine: safe(request.context?.recentRoutine || []) };
+};
+
+const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null, catalogDiscoveryService = null, productInfoService = null } = {}) => ({
   async advise(input) {
     const request = validateRequest(input);
     assertNoPrivilegedInstruction(request);
@@ -25,7 +39,8 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
     if (safetyResponse) return { ...safetyResponse, recommendations: [] };
     let output;
     try {
-      output = await provider.interpretConversation(request);
+      const safeContext = await buildReferenceContext(request, finalProductRepository);
+      output = await provider.interpretConversation({ ...request, conversationContext: safeContext });
     } catch (error) {
       if (error instanceof AIServiceError) throw error;
       throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
@@ -39,6 +54,9 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
         profile: validated.profile,
         recommendations: [],
       };
+    }
+    if (productInfoService && productInfoService.supports(validated.intent)) {
+      return productInfoService.handle({ request, interpretation: validated, provider });
     }
     if (validated.nextAction !== 'RECOMMEND') {
       if (validated.nextAction === 'CATALOG_DISCOVERY' && catalogDiscoveryService) {

@@ -121,6 +121,20 @@ const ROUTINE_FORMAT = {
   },
 };
 
+const PRODUCT_INFO_FORMAT = {
+  type: 'json_schema',
+  name: 'nari_product_info',
+  strict: true,
+  schema: {
+    type: 'object', additionalProperties: false,
+    properties: {
+      mode: { type: 'string', enum: ['ANSWER', 'RECOMMENDATION'] },
+      message: { type: 'string', minLength: 1, maxLength: AI_LIMITS.responseMessage },
+    },
+    required: ['mode', 'message'],
+  },
+};
+
 const SYSTEM_INSTRUCTIONS = [
   'Eres el intérprete cosmético de NARI. Solo atiendes NARI, skincare, rutinas cosméticas, productos de NARI y educación cosmética general.',
   'Si la solicitud no pertenece a ese ámbito, devuelve scope OUT_OF_SCOPE, intent UNKNOWN, mode ANSWER y un breve mensaje de redirección; no respondas la pregunta ajena.',
@@ -130,6 +144,7 @@ const SYSTEM_INSTRUCTIONS = [
   'Si la persona pregunta qué productos vende NARI o pide productos de una categoría sin pedir personalización, usa intent DISCOVERY, nextAction CATALOG_DISCOVERY, mode ANSWER y requestedRoutineStep con el paso canónico correspondiente o null. Backend leerá el catálogo real; no enumeres productos de memoria.',
   'Si la persona pregunta qué producto le recomiendas para su piel, usa intent PRODUCT_SELECTION y nextAction RECOMMEND cuando ya exista contexto suficiente. Usa la conversación previa para conservar su perfil, pero sigue la solicitud actual aunque antes hablara de una rutina.',
   'Conserva y actualiza los datos ya establecidos en la conversación. Interpreta respuestas breves como “sí”, “listo”, “eso” o “creo que grasa” usando el contexto previo; no reinicies el perfil ni vuelvas a preguntar lo ya respondido.',
+  'Si Backend entrega referencias recientes de productos o rutina, úsalas para entender expresiones como “el hidratante que me recomendaste”, “el primero” o “el protector”. Son referencias revalidadas por Backend, no datos comerciales proporcionados por el usuario.',
   'No presentes lavar la cara y esperar 30-60 minutos como una prueba diagnóstica fiable del tipo de piel. Puedes conservar la incertidumbre y tomar una descripción del usuario como punto de partida ajustable.',
   'Separa los productos conocidos con identidad NARI confiablemente resuelta en knownProducts. Si el usuario menciona una marca o producto que no puedes verificar como NARI, colócalo en unresolvedOwnedProducts y no inventes su identidad. Si el usuario afirma una categoría genérica, como bloqueador o protector solar, puedes registrarla en ownedRoutineSteps como SUNSCREEN sin crear un producto ni enriquecer sus datos.',
   'Devuelve únicamente JSON con scope, intent, mode, nextAction, requestedRoutineStep, message, profile y productReferences cuando necesites identificar productos mencionados por el usuario.',
@@ -155,6 +170,7 @@ const ROUTINE_SYSTEM_INSTRUCTIONS = [
   'Respeta morning/evening: SUNSCREEN solo por la mañana, FIRST_CLEANSE solo por la noche y SERUM de tratamiento solo por la noche en V1.',
   'Si Backend indica missingRequiredSteps, la respuesta es parcial: no declares la rutina completa ni presentes como resuelto el paso faltante.',
   'NULL significa información desconocida; [] significa revisado y neutral, no apto universalmente.',
+  'Antes de las tarjetas, explica en una o dos frases por qué esta rutina es un buen punto de partida para lo que la persona contó. Cada razón de producto debe mencionar solo el ajuste visible en los datos entregados, como el paso de rutina o el tipo de piel compatible; no inventes ingredientes, textura, concentraciones ni resultados.',
   'Devuelve únicamente JSON con mode, message, routine y profile. Cada paso seleccionado lleva step, selectedProductId y reason breve.',
   'Respeta los pasos obligatorios y no añadas pasos fuera del plan. No reveles cadena de pensamiento.',
 ].join(' ');
@@ -184,10 +200,11 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
   };
 
   return {
-    async interpretConversation({ message, history }) {
+    async interpretConversation({ message, history, conversationContext = { recentRecommendations: [], recentRoutine: [] } }) {
       return callModel([
         { role: 'system', content: SYSTEM_INSTRUCTIONS },
         ...history.map((item) => ({ role: item.role, content: item.content })),
+        { role: 'user', content: JSON.stringify({ conversationContext }) },
         { role: 'user', content: message },
       ], INTERPRETATION_FORMAT);
     },
@@ -213,6 +230,12 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
           content: JSON.stringify({ message: request.message, history: request.history, interpretation, plan, candidatesByStep }),
         },
       ], ROUTINE_FORMAT);
+    },
+    async reasonProductInfo({ request, interpretation, products }) {
+      return callModel([
+        { role: 'system', content: 'Eres el asesor cosmético de NARI. Explica únicamente el papel general de los Products entregados por Backend. No inventes ingredientes, concentraciones, textura, resultados, frecuencia ni compatibilidad. Puedes recomendar el producto solo si la solicitud lo pide y debes usar únicamente los Products entregados. Escribe en español natural y breve. Devuelve JSON con mode ANSWER o RECOMMENDATION y message.' },
+        { role: 'user', content: JSON.stringify({ message: request.message, history: request.history, interpretation, products }) },
+      ], PRODUCT_INFO_FORMAT);
     },
     async reasonComparison({ request, interpretation, products }) {
       return callModel([
