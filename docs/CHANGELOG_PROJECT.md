@@ -360,3 +360,16 @@ SUMMARY:
 - Added a read-only, explicitly guarded DEV cleanser diagnostic script that reports eligibility, canonical metadata, scoring and exclusion information without writing to a database.
 
 STATE AFTER: R11E remains IN REVIEW — DEV QA. Live DEV catalog diagnostics were not executed by Codex; no DEV writes or PROD access occurred.
+
+## 2026-09-08 — R11E Conversational Orchestration Rework
+
+TYPE: TWO-STAGE CONVERSATION / RECOMMENDATION BOUNDARY
+
+SUMMARY:
+
+- Added explicit provider `nextAction` separation from intent: `ASK_FOLLOW_UP`, `ANSWER` or `RECOMMEND`.
+- Backend now refuses to invoke routine or candidate execution unless the provider explicitly requests `RECOMMEND` and Backend readiness validation passes.
+- Preserved deterministic catalog eligibility, bounded candidates, final Product validation and commercial truth.
+- Added contract coverage proving an initial beginner routine request can remain conversational without invoking routine search, while an explicit recommendation action runs only after readiness.
+
+STATE AFTER: R11E remains IN REVIEW — DEV QA. Real DEV replay is still required; no PROD access occurred.

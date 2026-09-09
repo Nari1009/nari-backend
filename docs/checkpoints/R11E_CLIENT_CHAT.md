@@ -51,6 +51,14 @@ The real DEV provider path was confirmed operational by owner testing. This revi
 
 R11E remains IN REVIEW — DEV QA.
 
+## DEV CONVERSATION QA ROUND 5 — TWO-STAGE ORCHESTRATION
+
+The provider interpretation contract now separates `intent` from `nextAction`. `BUILD_ROUTINE` means the customer's goal, not an execution command. Interpretation may return `ASK_FOLLOW_UP` while retaining `BUILD_ROUTINE`; Backend then returns the conversational response without invoking routine planning, candidate search or Product reasoning. Only `nextAction: RECOMMEND`, followed by Backend readiness validation, can enter deterministic routine construction.
+
+This preserves a two-stage flow: understand and converse first, then search eligible NARI Products and reason only among bounded candidates. Short replies continue to be interpreted through bounded history and profile context. General maintenance is allowed as a valid simple-routine goal without requiring a treatment target. Catalog failures remain structured data and cannot decide the next customer-facing turn by themselves.
+
+R11E remains IN REVIEW — DEV QA.
+
 ## DEV CONVERSATION QA ROUND 5 — ORCHESTRATION
 
 The conversation layer now has an explicit readiness boundary before routine catalog search. A `BUILD_ROUTINE` intent is treated as the customer's goal, not proof that enough information is available. When the transient profile has no skin type, canonical condition/target or verified owned Product signal, the Backend returns one concise profile question and does not invoke deterministic candidate search. Provider instructions preserve facts across bounded history and interpret brief replies such as “sí”, “listo”, “eso” and “creo que grasa” in context.

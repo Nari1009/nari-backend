@@ -13,6 +13,7 @@ const AI_INTENTS = Object.freeze([
 ]);
 
 const AI_MODES = Object.freeze(['FOLLOW_UP', 'ANSWER', 'RECOMMENDATION']);
+const AI_NEXT_ACTIONS = Object.freeze(['ASK_FOLLOW_UP', 'ANSWER', 'RECOMMEND']);
 
 const AI_LIMITS = Object.freeze({
   message: 2000,
@@ -44,6 +45,7 @@ const PROFILE_KEYS = Object.freeze([
 module.exports = {
   AI_INTENTS,
   AI_MODES,
+  AI_NEXT_ACTIONS,
   AI_LIMITS,
   BASE_SKIN_TYPES,
   SKIN_CONDITIONS,

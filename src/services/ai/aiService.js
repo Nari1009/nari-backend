@@ -40,6 +40,15 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
         recommendations: [],
       };
     }
+    if (validated.nextAction !== 'RECOMMEND') {
+      return {
+        ...validated,
+        mode: validated.nextAction === 'ASK_FOLLOW_UP' ? 'FOLLOW_UP' : 'ANSWER',
+        routine: null,
+        routineComplete: false,
+        recommendations: [],
+      };
+    }
     if (validated.intent === 'BUILD_ROUTINE' && validated.mode === 'RECOMMENDATION' && !isRoutineRecommendationReady(validated.profile)) {
       return { ...validated, mode: 'FOLLOW_UP', message: routineReadinessQuestion(), routine: null, routineComplete: false, recommendations: [] };
     }

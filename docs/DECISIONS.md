@@ -305,3 +305,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** The conversational layer decides when a recommendation attempt is useful; the deterministic layer decides which Products are eligible after that gate. This prevents catalog failures from becoming the conversation manager while preserving commercial and structural truth.
 - **Status:** IMPLEMENTED / IN REVIEW
 - **Source class:** R11E DEV Conversation QA Round 5 implementation and tests.
+
+## DEC-035 — Intent and Conversational Action Are Separate
+
+- **Date:** 2026-09-08
+- **Area:** R11E orchestration
+- **Decision:** Provider interpretation now carries `nextAction`: `ASK_FOLLOW_UP`, `ANSWER` or `RECOMMEND`. `BUILD_ROUTINE` describes the user's goal but never authorizes routine/catalog execution by itself. Backend accepts recommendation execution only when `nextAction = RECOMMEND` and its readiness validation passes; otherwise it returns conversation/answer output with no recommendations. The provider receives no catalog data during interpretation.
+- **Rationale:** Prevent the deterministic routine engine from becoming the conversation manager. Candidate search answers which Products are eligible after the conversational layer decides that a recommendation attempt is useful.
+- **Status:** IMPLEMENTED / IN REVIEW
+- **Source class:** R11E DEV Conversation QA Round 5 orchestration rework.

@@ -91,6 +91,7 @@ test('BUILD_ROUTINE waits for recommendation readiness before deterministic cata
     provider: {
       interpretConversation: async () => providerOutput({
         mode: 'RECOMMENDATION',
+        nextAction: 'ASK_FOLLOW_UP',
         profile: { ...profile, skinType: null, conditions: [], targets: [], knownProducts: [], unresolvedOwnedProducts: ['protector externo'], ownedRoutineSteps: ['SUNSCREEN'] },
       }),
       reasonRoutine: async () => { routineReasoning = true; return {}; },
@@ -99,9 +100,36 @@ test('BUILD_ROUTINE waits for recommendation readiness before deterministic cata
   });
   const result = await service.advise({ message: 'Quiero empezar una rutina y ya uso protector solar.' });
   assert.equal(result.mode, 'FOLLOW_UP');
-  assert.match(result.message, /cómo sientes normalmente tu piel/i);
+  assert.match(result.message, /cómo sientes tu piel durante el día/i);
   assert.equal(searched, false);
   assert.equal(routineReasoning, false);
+});
+
+test('recommendation execution requires explicit nextAction RECOMMEND after readiness', async () => {
+  let routineCalled = false;
+  const service = createAIService({
+    provider: {
+      interpretConversation: async () => providerOutput({ mode: 'RECOMMENDATION', nextAction: 'ASK_FOLLOW_UP' }),
+      reasonRoutine: async () => { routineCalled = true; return {}; },
+    },
+    routineService: { build: async () => { routineCalled = true; return { recommendations: [] }; } },
+  });
+  const result = await service.advise({ message: 'Quiero una rutina' });
+  assert.equal(result.mode, 'FOLLOW_UP');
+  assert.equal(routineCalled, false);
+});
+
+test('explicit RECOMMEND runs routine only after readiness validation', async () => {
+  let routineCalled = false;
+  const service = createAIService({
+    provider: {
+      interpretConversation: async () => providerOutput({ mode: 'RECOMMENDATION', nextAction: 'RECOMMEND' }),
+      reasonRoutine: async () => ({}),
+    },
+    routineService: { build: async () => { routineCalled = true; return { intent: 'BUILD_ROUTINE', mode: 'ANSWER', message: 'ok', recommendations: [] }; } },
+  });
+  await service.advise({ message: 'Quiero una rutina' });
+  assert.equal(routineCalled, true);
 });
 
 test('provider instructions preserve progressive context for short replies', () => {
