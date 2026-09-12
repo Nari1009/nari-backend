@@ -223,3 +223,12 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 - **Implementation:** Branded global floating NARI AI advisor across storefront pages, with a refined pill launcher, desktop side panel, mobile near-full-screen panel, free-form input, three subtle optional conversation starters, temporary bounded per-tab state, 30-minute inactivity expiry, manual “Nueva conversación”, trusted Backend recommendation cards and structured routine/compare/compatibility/budget rendering. The shared `/nari-ai` route remains secondary and is not a primary navigation destination; checkout/payment flows hide the entry point.
 - **Boundary:** Client calls only `POST /api/ai/adviser`; no OpenAI SDK/key, Product mutation, cart authority, web search, external Product retrieval or permanent conversation persistence.
 - **Verification:** Production build and TypeScript validation pass. Repository lint remains blocked by pre-existing errors outside R11E; local visual runtime QA was not run because the restricted environment could not bind the dev server port.
+
+### R11E — TurnPlan Consolidation
+
+- **Status:** IMPLEMENTED LOCALLY / IN REVIEW — DEV QA
+- **Scope:** Consolidate all normal R11E Product intents behind one signed-state, Backend-owned TurnPlan orchestration path.
+- **Architecture:** Provider interprets language; Backend reduces authenticated ephemeral state, compiles the executable turn plan, runs deterministic services, validates Product/commercial truth and signs the next state.
+- **State:** HMAC-authenticated, bounded, in-memory/per-tab only; no permanent history, database conversation storage, embeddings or web/Product knowledge retrieval.
+- **Validation:** Backend suite 210 passing; syntax, diff-check and secret scan passing. Live DEV replay remains required.
+- **Boundary:** Canonical PostgreSQL Product data remains authoritative. R11F is not started and PROD remains untouched.

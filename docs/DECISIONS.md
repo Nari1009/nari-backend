@@ -323,3 +323,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** “What exists?” and “what fits me?” are different customer actions. The model must not invent catalog contents or make a broad catalog question depend on a personal profile.
 - **Status:** IMPLEMENTED / IN REVIEW
 - **Source class:** R11E DEV QA Round 6 implementation and tests.
+
+## DEC-037 — R11E Uses One Signed TurnPlan Orchestration Boundary
+
+- **Date:** 2026-09-12
+- **Area:** R11E orchestration consolidation
+- **Decision:** All normal R11E Product intents route through the authoritative TurnPlan flow after provider interpretation and Backend state reduction. Migrated intents cannot silently fall through to legacy orchestration; missing flow configuration returns a controlled `TURNPLAN_NOT_CONFIGURED` error.
+- **Rationale:** Prevent duplicated intent/action decisions and preserve one Backend-owned execution contract across Product selection, routines, Product information, comparison, compatibility, budget and discovery.
+- **State/security:** ConversationState is bounded, HMAC-authenticated with `NARI_AI_STATE_SECRET`, transient and per-tab. It contains semantic references only and no commercial fields or permanent history.
+- **Status:** IMPLEMENTED LOCALLY / IN REVIEW — DEV QA

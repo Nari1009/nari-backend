@@ -157,17 +157,19 @@ Product rows are intended to hold canonical Product recommendation metadata. Leg
 
 ## NOT IMPLEMENTED YET
 
-- Client chat UI.
-- Client chat UI and canonical Client consumption.
 - Conversation database.
 - Embeddings/vector database.
+- ProductKnowledgeRetrieval or external Product-specific evidence retrieval.
+- Web search.
 
 ## CURRENT STOPPING POINT
 
-R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base is complete. R11D points 6–10 are complete and R11D is closed. The post-R11D real OpenAI DEV integration gate is validated and closed. No additional DEV DB or Product metadata writes are made by Codex. No external official-source retrieval or permanent conversation history exists. R11E is not started.
+R11B2.6D, the controlled READY DEV write, and the R11B Admin canonical metadata editor are complete. R11B is closed. R11C Backend AI Base is complete. R11D points 6–10 are complete and R11D is closed. The post-R11D real OpenAI DEV integration gate is validated and closed. R11E orchestration is consolidated locally and remains IN REVIEW — DEV QA. No additional DEV DB or Product metadata writes are made by Codex. No external official-source retrieval or permanent conversation history exists. R11F is NOT STARTED.
 
 The real provider uses the OpenAI Responses API through the existing provider abstraction. It is opt-in with `OPENAI_ENABLED=true`, requires `OPENAI_API_KEY`, and the current DEV configuration uses `OPENAI_MODEL=gpt-5.6-luna`. Interpretation uses Structured Outputs, requests set `store:false`, and bounded JSON validation plus existing safety/commercial boundaries remain authoritative. The no-DB harness passed 3/3 real cases and the automated fake-provider suite passed 117/117 tests. Web search is OFF; external Product knowledge/retrieval is NOT IMPLEMENTED; Client chat is implemented/in review at `/nari-ai`; permanent history is NOT IMPLEMENTED; PROD was untouched.
 
 R11E DEV QA Round 6 adds a separate interpretation action for catalog discovery: `DISCOVERY` with `nextAction: CATALOG_DISCOVERY` reads a bounded active `CATALOG` public projection directly from Backend/PostgreSQL, optionally filtered by canonical routine step. Personalized selection remains `PRODUCT_SELECTION` with `nextAction: RECOMMEND` and the deterministic candidate/validation path. `BUILD_ROUTINE` remains an intent, not an execution command; `ASK_FOLLOW_UP` can preserve the goal while deferring catalog work. Provider-facing system-state concepts remain internal and should not be narrated to customers.
 
 R11D point 9 adds a bounded V1 routine builder. The Backend plans AM `CLEANSER`, `MOISTURIZER`, `SUNSCREEN` and PM `CLEANSER`, `MOISTURIZER`; `SERUM` is optional in PM when canonical targets justify treatment and is conservatively rejected from AM until trusted Product-specific usage/compatibility knowledge exists. Each step searches its own deterministic candidate group, capped at five. Provider-selected IDs must belong to the exact step group, routine steps/order are validated against the canonical taxonomy, Products may be reused AM/PM, and unique final Products are re-fetched and revalidated from DB. Missing required core Products prevent the routine from being represented as complete; missing optional Products are omitted. Point 10 now adds deterministic Product resolution, structural-only compatibility, bounded comparison, total-COP budget accounting and existing-Product completion; formula compatibility, external knowledge and later refinements remain pending.
+
+R11E Stage 10/11 consolidation adds the final authoritative TurnPlan boundary for all normal Product intents, signed HMAC state transport, shared reference resolution, deterministic service execution and response consistency validation. The Client retains only in-memory/per-tab signed state and rendered UI messages; it does not persist or author semantic state. The Backend test suite is 210 passing. R11E remains IN REVIEW — DEV QA, PROD is untouched, and R11F is NOT STARTED.

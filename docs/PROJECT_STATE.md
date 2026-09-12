@@ -98,6 +98,14 @@ Do not record or assume R11B2.7 as started, completed, approved or established r
 
 ## CONTINUATION PROTOCOL
 
+## R11E CONSOLIDATION — 2026-09-12
+
+- R11E normal Product intents now use authoritative Backend TurnPlan execution: Product Selection, Build Routine, Product Info, Compare, Compatibility, Budget Routine and Catalog Discovery.
+- Conversation state is bounded, ephemeral and HMAC-authenticated with `NARI_AI_STATE_SECRET`; it is transported by the Client in memory/per tab only.
+- PostgreSQL remains the source of Product identity, canonical metadata, availability and commercial truth.
+- No permanent conversation history, web retrieval, ProductKnowledgeRetrieval, embeddings or new database schema were added.
+- R11E remains **IN REVIEW — DEV QA** pending live DEV replay. R11F is **NOT STARTED**. PROD was untouched.
+
 1. Read `PROJECT_STATE.md`.
 2. Read `DECISIONS.md`, `ROADMAP.md`, `PROJECT_HISTORY.md`, then the module-specific files and latest checkpoint listed above.
 3. Inspect current Git and worktree state.

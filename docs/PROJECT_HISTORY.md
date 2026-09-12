@@ -155,6 +155,12 @@
 
 ## HISTORICAL UNKNOWNS
 
+### R11E — TurnPlan Consolidation (2026-09-12)
+
+- **What happened:** Consolidated all normal R11E Product intents behind Backend-owned TurnPlan execution and signed ephemeral ConversationState. Added the final no-silent-legacy-fallback boundary and removed redundant Client semantic reference transport after verifying signed-state artifacts cover the migrated flows.
+- **Boundaries:** PostgreSQL remains canonical Product truth; no Product metadata or database schema changed. ProductKnowledgeRetrieval, web retrieval, embeddings and permanent conversation history remain unimplemented.
+- **Verification:** Backend suite 210 passing; Client build/type validation performed separately; R11E remains IN REVIEW — DEV QA, R11F is not started and PROD was untouched.
+
 - Exact original names, acceptance criteria and boundaries for R1–R4 are not fully recoverable.
 - The complete history of Nari Points, favorites and some early account features is not established from the available evidence.
 - Exact deployment dates and some historical environment details are not recoverable without external records.

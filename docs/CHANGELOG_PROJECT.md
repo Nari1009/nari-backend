@@ -386,3 +386,17 @@ SUMMARY:
 - Strengthened presentation guidance so transient ownership, readiness and candidate state are not narrated as system terminology.
 
 STATE AFTER: R11E remains IN REVIEW — DEV QA. Live DEV replay and catalog verification remain required; no PROD access occurred.
+
+## 2026-09-12 — R11E Stage 10/11 Consolidation
+
+TYPE: ORCHESTRATION CONSOLIDATION / CLIENT STATE TRANSPORT
+
+SUMMARY:
+
+- Consolidated Product Selection, Build Routine, Product Info, Compare, Compatibility, Budget Routine and Catalog Discovery behind authoritative Backend TurnPlan flows.
+- Added the explicit no-silent-legacy-fallback boundary for migrated intents.
+- Confirmed HMAC-authenticated bounded ConversationState, shared Product reference resolution, deterministic commercial validation and in-memory/per-tab Client transport.
+- Removed redundant Client-generated semantic recommendation/routine context from live adviser requests while preserving rendered UI state and current Product ID support.
+- No DB changes, web retrieval, ProductKnowledgeRetrieval, embeddings or permanent conversation storage.
+
+STATE AFTER: R11E remains IN REVIEW — DEV QA pending live DEV verification. R11F remains NOT STARTED. PROD was untouched.
