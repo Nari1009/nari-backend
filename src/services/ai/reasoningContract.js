@@ -12,12 +12,19 @@ const boundedReason = (value, field) => {
   return result;
 };
 
+const assertCustomerFacingReason = (value) => {
+  if (/(unresolvedOwnedProducts|ownedRoutineSteps|knownProducts|catalogRole|recommendation readiness|\bcandidatos?\b|\bscores?\b|queda registrado|producto verificado|clasificación provisional|identidad como producto nari)/i.test(value)) {
+    fail('La respuesta de razonamiento AI contiene lenguaje interno no permitido.');
+  }
+  return value;
+};
+
 const validateProviderReasoningOutput = (value, { allowedProductIds = [] } = {}) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) fail('La respuesta de razonamiento AI no es válida.');
   const allowedKeys = ['mode', 'message', 'selectedProductIds', 'reasons', 'profile'];
   if (Object.keys(value).some((key) => !allowedKeys.includes(key))) fail('La respuesta de razonamiento AI contiene campos no permitidos.');
   if (!AI_MODES.includes(value.mode)) fail('La respuesta de razonamiento AI contiene un modo no permitido.');
-  const message = boundedReason(value.message, 'message');
+  const message = assertCustomerFacingReason(boundedReason(value.message, 'message'));
   if (!Array.isArray(value.selectedProductIds) || value.selectedProductIds.length > 3) fail('La selección AI no es válida.');
   const allowed = new Set(allowedProductIds.map(String));
   const selectedProductIds = value.selectedProductIds.map((id) => {
@@ -33,7 +40,7 @@ const validateProviderReasoningOutput = (value, { allowedProductIds = [] } = {})
     if (!item || typeof item !== 'object' || Array.isArray(item) || Object.keys(item).some((key) => !['productId', 'reason'].includes(key))) fail(`La razón AI ${index} no es válida.`);
     const productId = typeof item.productId === 'string' ? item.productId.trim() : '';
     if (!productId || !selectedProductIds.includes(productId)) fail(`La razón AI ${index} no corresponde a un Product seleccionado.`);
-    return { productId, reason: boundedReason(item.reason, `reason[${index}]`) };
+    return { productId, reason: assertCustomerFacingReason(boundedReason(item.reason, `reason[${index}]`)) };
   });
   if (new Set(reasons.map((item) => item.productId)).size !== reasons.length) fail('La respuesta AI contiene razones duplicadas.');
   if (reasons.length !== selectedProductIds.length) fail('Cada Product seleccionado requiere una razón.');

@@ -97,7 +97,7 @@ test('valid selected IDs are accepted and final Product data comes from DB', asy
   const service = createHarness({ onRefetch: (ids) => { refetched = ids; } });
   const result = await service.advise({ message: 'Quiero una hidratante' });
   assert.deepEqual(refetched, ['p-1']);
-  assert.deepEqual(result.recommendations, [{ product: { id: 'p-1', name: 'Nombre DB p-1', price: 123, image: 'https://cdn.example/p-1.jpg', slug: 'slug-p-1' }, reason: 'Coincide con tu objetivo de hidratación.' }]);
+  assert.deepEqual(result.recommendations, [{ product: { id: 'p-1', name: 'Nombre DB p-1', price: 123, image: 'https://cdn.example/p-1.jpg', slug: 'slug-p-1', routineStep: null }, reason: 'Encaja con el paso de hidratante.' }]);
   assert.equal('selectedProductIds' in result, false);
   assert.equal('reasons' in result, false);
 });

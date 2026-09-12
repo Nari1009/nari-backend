@@ -12,7 +12,7 @@ const CANDIDATE_SEARCH_INTENTS = Object.freeze(new Set(['PRODUCT_SELECTION', 'BU
 
 const validateCandidateInput = (input = {}) => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Candidate input must be an object.');
-  const allowed = ['intent', 'profile', 'requestedRoutineStep', 'currentProductId', 'budget'];
+  const allowed = ['intent', 'profile', 'requestedRoutineStep', 'currentProductId', 'budget', 'excludeProductIds'];
   if (Object.keys(input).some((key) => !allowed.includes(key))) throw new Error('Candidate input contains unsupported fields.');
   if (!AI_INTENTS.includes(input.intent)) throw new Error('Candidate input intent is invalid.');
   const profile = validateProfile(input.profile || { skinType: null, conditions: null, targets: null, budget: null, routinePreference: null, knownProducts: [] });
@@ -26,7 +26,9 @@ const validateCandidateInput = (input = {}) => {
   const currentProductId = input.currentProductId === undefined || input.currentProductId === null ? null : String(input.currentProductId).trim();
   if (currentProductId && currentProductId.length > AI_LIMITS.contextProductId) throw new Error('Candidate currentProductId is too long.');
   const budget = input.budget === undefined || input.budget === null ? profile.budget : String(input.budget).trim();
-  return { intent: input.intent, profile, requestedRoutineStep, currentProductId, budget };
+  const excludeProductIds = input.excludeProductIds === undefined ? [] : input.excludeProductIds;
+  if (!Array.isArray(excludeProductIds) || excludeProductIds.length > AI_LIMITS.contextReferenceItems || excludeProductIds.some((id) => typeof id !== 'string' || !id.trim() || id.trim().length > AI_LIMITS.contextProductId)) throw new Error('Candidate exclusions are invalid.');
+  return { intent: input.intent, profile, requestedRoutineStep, currentProductId, budget, excludeProductIds: [...new Set(excludeProductIds.map((id) => id.trim()))] };
 };
 
 const hasSearchCriteria = ({ profile, requestedRoutineStep }) => Boolean(

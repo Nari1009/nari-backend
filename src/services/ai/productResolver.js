@@ -1,7 +1,7 @@
 const { AI_LIMITS } = require('./constants');
 
 const CATALOG_PRODUCT_SELECT = `
-  SELECT id, name, slug, price, images, status, stock,
+  SELECT id, brand, name, slug, price, images, status, stock,
          catalogRole AS "catalogRole",
          routineStep AS "routineStep",
          sizeLabel AS "sizeLabel",

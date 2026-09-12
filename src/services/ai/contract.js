@@ -71,7 +71,7 @@ const uniqueCanonicalList = (value, allowed, field, { nullable = true } = {}) =>
 
 const validateRequest = (input) => {
   if (!input || typeof input !== 'object' || Array.isArray(input)) fail('La solicitud debe ser un objeto.');
-  const allowed = ['message', 'history', 'context'];
+  const allowed = ['message', 'history', 'context', 'conversationState'];
   if (ownKeys(input).some((key) => !allowed.includes(key))) fail('La solicitud contiene campos no permitidos.');
   const message = boundedString(input.message, 'message', AI_LIMITS.message, { required: true });
   const history = input.history === undefined ? [] : input.history;
@@ -108,7 +108,17 @@ const validateRequest = (input) => {
     if (input.context.recentRecommendations !== undefined) context.recentRecommendations = validateReferences(input.context.recentRecommendations, 'context.recentRecommendations');
     if (input.context.recentRoutine !== undefined) context.recentRoutine = validateReferences(input.context.recentRoutine, 'context.recentRoutine');
   }
-  return { message, history: normalizedHistory, context };
+  let conversationState;
+  if (input.conversationState !== undefined) {
+    if (!input.conversationState || typeof input.conversationState !== 'object' || Array.isArray(input.conversationState)) fail('conversationState debe ser un envelope válido.', 'INVALID_CONVERSATION_STATE');
+    if (ownKeys(input.conversationState).some((key) => !['state', 'signature'].includes(key)) || typeof input.conversationState.signature !== 'string' || !input.conversationState.state || typeof input.conversationState.state !== 'object' || Array.isArray(input.conversationState.state)) {
+      fail('conversationState no es válido.', 'INVALID_CONVERSATION_STATE');
+    }
+    conversationState = { state: input.conversationState.state, signature: input.conversationState.signature };
+  }
+  return conversationState === undefined
+    ? { message, history: normalizedHistory, context }
+    : { message, history: normalizedHistory, context, conversationState };
 };
 
 const validateProfile = (value) => {
@@ -140,7 +150,7 @@ const validateProfile = (value) => {
 
 const validateProviderOutput = (value) => {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI no es válida.', 502);
-  if (ownKeys(value).some((key) => !['intent', 'mode', 'message', 'profile', 'productReferences', 'scope', 'nextAction', 'requestedRoutineStep'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene campos no permitidos.', 502);
+  if (ownKeys(value).some((key) => !['intent', 'mode', 'message', 'profile', 'productReferences', 'scope', 'nextAction', 'requestedRoutineStep', 'requestedSteps', 'relationToPrevious', 'referencePhrases', 'ownershipDelta', 'discoveryCriteria'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene campos no permitidos.', 502);
   if (!AI_INTENTS.includes(value.intent)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un intent no permitido.', 502);
   if (!AI_MODES.includes(value.mode)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un modo no permitido.', 502);
   const message = assertCustomerFacingMessage(providerString(value.message, 'message', AI_LIMITS.responseMessage));
@@ -154,14 +164,53 @@ const validateProviderOutput = (value) => {
     : value.nextAction;
   const requestedRoutineStep = value.requestedRoutineStep === undefined || value.requestedRoutineStep === null ? null : value.requestedRoutineStep;
   if (requestedRoutineStep !== null && (typeof requestedRoutineStep !== 'string' || !ROUTINE_STEPS.includes(requestedRoutineStep.trim()))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene un paso de catálogo no permitido.', 502);
+  const requestedSteps = value.requestedSteps === undefined ? (requestedRoutineStep ? [requestedRoutineStep.trim()] : []) : value.requestedSteps;
+  if (!Array.isArray(requestedSteps) || requestedSteps.length > ROUTINE_STEPS.length || requestedSteps.some((step) => typeof step !== 'string' || !ROUTINE_STEPS.includes(step.trim()))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene pasos solicitados no permitidos.', 502);
+  const relationToPrevious = value.relationToPrevious === undefined ? 'NONE' : value.relationToPrevious;
+  if (!['NONE', 'ALTERNATIVE', 'FOLLOW_UP', 'CORRECTION'].includes(relationToPrevious)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene una relación de conversación no permitida.', 502);
+  const referencePhrases = value.referencePhrases === undefined ? productReferences : value.referencePhrases;
+  if (!Array.isArray(referencePhrases) || referencePhrases.length > AI_LIMITS.productReferences || referencePhrases.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > AI_LIMITS.productReference)) throw new AIServiceError('INVALID_AI_RESPONSE', 'Las referencias conversacionales no son válidas.', 502);
   if (!AI_NEXT_ACTIONS.includes(nextAction)) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene una acción no permitida.', 502);
+  const ownershipDelta = value.ownershipDelta === undefined ? {} : value.ownershipDelta;
+  if (!ownershipDelta || typeof ownershipDelta !== 'object' || Array.isArray(ownershipDelta) || ownKeys(ownershipDelta).some((key) => !['addVerifiedProductReferences', 'addUnresolvedItems', 'addOwnedRoutineSteps', 'removeReferences', 'removeUnresolvedLabels', 'removeOwnedRoutineSteps'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene cambios de pertenencia no permitidos.', 502);
+  const validateTextList = (input, field, max = AI_LIMITS.contextReferenceItems) => {
+    if (input === undefined) return [];
+    if (!Array.isArray(input) || input.length > max || input.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > AI_LIMITS.productReference)) throw new AIServiceError('INVALID_AI_RESPONSE', `La respuesta AI contiene ${field} no válido.`, 502);
+    return [...new Set(input.map((item) => item.trim()))];
+  };
+  const addUnresolvedItems = ownershipDelta.addUnresolvedItems === undefined ? [] : ownershipDelta.addUnresolvedItems;
+  if (!Array.isArray(addUnresolvedItems) || addUnresolvedItems.length > AI_LIMITS.contextReferenceItems || addUnresolvedItems.some((item) => !item || typeof item !== 'object' || ownKeys(item).some((key) => !['label', 'reportedRoutineStep'].includes(key)) || typeof item.label !== 'string' || !item.label.trim() || item.label.trim().length > AI_LIMITS.productReference || (item.reportedRoutineStep !== null && item.reportedRoutineStep !== undefined && !ROUTINE_STEPS.includes(item.reportedRoutineStep)))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI contiene productos externos no válidos.', 502);
+  const addOwnedRoutineSteps = ownershipDelta.addOwnedRoutineSteps === undefined ? [] : ownershipDelta.addOwnedRoutineSteps;
+  const removeOwnedRoutineSteps = ownershipDelta.removeOwnedRoutineSteps === undefined ? [] : ownershipDelta.removeOwnedRoutineSteps;
+  for (const [field, input] of [['addOwnedRoutineSteps', addOwnedRoutineSteps], ['removeOwnedRoutineSteps', removeOwnedRoutineSteps]]) {
+    if (!Array.isArray(input) || input.length > ROUTINE_STEPS.length || input.some((step) => typeof step !== 'string' || !ROUTINE_STEPS.includes(step))) throw new AIServiceError('INVALID_AI_RESPONSE', `La respuesta AI contiene ${field} no válido.`, 502);
+  }
+  const normalizedOwnershipDelta = {
+    addVerifiedProductReferences: validateTextList(ownershipDelta.addVerifiedProductReferences, 'addVerifiedProductReferences'),
+    addUnresolvedItems: addUnresolvedItems.map((item) => ({ label: item.label.trim(), reportedRoutineStep: item.reportedRoutineStep === undefined ? null : item.reportedRoutineStep })),
+    addOwnedRoutineSteps: [...new Set(addOwnedRoutineSteps)],
+    removeReferences: validateTextList(ownershipDelta.removeReferences, 'removeReferences'),
+    removeUnresolvedLabels: validateTextList(ownershipDelta.removeUnresolvedLabels, 'removeUnresolvedLabels'),
+    removeOwnedRoutineSteps: [...new Set(removeOwnedRoutineSteps)],
+  };
   if (nextAction === 'ASK_FOLLOW_UP' && value.mode === 'RECOMMENDATION') {
-    return { intent: value.intent, mode: 'FOLLOW_UP', message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()), scope, nextAction, requestedRoutineStep };
+    return { intent: value.intent, mode: 'FOLLOW_UP', message, profile: validateProfile(value.profile), ownershipDelta: normalizedOwnershipDelta, productReferences: productReferences.map((item) => item.trim()), referencePhrases: referencePhrases.map((item) => item.trim()), requestedSteps: [...new Set(requestedSteps.map((step) => step.trim()))], relationToPrevious, scope, nextAction, requestedRoutineStep };
   }
   if (nextAction === 'CATALOG_DISCOVERY' && value.mode !== 'ANSWER') throw new AIServiceError('INVALID_AI_RESPONSE', 'La acción de descubrimiento requiere un modo de respuesta.', 502);
   if (nextAction === 'CATALOG_DISCOVERY' && value.intent !== 'DISCOVERY') throw new AIServiceError('INVALID_AI_RESPONSE', 'La acción de descubrimiento requiere el intent DISCOVERY.', 502);
   if (nextAction === 'RECOMMEND' && value.mode === 'FOLLOW_UP') throw new AIServiceError('INVALID_AI_RESPONSE', 'La acción de recomendación requiere un modo válido.', 502);
-  return { intent: value.intent, mode: value.mode, message, profile: validateProfile(value.profile), productReferences: productReferences.map((item) => item.trim()), scope, nextAction, requestedRoutineStep };
+  const rawDiscovery = value.discoveryCriteria || {};
+  if (!rawDiscovery || typeof rawDiscovery !== 'object' || Array.isArray(rawDiscovery) || ownKeys(rawDiscovery).some((key) => !['routineSteps', 'brand', 'skinTypes', 'conditions', 'targets', 'useProfile', 'browseScope'].includes(key))) throw new AIServiceError('INVALID_AI_RESPONSE', 'Los filtros de catálogo no son válidos.', 502);
+  const discoveryCriteria = {
+    routineSteps: uniqueCanonicalList(rawDiscovery.routineSteps === undefined ? requestedSteps : rawDiscovery.routineSteps, ROUTINE_STEPS, 'discoveryCriteria.routineSteps', { nullable: false }) || [],
+    brand: rawDiscovery.brand === undefined || rawDiscovery.brand === null ? null : providerString(rawDiscovery.brand, 'discoveryCriteria.brand', 120),
+    skinTypes: uniqueCanonicalList(rawDiscovery.skinTypes === undefined ? null : rawDiscovery.skinTypes, BASE_SKIN_TYPES, 'discoveryCriteria.skinTypes'),
+    conditions: uniqueCanonicalList(rawDiscovery.conditions === undefined ? null : rawDiscovery.conditions, SKIN_CONDITIONS, 'discoveryCriteria.conditions'),
+    targets: uniqueCanonicalList(rawDiscovery.targets === undefined ? null : rawDiscovery.targets, CONCERN_GOALS, 'discoveryCriteria.targets'),
+    useProfile: rawDiscovery.useProfile === true,
+    browseScope: rawDiscovery.browseScope === 'FILTERED' ? 'FILTERED' : 'BROAD',
+  };
+  return { intent: value.intent, mode: value.mode, message, profile: validateProfile(value.profile), ownershipDelta: normalizedOwnershipDelta, productReferences: productReferences.map((item) => item.trim()), referencePhrases: referencePhrases.map((item) => item.trim()), requestedSteps: [...new Set(requestedSteps.map((step) => step.trim()))], relationToPrevious, scope, nextAction, requestedRoutineStep, discoveryCriteria };
 };
 
-module.exports = { validateRequest, validateProviderOutput, validateProfile };
+module.exports = { validateRequest, validateProviderOutput, validateProfile, assertCustomerFacingMessage };

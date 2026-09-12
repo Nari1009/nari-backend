@@ -11,6 +11,8 @@ const { createPoint10Service } = require('../services/ai/point10Service');
 const { createCatalogDiscoveryRepository } = require('../services/ai/catalogDiscoveryRepository');
 const { createCatalogDiscoveryService } = require('../services/ai/catalogDiscoveryService');
 const { createProductInfoService } = require('../services/ai/productInfoService');
+const { createCompareService } = require('../services/ai/compareService');
+const { createCompatibilityService } = require('../services/ai/compatibilityService');
 
 const router = express.Router();
 const candidateService = createCandidateService();
@@ -26,6 +28,17 @@ const service = createAIService({
   point10Service,
   catalogDiscoveryService,
   productInfoService,
+  compareService: createCompareService(),
+  compatibilityService: createCompatibilityService(),
+  stateTransport: true,
+  stateSecret: process.env.NARI_AI_STATE_SECRET,
+  turnPlanSelectionFlow: true,
+  turnPlanRoutineFlow: true,
+  turnPlanProductInfoFlow: true,
+  turnPlanCompareFlow: true,
+  turnPlanCompatibilityFlow: true,
+  turnPlanBudgetFlow: true,
+  productResolver,
 });
 const allowRequest = createRateLimiter({ windowMs: AI_LIMITS.rateWindowMs, maxRequests: AI_LIMITS.rateMaxRequests });
 
@@ -33,8 +46,9 @@ router.post('/adviser', async (req, res) => {
   const key = String(req.ip || req.socket?.remoteAddress || 'unknown');
   if (!allowRequest(key)) return res.status(429).json({ success: false, code: 'AI_RATE_LIMITED', error: 'Demasiadas solicitudes. Inténtalo de nuevo más tarde.' });
   try {
-    const data = await service.advise(req.body);
-    return res.json({ success: true, data });
+    const result = await service.advise(req.body);
+    const { conversationState, ...data } = result;
+    return res.json({ success: true, data, conversationState });
   } catch (error) {
     if (error instanceof AIServiceError) return res.status(error.status).json({ success: false, code: error.code, error: error.message });
     console.error('AI adviser request failed', { category: 'AI_INTERNAL_ERROR' });

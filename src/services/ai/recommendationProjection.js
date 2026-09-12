@@ -22,6 +22,7 @@ const toPublicRecommendationProduct = (product = {}) => ({
   price: product.price ?? null,
   image: primaryImage(product.images),
   slug: product.slug,
+  routineStep: product.routineStep ?? null,
 });
 
 const toPublicRecommendations = ({ selectedProducts = [], reasons = [] } = {}) => {

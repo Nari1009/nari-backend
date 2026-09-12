@@ -12,9 +12,11 @@ const CANDIDATE_PRODUCT_SELECT = `
     AND stock > 0`;
 
 const createCandidateRepository = ({ query } = {}) => ({
-  async findEligibleProducts() {
+  async findEligibleProducts({ excludeProductIds = [] } = {}) {
     const execute = query || ((sql, params) => require('../../../db/init').all(sql, params));
-    return execute(CANDIDATE_PRODUCT_SELECT);
+    const ids = [...new Set(excludeProductIds.map((id) => String(id)))];
+    if (!ids.length) return execute(CANDIDATE_PRODUCT_SELECT);
+    return execute(`${CANDIDATE_PRODUCT_SELECT}\n    AND id NOT IN (${ids.map(() => '?').join(',')})`, ids);
   },
 });
 
