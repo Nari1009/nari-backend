@@ -2,7 +2,7 @@ const assert = require('node:assert/strict');
 const test = require('node:test');
 const { createAIService } = require('../src/services/ai/aiService');
 const { AIServiceError } = require('../src/services/ai/errors');
-const { createOpenAIProvider } = require('../src/services/ai/providers/openaiProvider');
+const { createOpenAIProvider, resolveProviderTimeout } = require('../src/services/ai/providers/openaiProvider');
 
 const profile = (overrides = {}) => ({
   skinType: 'DRY',
@@ -212,4 +212,11 @@ test('OpenAI adapter normalizes structured JSON and uses a bounded timeout witho
 test('OpenAI adapter is disabled without explicit DEV enablement or a key', async () => {
   const provider = createOpenAIProvider({ enabled: false, apiKey: 'test-only-key', fetchImpl: async () => { throw new Error('network must not be called'); } });
   await assert.rejects(() => provider.interpretConversation({ message: 'x', history: [] }), (error) => error.code === 'AI_UNAVAILABLE');
+});
+
+test('OpenAI provider timeout accepts a bounded DEV configuration and defaults safely', () => {
+  assert.equal(resolveProviderTimeout('15000'), 15000);
+  assert.equal(resolveProviderTimeout('30000'), 30000);
+  assert.equal(resolveProviderTimeout('8000'), 20000);
+  assert.equal(resolveProviderTimeout('not-a-number'), 20000);
 });

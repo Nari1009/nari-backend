@@ -164,6 +164,16 @@ const PRODUCT_INFO_FORMAT = {
   },
 };
 
+const DEFAULT_PROVIDER_TIMEOUT_MS = 20_000;
+const MIN_PROVIDER_TIMEOUT_MS = 15_000;
+const MAX_PROVIDER_TIMEOUT_MS = 30_000;
+const resolveProviderTimeout = (value) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed >= MIN_PROVIDER_TIMEOUT_MS && parsed <= MAX_PROVIDER_TIMEOUT_MS
+    ? parsed
+    : DEFAULT_PROVIDER_TIMEOUT_MS;
+};
+
 const SYSTEM_INSTRUCTIONS = [
   'Eres el intérprete cosmético de NARI. Solo atiendes NARI, skincare, rutinas cosméticas, productos de NARI y educación cosmética general.',
   'Si la solicitud no pertenece a ese ámbito, devuelve scope OUT_OF_SCOPE, intent UNKNOWN, mode ANSWER y un breve mensaje de redirección; no respondas la pregunta ajena.',
@@ -208,7 +218,7 @@ const ROUTINE_SYSTEM_INSTRUCTIONS = [
   'Respeta los pasos obligatorios y no añadas pasos fuera del plan. No reveles cadena de pensamiento.',
 ].join(' ');
 
-const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = process.env.OPENAI_MODEL || 'gpt-5-mini', enabled = process.env.OPENAI_ENABLED === 'true', fetchImpl = global.fetch, timeoutMs = AI_LIMITS.providerTimeoutMs, maxOutputTokens = AI_LIMITS.providerMaxOutputTokens } = {}) => {
+const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = process.env.OPENAI_MODEL || 'gpt-5-mini', enabled = process.env.OPENAI_ENABLED === 'true', fetchImpl = global.fetch, timeoutMs = resolveProviderTimeout(process.env.OPENAI_TIMEOUT_MS), maxOutputTokens = AI_LIMITS.providerMaxOutputTokens } = {}) => {
   const callModel = async (messages, textFormat = { type: 'json_object' }) => {
     if (!enabled || !apiKey || typeof fetchImpl !== 'function') throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está configurado.', 503);
     const controller = new AbortController();
@@ -287,4 +297,4 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
   };
 };
 
-module.exports = { createOpenAIProvider, SYSTEM_INSTRUCTIONS, REASONING_SYSTEM_INSTRUCTIONS, ROUTINE_SYSTEM_INSTRUCTIONS };
+module.exports = { createOpenAIProvider, resolveProviderTimeout, SYSTEM_INSTRUCTIONS, REASONING_SYSTEM_INSTRUCTIONS, ROUTINE_SYSTEM_INSTRUCTIONS };
