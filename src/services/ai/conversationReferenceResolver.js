@@ -32,7 +32,7 @@ const createConversationReferenceResolver = ({ productResolver } = {}) => {
     if (externalLabelMatches.length) matches = externalLabelMatches;
     else if (/\bprimero\b/.test(normalized)) matches = artifacts.slice(0, 1);
     else if (/\bsegundo\b/.test(normalized)) matches = artifacts.slice(1, 2);
-    else if (/\b(dos|ambos|entre estos)\b/.test(normalized)) matches = artifacts.slice(0, 2);
+    else if (/\b(dos|ambos|ambas|entre estos|estos|estas|esos|esas|todos|todas)\b/.test(normalized)) matches = artifacts;
     else {
       const step = STEP_ALIASES[normalized];
       if (step) matches = artifacts.filter((item) => item.routineStep === step);

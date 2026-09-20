@@ -464,7 +464,11 @@ const createCompareTurnPlanFlow = ({ provider, compareService, productResolver }
       profileDelta: profileDeltaFromValidatedResult(previousState.profile, interpretation.profile),
     });
     const effectiveInterpretation = { ...interpretation, profile: effectiveState.profile };
-    const focus = effectiveState.artifacts.recentProductReferences || [];
+    const focus = [
+      ...(effectiveState.artifacts.recentProductReferences || []),
+      ...(effectiveState.artifacts.recentRoutine || []),
+      ...(effectiveState.artifacts.recentRecommendations || []),
+    ].filter((item, index, all) => all.findIndex((candidate) => String(candidate.productId) === String(item.productId)) === index).slice(0, 8);
     const referencePhrases = interpretation.referencePhrases?.length
       ? interpretation.referencePhrases
       : interpretation.productReferences?.length
