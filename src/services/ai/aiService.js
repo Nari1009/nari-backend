@@ -220,12 +220,17 @@ const createProductSelectionTurnPlanFlow = ({ provider, candidateService, finalP
       if (error instanceof AIServiceError) throw error;
       throw new AIServiceError('TURNPLAN_EXECUTION_FAILED', 'No pude resolver la referencia del producto de forma segura.', 502);
     }
+    // A broad alternative request has no concrete reference to resolve. The
+    // structured empty reference set lets the TurnPlan derive exclusions from
+    // signed artifacts. Concrete unresolved/ambiguous references still stop
+    // the flow so the Backend never guesses Product identity.
+    const hasConcreteReference = interpretation.referencePhrases?.length > 0;
     if (resolution.status === 'AMBIGUOUS') {
       const plan = compileTurnPlan({ interpretation, state: preExecutionState, message: request.message, resolution });
       turnPlanDiagnostics('reference-ambiguous', plan);
       return safeSelectionResponse({ interpretation: effectiveInterpretation, mode: 'FOLLOW_UP', message: 'No pude distinguir con seguridad el producto al que te refieres. ¿Puedes indicarme cuál de los productos quieres usar como referencia?' });
     }
-    if (resolution.unresolvedPhrases?.length) {
+    if (hasConcreteReference && resolution.unresolvedPhrases?.length) {
       const plan = compileTurnPlan({ interpretation, state: preExecutionState, message: request.message, resolution });
       turnPlanDiagnostics('reference-not-found', plan);
       return safeSelectionResponse({ interpretation: effectiveInterpretation, mode: 'FOLLOW_UP', message: 'No pude identificar con suficiente seguridad el producto al que te refieres. ¿Puedes decirme su nombre o indicar el paso de rutina?' });
