@@ -167,3 +167,9 @@
 - The original Admin R10 release checkout/commit relationship is not fully recoverable from the safe audit checkout.
 - Current PROD state beyond previously reported release outcomes was not re-queried for this documentation task.
 - A possible R11B2.7 discussion occurred outside the recoverable Codex execution history and is not an established phase.
+
+### R11 — Pause and Preserve (2026-09-20)
+
+- **What happened:** Paused Nari AI development to prioritize the e-commerce store launch. Preserved the local Conversational Agent Proof in DEV code with `search_catalog`, `get_product_information`, bounded tool execution, signed transient state and canonical Product grounding.
+- **Verification:** 231/231 Backend tests and 7 pilot tests passed. No database, Client or PROD changes were made.
+- **Release state:** `NARI_AI_AGENT_ENABLED` defaults to `false`; Render DEV configuration and real-provider smoke QA are pending. R11 remains PAUSED / DEV ONLY, R11F is NOT STARTED, and Nari AI is not approved for PROD.

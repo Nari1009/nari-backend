@@ -13,6 +13,7 @@ const { createCatalogDiscoveryService } = require('../services/ai/catalogDiscove
 const { createProductInfoService } = require('../services/ai/productInfoService');
 const { createCompareService } = require('../services/ai/compareService');
 const { createCompatibilityService } = require('../services/ai/compatibilityService');
+const { createAgentToolFacade } = require('../services/ai/agentTools');
 
 const router = express.Router();
 const candidateService = createCandidateService();
@@ -21,6 +22,7 @@ const productResolver = createProductResolver();
 const point10Service = createPoint10Service({ resolver: productResolver, candidateService, finalProductRepository });
 const catalogDiscoveryService = createCatalogDiscoveryService({ repository: createCatalogDiscoveryRepository() });
 const productInfoService = createProductInfoService({ resolver: productResolver, finalProductRepository });
+const agentToolFacade = createAgentToolFacade({ candidateService, catalogDiscoveryService, productResolver });
 const service = createAIService({
   candidateService,
   finalProductRepository,
@@ -39,6 +41,8 @@ const service = createAIService({
   turnPlanCompatibilityFlow: true,
   turnPlanBudgetFlow: true,
   productResolver,
+  agentEnabled: process.env.NARI_AI_AGENT_ENABLED === 'true',
+  agentToolFacade,
 });
 const allowRequest = createRateLimiter({ windowMs: AI_LIMITS.rateWindowMs, maxRequests: AI_LIMITS.rateMaxRequests });
 

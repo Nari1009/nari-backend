@@ -164,6 +164,64 @@ const PRODUCT_INFO_FORMAT = {
   },
 };
 
+const AGENT_PROFILE_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    skinType: { anyOf: [{ type: 'string', enum: BASE_SKIN_TYPES }, { type: 'null' }] },
+    conditions: nullableEnumList(SKIN_CONDITIONS),
+    targets: nullableEnumList(CONCERN_GOALS),
+    budget: nullableString(200),
+    routinePreference: nullableString(200),
+    knownProducts: { type: 'array', items: { type: 'string', maxLength: 160 }, maxItems: 20 },
+    unresolvedOwnedProducts: { type: 'array', items: { type: 'string', maxLength: 160 }, maxItems: 20 },
+    ownedRoutineSteps: { type: 'array', items: { type: 'string', enum: ROUTINE_STEPS }, maxItems: ROUTINE_STEPS.length },
+  },
+  required: ['skinType', 'conditions', 'targets', 'budget', 'routinePreference', 'knownProducts', 'unresolvedOwnedProducts', 'ownedRoutineSteps'],
+};
+
+const AGENT_FINAL_FORMAT = {
+  type: 'json_schema',
+  name: 'nari_agent_response',
+  strict: true,
+  schema: {
+    type: 'object',
+    additionalProperties: false,
+    properties: {
+      mode: { type: 'string', enum: AI_MODES },
+      profile: AGENT_PROFILE_SCHEMA,
+      updatedProfileFields: { type: 'array', items: { type: 'string', enum: ['skinType', 'conditions', 'targets', 'budget', 'routinePreference'] }, maxItems: 5 },
+      segments: {
+        type: 'array', maxItems: 8,
+        items: {
+          type: 'object', additionalProperties: false,
+          properties: {
+            kind: { type: 'string', enum: ['GENERAL', 'PRODUCT_FACT'] },
+            productId: { anyOf: [{ type: 'string', maxLength: 120 }, { type: 'null' }] },
+            evidenceKeys: { type: 'array', items: { type: 'string', enum: ['productId', 'name', 'brand', 'routineStep', 'sizeLabel', 'suitableSkinTypes', 'suitableConditions', 'targets', 'availability', 'price'] }, maxItems: 10 },
+            text: { type: 'string', minLength: 1, maxLength: AI_LIMITS.responseMessage },
+          },
+          required: ['kind', 'productId', 'evidenceKeys', 'text'],
+        },
+      },
+      selectedProductIds: { type: 'array', items: { type: 'string', maxLength: 120 }, maxItems: 3 },
+    },
+    required: ['mode', 'profile', 'updatedProfileFields', 'segments', 'selectedProductIds'],
+  },
+};
+
+const AGENT_SYSTEM_INSTRUCTIONS = [
+  'Eres Nari, una asesora cosmética conversacional en español.',
+  'Conversa naturalmente y usa las herramientas únicamente cuando necesites Products reales de NARI.',
+  'Nunca inventes Products, IDs, precios, stock, imágenes, slugs ni hechos Product-específicos.',
+  'Para recomendar o explorar Products usa search_catalog. Para explicar Products ya identificados usa get_product_information.',
+  'Las referencias como el segundo, ese, esos u otros se resuelven usando el contexto y los resultados de herramientas; no pidas nombres si la referencia es clara.',
+  'Si una persona responde una pregunta que tú hiciste, continúa la conversación con ese contexto.',
+  'La educación general puede aparecer en segmentos GENERAL. Los hechos de un Product deben aparecer únicamente en PRODUCT_FACT y citar evidenceKeys presentes en la herramienta.',
+  'No conviertas NULL o listas vacías de metadata en afirmaciones positivas. No diagnostiques, no prescribas y no aconsejes cambiar medicamentos.',
+  'Devuelve únicamente el JSON solicitado. Usa updatedProfileFields solo para datos establecidos en este turno; conserva el resto del perfil recibido.',
+].join(' ');
+
 const DEFAULT_PROVIDER_TIMEOUT_MS = 20_000;
 const MIN_PROVIDER_TIMEOUT_MS = 15_000;
 const MAX_PROVIDER_TIMEOUT_MS = 30_000;
@@ -297,7 +355,55 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
         { role: 'user', content: JSON.stringify({ message: request.message, history: request.history, interpretation, turnPlan, conversationState, evidence: evidence || products, facts }) },
       ]);
     },
+    async runAgentTurn({ message, history = [], conversationState, tools = [], executeTool, maxToolCalls = 2 }) {
+      if (typeof executeTool !== 'function') throw new AIServiceError('AGENT_TOOL_INVALID', 'El ejecutor de herramientas no está configurado.', 503);
+      const initialInput = [
+        { role: 'system', content: AGENT_SYSTEM_INSTRUCTIONS },
+        ...history.map((item) => ({ role: item.role, content: item.content })),
+        { role: 'user', content: JSON.stringify({ conversationState: { profile: conversationState?.profile || null, ownership: conversationState?.ownership || null, focus: conversationState?.artifacts?.recentProductReferences || [] } }) },
+        { role: 'user', content: message },
+      ];
+      const toolResults = [];
+      let toolCallCount = 0;
+      let currentInput = initialInput;
+      while (true) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const response = await fetchImpl('https://api.openai.com/v1/responses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+            body: JSON.stringify({ model, store: false, max_output_tokens: maxOutputTokens, input: currentInput, tools: tools.map((tool) => ({ ...tool, strict: true })), text: { format: AGENT_FINAL_FORMAT } }),
+            signal: controller.signal,
+          });
+          if (!response.ok) throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
+          const body = await response.json();
+          const calls = Array.isArray(body.output) ? body.output.filter((item) => item?.type === 'function_call') : [];
+          if (!calls.length) {
+            const content = extractOutputText(body);
+            if (typeof content !== 'string') throw new AIServiceError('INVALID_AI_RESPONSE', 'El agente no devolvió una respuesta final.', 502);
+            try { return { output: JSON.parse(content), toolResults, toolCallCount }; } catch { throw new AIServiceError('INVALID_AI_RESPONSE', 'El agente devolvió un formato inválido.', 502); }
+          }
+          if (toolCallCount + calls.length > maxToolCalls) throw new AIServiceError('AGENT_TOOL_LIMIT', 'El agente superó el límite de herramientas permitido.', 502);
+          currentInput = [...currentInput, ...(body.output || [])];
+          for (const call of calls) {
+            let args;
+            try { args = JSON.parse(call.arguments || '{}'); } catch { throw new AIServiceError('AGENT_TOOL_INVALID', 'Los argumentos de la herramienta no son válidos.', 502); }
+            const toolResult = await executeTool(call.name, args);
+            toolCallCount += 1;
+            toolResults.push(toolResult);
+            currentInput.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(toolResult) });
+          }
+        } catch (error) {
+          if (error.name === 'AbortError') throw new AIServiceError('AI_TIMEOUT', 'El servicio AI tardó demasiado.', 504);
+          if (error instanceof AIServiceError) throw error;
+          throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+    },
   };
 };
 
-module.exports = { createOpenAIProvider, resolveProviderTimeout, SYSTEM_INSTRUCTIONS, REASONING_SYSTEM_INSTRUCTIONS, ROUTINE_SYSTEM_INSTRUCTIONS };
+module.exports = { createOpenAIProvider, resolveProviderTimeout, SYSTEM_INSTRUCTIONS, REASONING_SYSTEM_INSTRUCTIONS, ROUTINE_SYSTEM_INSTRUCTIONS, AGENT_FINAL_FORMAT };

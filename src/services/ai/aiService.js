@@ -18,6 +18,7 @@ const {
 } = require('./conversationState');
 const { compileTurnPlan, relationFallback } = require('./turnPlan');
 const { createConversationReferenceResolver } = require('./conversationReferenceResolver');
+const { createAgentService } = require('./agentService');
 
 // These intents are owned by the signed-state TurnPlan router whenever the
 // live transport is enabled.  A missing flow is a configuration defect, not
@@ -626,7 +627,7 @@ const createCatalogDiscoveryTurnPlanFlow = ({ catalogDiscoveryService }) => asyn
   return { ...publicResult, profile: effectiveProfile };
 };
 
-const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null, catalogDiscoveryService = null, productInfoService = null, compareService = null, compatibilityService = null, stateTransport = false, stateSecret = undefined, turnPlanSelectionFlow = false, turnPlanRoutineFlow = false, turnPlanProductInfoFlow = false, turnPlanCompareFlow = false, turnPlanCompatibilityFlow = false, turnPlanBudgetFlow = false, productResolver = null } = {}) => {
+const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null, catalogDiscoveryService = null, productInfoService = null, compareService = null, compatibilityService = null, stateTransport = false, stateSecret = undefined, turnPlanSelectionFlow = false, turnPlanRoutineFlow = false, turnPlanProductInfoFlow = false, turnPlanCompareFlow = false, turnPlanCompatibilityFlow = false, turnPlanBudgetFlow = false, productResolver = null, agentEnabled = false, agentToolFacade = null } = {}) => {
   const adviseLegacy = async (input, prepared = null) => {
     const request = validateRequest(input);
     // The signed transport envelope is Backend state, never provider input.
@@ -764,6 +765,9 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
   const catalogDiscoveryTurnPlan = catalogDiscoveryService
     ? createCatalogDiscoveryTurnPlanFlow({ catalogDiscoveryService })
     : null;
+  const agentTurn = agentEnabled && agentToolFacade
+    ? createAgentService({ provider, toolFacade: agentToolFacade, finalProductRepository })
+    : null;
 
   return {
     async advise(input) {
@@ -779,6 +783,9 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
       let result;
       if (safetyResponse) {
         result = { ...safetyResponse, recommendations: [] };
+      } else if (agentEnabled) {
+        if (!agentTurn) throw new AIServiceError('AGENT_NOT_CONFIGURED', 'El agente AI no está configurado.', 503);
+        result = await agentTurn.advise({ request, state: previousState });
       } else {
         const safeContext = await stateReferenceContext(previousState, finalProductRepository);
         let interpretation;
@@ -815,7 +822,10 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
           result = await adviseLegacy(input, { interpretation, safeContext });
         }
       }
-      const { __ownershipDelta, __missingEvidence, __referenceArtifacts, ...publicResult } = result;
+      const { __ownershipDelta, __missingEvidence, __referenceArtifacts, __agentProfileDelta, __agentToolCalls, ...publicResult } = result;
+      if (process.env.AI_TURNPLAN_DEBUG === 'true' && __agentToolCalls !== undefined) {
+        console.info('AI agent diagnostic', { flow: 'AGENT_PILOT', toolCallCount: __agentToolCalls, finalMode: publicResult.mode, referenceCount: __referenceArtifacts?.length || 0 });
+      }
       const nextState = reduceConversationState(previousState, {
         profileDelta: profileDeltaFromValidatedResult(previousState.profile, publicResult.profile),
         ownershipDelta: __ownershipDelta || ownershipEvidenceFromValidatedResult(publicResult.profile),

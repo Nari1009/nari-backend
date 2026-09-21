@@ -121,3 +121,14 @@ After an approved phase that actually changes project state, evaluate updating `
 ## ANTI-DRIFT RULES
 
 Code/schema/Git wins for implementation truth. `DECISIONS.md` records human decisions. `PROJECT_STATE.md` describes current state. Checkpoints are historical snapshots. Never store secrets or claim unverified PROD state. A prompt is not project history until executed and verified. Report documentation/repository discrepancies instead of silently resolving them.
+
+## R11 PAUSE — DEV ONLY (2026-09-20)
+
+- R11 is paused because the e-commerce store launch is the current product priority. This is a product-priority pause, not an architectural failure.
+- The local Conversational Agent Proof is preserved in DEV code and tested, but is not enabled, deployed, or approved for PROD.
+- The proof uses `search_catalog`, `get_product_information`, a bounded agent loop, canonical Product/card validation, structured Product grounding and the existing signed ephemeral ConversationState.
+- `NARI_AI_AGENT_ENABLED` defaults to `false`. Render DEV has not been configured for the pilot and real-provider DEV smoke QA has not been run.
+- The future direction remains OpenAI as conversational orchestrator, Backend deterministic tools as catalog/commercial authority, and PostgreSQL as canonical Product truth.
+- Known limitations: only the two proof tools exist; routine, compare, compatibility and budget remain on the existing architecture; ProductKnowledgeRetrieval, web retrieval and embeddings are not implemented.
+- R11F remains **NOT STARTED**. Nari AI is **NOT APPROVED FOR PROD**. Non-AI store changes may proceed independently; AI activation requires a separate explicit production decision.
+- Resume point: enable the flag only in DEV, deploy the pilot, run the bounded real-provider smoke conversation, and evaluate the architecture before further conversational fixes.

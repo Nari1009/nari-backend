@@ -400,3 +400,16 @@ SUMMARY:
 - No DB changes, web retrieval, ProductKnowledgeRetrieval, embeddings or permanent conversation storage.
 
 STATE AFTER: R11E remains IN REVIEW — DEV QA pending live DEV verification. R11F remains NOT STARTED. PROD was untouched.
+
+## 2026-09-20 — R11 Paused / Conversational Agent Proof Preserved
+
+TYPE: R11 PAUSE / DEV-ONLY PRESERVATION
+
+SUMMARY:
+
+- Preserved the local Conversational Agent Proof with `search_catalog` and `get_product_information`.
+- Kept the bounded agent loop, signed ephemeral ConversationState, canonical Product/card validation and structured Product grounding.
+- Kept `NARI_AI_AGENT_ENABLED=false` as the default. No Render configuration, deployment, Client change, database change or PROD access was performed.
+- Documented the product-priority pause, pending real-provider DEV QA, known limitations and explicit PROD isolation rule.
+
+STATE AFTER: R11 is PAUSED / DEV ONLY. R11E is preserved locally; R11F is NOT STARTED. Nari AI is not approved for PROD. Non-AI store changes may proceed independently.

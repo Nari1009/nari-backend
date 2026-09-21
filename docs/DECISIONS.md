@@ -332,3 +332,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Prevent duplicated intent/action decisions and preserve one Backend-owned execution contract across Product selection, routines, Product information, comparison, compatibility, budget and discovery.
 - **State/security:** ConversationState is bounded, HMAC-authenticated with `NARI_AI_STATE_SECRET`, transient and per-tab. It contains semantic references only and no commercial fields or permanent history.
 - **Status:** IMPLEMENTED LOCALLY / IN REVIEW — DEV QA
+
+## DEC-038 — Pause and Preserve the Conversational Agent Proof
+
+- **Date:** 2026-09-20
+- **Area:** R11 pause / DEV release boundary
+- **Decision:** Preserve the local proof of OpenAI conversational orchestration with `search_catalog` and `get_product_information`, bounded tool calls, signed transient state, canonical Product/card validation and structured Product grounding. Keep `NARI_AI_AGENT_ENABLED` defaulted to `false`.
+- **Rationale:** Store launch work has priority. The pause preserves a recoverable architecture experiment without enabling or deploying unfinished AI behavior.
+- **Release boundary:** Render DEV configuration and real-provider DEV smoke QA are still pending. Nari AI is not approved for PROD. Non-AI store changes may proceed independently, but no AI production activation may occur without a separate explicit decision.
+- **Status:** PAUSED / DEV ONLY; R11F NOT STARTED.

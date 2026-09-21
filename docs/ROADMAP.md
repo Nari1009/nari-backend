@@ -232,3 +232,11 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 - **State:** HMAC-authenticated, bounded, in-memory/per-tab only; no permanent history, database conversation storage, embeddings or web/Product knowledge retrieval.
 - **Validation:** Backend suite 210 passing; syntax, diff-check and secret scan passing. Live DEV replay remains required.
 - **Boundary:** Canonical PostgreSQL Product data remains authoritative. R11F is not started and PROD remains untouched.
+
+### R11 — Paused / DEV Only
+
+- Store launch is prioritized. R11 development is paused without changing the approved architecture.
+- The Conversational Agent Proof is implemented locally and tested behind `NARI_AI_AGENT_ENABLED=false` by default.
+- It has not received Render DEV configuration, real-provider DEV smoke QA, or production approval.
+- Resume with DEV-only enablement and the bounded conversation: start skincare, report oily skin, request recommendations, ask about the second, ask for others, then ask about the first.
+- Non-AI store work may move independently. Nari AI must remain disabled/not exposed in PROD until explicitly approved. R11F remains **NOT STARTED**.
