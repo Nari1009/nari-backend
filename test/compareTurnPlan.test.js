@@ -50,6 +50,36 @@ test('comparison follow-up reuses the same pair from signed Product focus', asyn
   assert.deepEqual(second.comparison.productIds, ['p-a', 'p-b']);
 });
 
+test('profile clarification continues the active comparison pair and recomputes fit', async () => {
+  const rows = [product('p-a', { suitableSkinTypes: null }), product('p-b', { suitableSkinTypes: ['DRY', 'NORMAL', 'COMBINATION'] })];
+  const first = await createHarness({ catalog: rows }).service.advise({ message: 'p-a vs p-b' });
+  let receivedFacts;
+  const provider = {
+    async interpretConversation() { return { intent: 'COMPARE', mode: 'ANSWER', nextAction: 'ANSWER', scope: 'IN_SCOPE', requestedRoutineStep: null, message: 'Continuaré con la comparación.', profile: { ...profile, skinType: 'OILY' }, productReferences: [], requestedSteps: [], relationToPrevious: 'FOLLOW_UP', referencePhrases: [] }; },
+    async reasonComparison(input) { receivedFacts = input.facts; return { mode: 'ANSWER', message: 'Con la información confirmada no puedo declarar uno mejor.', profile: { ...profile, skinType: 'OILY' }, comparison: { productIds: input.evidence.map((item) => item.productId), summary: 'La información disponible no permite una preferencia concluyente.', differences: ['El respaldo de tipo de piel no es suficiente para establecer un ganador.'], winnerProductId: null } }; },
+  };
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const resolver = { async resolveReferences(refs) { const products = refs.map((ref) => byId.get(String(ref))).filter(Boolean); return products.length === refs.length ? { status: 'RESOLVED', products } : { status: 'NOT_FOUND', products: [] }; } };
+  const repo = { async findCurrentEligibleProducts(ids) { return rows.filter((row) => ids.includes(row.id)); } };
+  const service = createAIService({ stateTransport: true, stateSecret: SECRET, turnPlanCompareFlow: true, provider, productResolver: resolver, compareService: createCompareService(), finalProductRepository: repo });
+  const second = await service.advise({ message: 'Mi piel tiende más a grasa.', conversationState: first.conversationState });
+
+  assert.equal(second.intent, 'COMPARE');
+  assert.deepEqual(second.comparison.productIds, ['p-a', 'p-b']);
+  assert.equal(receivedFacts.fit[0].overall, 'INSUFFICIENT_EVIDENCE');
+  assert.equal(receivedFacts.fit[1].overall, 'CONFLICT');
+  assert.equal(receivedFacts.outcome, 'INSUFFICIENT_EVIDENCE');
+});
+
+test('contextual continuation recovers exactly the validated comparison pair', async () => {
+  const rows = [product('p-a'), product('p-b')];
+  const first = await createHarness({ catalog: rows }).service.advise({ message: 'p-a vs p-b' });
+  const second = await createHarness({ catalog: rows, referencePhrases: [] }).service.advise({ message: 'De los que te pregunté antes.', conversationState: first.conversationState });
+
+  assert.equal(second.intent, 'COMPARE');
+  assert.deepEqual(second.comparison.productIds, ['p-a', 'p-b']);
+});
+
 test('comparison permits unavailable Products but does not create a purchase card for them', async () => {
   const rows = [product('p-a', { stock: 0 }), product('p-b')];
   const result = await createHarness({ catalog: rows }).service.advise({ message: 'p-a vs p-b' });
@@ -85,5 +115,17 @@ test('ambiguous or incomplete comparison references return a follow-up without g
 test('provider cannot introduce a third Product into a comparison', async () => {
   const rows = [product('p-a'), product('p-b')];
   const providerResult = { mode: 'ANSWER', message: 'Comparación.', profile, comparison: { productIds: ['p-a', 'p-b', 'p-c'], summary: 'Tres.', differences: [], winnerProductId: null } };
+  await assert.rejects(() => createHarness({ catalog: rows, providerResult }).service.advise({ message: 'p-a vs p-b' }), (error) => error.code === 'INVALID_AI_RESPONSE');
+});
+
+test('unsupported texture claims are rejected from comparison output', async () => {
+  const rows = [product('p-a'), product('p-b')];
+  const providerResult = { mode: 'ANSWER', message: 'El primero es más ligero.', profile, comparison: { productIds: ['p-a', 'p-b'], summary: 'El primero tiene una textura más ligera.', differences: ['Se siente más liviano.'], winnerProductId: null } };
+  await assert.rejects(() => createHarness({ catalog: rows, providerResult }).service.advise({ message: 'p-a vs p-b' }), (error) => error.code === 'INVALID_AI_RESPONSE');
+});
+
+test('unsupported ingredient claims are rejected from comparison output', async () => {
+  const rows = [product('p-a'), product('p-b')];
+  const providerResult = { mode: 'ANSWER', message: 'El primero contiene un activo calmante.', profile, comparison: { productIds: ['p-a', 'p-b'], summary: 'No hay una preferencia concluyente.', differences: ['La fórmula del primero combina mejor sus ingredientes.'], winnerProductId: null } };
   await assert.rejects(() => createHarness({ catalog: rows, providerResult }).service.advise({ message: 'p-a vs p-b' }), (error) => error.code === 'INVALID_AI_RESPONSE');
 });

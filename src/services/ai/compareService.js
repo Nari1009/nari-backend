@@ -58,7 +58,7 @@ const comparisonFacts = (products, profile = {}) => {
   return { sameRoutineStep, routineSteps: evidence.map((item) => item.routineStep), fit: evidence.map((item) => item.fit), availability: evidence.map((item) => item.availability), outcome, evidence };
 };
 
-const unsupportedComparisonClaim = /(\d+\s*%|concentraci[oó]n|inci|ingredientes?\s+(principales?|activos?)|textura|catalogRole|suitableSkinTypes|suitableConditions|routineStep|DEV_FIXTURE|\bstock\b|cura|reemplaza\s+(mi|el)\s+tratamiento)/i;
+const unsupportedComparisonClaim = /(\d+\s*%|concentraci[oó]n|inci|ingredientes?\s+(principales?|activos?)|textura|acabado|\bliger[ao]s?\b|\bric[ao]s?\b|\bpesad[ao]s?\b|\bcalmante\b|\bcalmar\b|\brepara(?:r|ci[oó]n)\b|catalogRole|suitableSkinTypes|suitableConditions|routineStep|DEV_FIXTURE|\bstock\b|cura|reemplaza\s+(mi|el)\s+tratamiento)/i;
 
 const assertComparisonMessage = (message) => {
   assertCustomerFacingMessage(message);
@@ -85,6 +85,8 @@ const createCompareService = () => ({
       if (!defensible) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI declaró una preferencia que no está respaldada por la evidencia.', 502);
     }
     const message = assertComparisonMessage(output.message);
+    const summary = assertComparisonMessage(output.comparison.summary);
+    const differences = output.comparison.differences.map(assertComparisonMessage);
     const publicProducts = resolvedProducts.map((product, index) => {
       const { fit, ...publicEvidence } = evidence[index];
       return publicEvidence;
@@ -95,7 +97,7 @@ const createCompareService = () => ({
       mode: output.mode,
       message,
       profile: conversationState?.profile || interpretation.profile,
-      comparison: { ...output.comparison, productIds: orderedIds, products: publicProducts },
+      comparison: { ...output.comparison, summary, differences, productIds: orderedIds, products: publicProducts },
       recommendations: winner && isRecommendationEligibleProduct(winner)
         ? toPublicRecommendations({ selectedProducts: [winner], reasons: [{ productId: winner.id, reason: 'La comparación muestra un ajuste canónico más claro para tu perfil.' }] })
         : [],
