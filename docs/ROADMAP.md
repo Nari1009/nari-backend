@@ -93,6 +93,14 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 - **What was not done:** AI provider, chat, recommendation engine, routine builder or conversation persistence.
 - **Result:** Current frontier is R11B2.6D.
 
+## R12 — WOMPI PAYMENT INTEGRATION
+
+- **Status:** IN_PROGRESS — DEV ONLY
+- **R12A:** COMPLETE as a read-only checkout/order/payment architecture audit.
+- **R12B:** COMPLETE — DEV. Independent `payments` and `payment_events` schema, canonical payment status transition matrix, idempotency foundation, Backend payment service and same-migration RLS/grant protections are implemented and verified. Supabase DEV final state is 24/24 RLS-enabled public tables, zero anon/authenticated table grants, zero public policies, zero FORCE RLS tables, zero payment rows and zero payment-event rows; Security Advisor is 0/0. No Wompi integration or commercial effects are active.
+- **R12C:** Proposed next stage: review the payment-attempt boundary and then design the Wompi sandbox adapter, without modifying Client/Admin or reserving stock until explicitly approved.
+- **Explicitly not done:** Wompi API calls, keys/configuration, webhook processing, stock reservation/release, Client checkout changes, Admin payment UI, PROD changes and R11 changes.
+
 ## R11A — Architecture and Product Audit
 
 - **Status:** AUDITED_ONLY
