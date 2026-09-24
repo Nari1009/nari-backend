@@ -173,3 +173,30 @@
 - **What happened:** Paused Nari AI development to prioritize the e-commerce store launch. Preserved the local Conversational Agent Proof in DEV code with `search_catalog`, `get_product_information`, bounded tool execution, signed transient state and canonical Product grounding.
 - **Verification:** 231/231 Backend tests and 7 pilot tests passed. No database, Client or PROD changes were made.
 - **Release state:** `NARI_AI_AGENT_ENABLED` defaults to `false`; Render DEV configuration and real-provider smoke QA are pending. R11 remains PAUSED / DEV ONLY, R11F is NOT STARTED, and Nari AI is not approved for PROD.
+
+## R12 — PAYMENT DOMAIN FOUNDATION
+
+### R12A — Current Payment Architecture Audit (2026-09-23)
+
+- Audited the Client cart/demo checkout, Backend PostgreSQL order creation and shipping authority, Admin order operations, inventory mutation behavior and existing generic payment webhook.
+- Confirmed there was no independent Payment entity, payment-event ledger or Wompi integration. The current demo order path recalculates prices server-side but creates the order and decrements stock before real payment confirmation.
+- No code, database, environment or PROD changes were made by the audit.
+
+### R12B — Payment Model and Idempotency Foundation (2026-09-23)
+
+- Added local DEV-only schema/service/test foundations for independent payment attempts and provider event deduplication.
+- Payment amounts are represented as positive integer COP minor units for future provider amount-in-cents compatibility.
+- No Wompi calls, webhook processing, stock reservation/release, order mutation, Client/Admin change, commit, push or PROD access. The R12B migrations were subsequently applied and verified in Supabase DEV.
+
+### Supabase DEV Security Hardening (2026-09-24)
+
+- Manual DEV-only remediation completed before continuing R12: 22/22 NARI public tables have RLS enabled, `anon` and `authenticated` table grants removed, zero public policies, and Security Advisor reports 0 errors / 0 warnings.
+- Functional verification passed for Client, customer login, Admin login, Admin Products, Admin Orders and Storage/product images.
+- The attempted default-privilege change for a Supabase-managed role was rejected and rolled back. Managed roles, `service_role`, Storage objects and PROD were not modified.
+- A reproducible repository migration records the 22-table baseline with a schema-count guard; every future private public-schema table must harden itself in its creation migration.
+
+### R12B Final DEV Verification (2026-09-24)
+
+- R12B is COMPLETE / DEV. Both payment-domain migrations were successfully applied and verified in Supabase DEV.
+- Final DEV state: 24 public tables, 24 RLS enabled, 0 RLS disabled, 0 `anon`/`authenticated` grants, 0 public policies, 0 FORCE RLS tables, 0 payment rows and 0 payment-event rows.
+- No Wompi integration, real payment activation, Wompi credentials, Wompi webhook, checkout change, stock change or R12C work exists. R11 remains PAUSED / DEV ONLY; R11F is NOT STARTED; PROD was not accessed.

@@ -341,3 +341,23 @@ Only decisions supported by available project instructions or code are recorded 
 - **Rationale:** Store launch work has priority. The pause preserves a recoverable architecture experiment without enabling or deploying unfinished AI behavior.
 - **Release boundary:** Render DEV configuration and real-provider DEV smoke QA are still pending. Nari AI is not approved for PROD. Non-AI store changes may proceed independently, but no AI production activation may occur without a separate explicit decision.
 - **Status:** PAUSED / DEV ONLY; R11F NOT STARTED.
+
+## DEC-039 — R12B Separates Payment State from Order Logistics
+
+- **Date:** 2026-09-23
+- **Area:** R12 payment domain foundation
+- **Decision:** Keep `orders.status` as the existing logistics/commercial lifecycle and introduce independent `payments` (one order to many attempts) plus `payment_events` for provider-event deduplication. Payment amounts are validated against the canonical Backend order total and currency is explicitly COP.
+- **Money invariant:** `payments.amount` is a positive `BIGINT` of COP minor units (centavos), compatible with the future provider `amount_in_cents` contract. Backend converts the canonical order total; Client is never authoritative.
+- **State model:** `CREATED → PENDING → APPROVED|DECLINED|VOIDED|ERROR`; `APPROVED → REFUNDED`. Regressions such as `APPROVED → PENDING` and `REFUNDED → APPROVED` are rejected.
+- **Boundary:** R12B adds schema, service validation and idempotency foundations only. It does not call a provider, process Wompi webhooks, reserve/release/decrement stock, alter orders, send payment emails, or change Client/Admin.
+- **Status:** COMPLETE — DEV ONLY. Migrations were successfully applied and verified in Supabase DEV; no commit or push was made before this finalization.
+
+## DEC-040 — NARI DEV Public Schema Hardening
+
+- **Date:** 2026-09-24
+- **Area:** Supabase DEV security / R12 prerequisite
+- **Decision:** NARI-owned public tables remain Backend-only. DEV hardening enables RLS on all 22 current NARI public tables, removes `anon` and `authenticated` table grants, creates no public policies, preserves `service_role` and does not use `FORCE ROW LEVEL SECURITY`.
+- **Rationale:** Client and Admin already use Backend HTTP; direct Supabase Data API table access is unnecessary. Backend PostgreSQL access remains authoritative through the existing role with `rolbypassrls = true`.
+- **Future rule:** Every new private public-schema migration, including future R12 payment tables, must enable RLS and revoke `anon`/`authenticated` in the same transaction. Default privileges are not relied upon because the managed-role change was not permitted.
+- **Verification:** Manual DEV SQL Editor remediation and functional smoke tests were reported PASS: Security Advisor 0 errors / 0 warnings; Client, customer login, Admin login, Products, Orders and Storage passed. PROD was not accessed.
+- **Final R12B verification:** DEV has 24 public tables, 24 RLS-enabled, 0 RLS-disabled, 0 `anon`/`authenticated` grants, 0 public policies, 0 FORCE RLS tables, 0 payment rows and 0 payment-event rows. The historical baseline remains scoped to its 22 pre-R12B tables; payment tables are hardened by their own creation migration.

@@ -413,3 +413,29 @@ SUMMARY:
 - Documented the product-priority pause, pending real-provider DEV QA, known limitations and explicit PROD isolation rule.
 
 STATE AFTER: R11 is PAUSED / DEV ONLY. R11E is preserved locally; R11F is NOT STARTED. Nari AI is not approved for PROD. Non-AI store changes may proceed independently.
+
+## 2026-09-23 — R12B Payment Domain Foundation
+
+TYPE: BACKEND DEV-ONLY PAYMENT DOMAIN
+
+SUMMARY:
+
+- Added independent `payments` and `payment_events` PostgreSQL migration definitions.
+- Added one canonical payment status vocabulary and explicit monotonic transitions.
+- Added a Backend payment service for canonical order-amount validation, multiple attempts per order, persistent idempotency lookup, provider transaction lookup and event deduplication by provider event ID.
+- Represented payment amounts as positive integer COP minor units, compatible with a future provider `amount_in_cents` contract.
+- Added network-free domain/migration regression coverage.
+
+BOUNDARIES: Wompi is not integrated; no keys/configuration, provider calls, webhook processing, stock reservation/release, commercial effects, Client/Admin changes or PROD access were performed. Supabase DEV hardening and R12B migrations were completed and verified at 24/24 RLS-enabled public tables, zero RLS-disabled tables, zero anon/authenticated table grants, zero public policies, zero FORCE RLS tables, zero payment rows, zero payment-event rows and Security Advisor 0/0. R12A is COMPLETE; R12B is COMPLETE / DEV; R12C is NOT STARTED.
+
+## 2026-09-24 — Supabase DEV Security Hardening
+
+TYPE: DEV DATABASE SECURITY REMEDIATION
+
+SUMMARY:
+
+- Recorded the verified manual DEV baseline: 22/22 NARI public tables protected by RLS, no `anon`/`authenticated` table grants and no public policies.
+- Preserved `service_role`, Storage, managed Supabase roles and direct Backend PostgreSQL access.
+- Added a guarded, reproducible baseline migration for future review. Private R12 tables independently apply RLS and grant revocation in their creation migration.
+
+STATE AFTER: DEV hardening is reported verified and functional. PROD was not accessed or modified; R11 remains PAUSED / DEV ONLY.

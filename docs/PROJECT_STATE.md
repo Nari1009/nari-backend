@@ -132,3 +132,12 @@ Code/schema/Git wins for implementation truth. `DECISIONS.md` records human deci
 - Known limitations: only the two proof tools exist; routine, compare, compatibility and budget remain on the existing architecture; ProductKnowledgeRetrieval, web retrieval and embeddings are not implemented.
 - R11F remains **NOT STARTED**. Nari AI is **NOT APPROVED FOR PROD**. Non-AI store changes may proceed independently; AI activation requires a separate explicit production decision.
 - Resume point: enable the flag only in DEV, deploy the pilot, run the bounded real-provider smoke conversation, and evaluate the architecture before further conversational fixes.
+
+## R12A/R12B — PAYMENT FOUNDATION (2026-09-23)
+
+- **R12A:** COMPLETE as a read-only audit. The current checkout is demo-only: the Client collects customer/shipping data and sends product IDs/quantities; the Backend recalculates catalog prices and shipping, creates orders and currently decrements stock at order creation. There is no independent Payment or Wompi integration.
+- **R12B:** COMPLETE — DEV. Added independent `payments` and `payment_events` migrations, canonical payment statuses/transitions, canonical-order amount validation, provider/idempotency lookup and event deduplication support. Both migrations were successfully applied and verified in Supabase DEV.
+- Payment amounts use positive integer COP minor units (`BIGINT`, future Wompi-compatible `amount_in_cents`), while the order total remains the canonical source converted by Backend.
+- Supabase DEV hardening was manually completed and functionally verified: 24 public tables have RLS enabled, 0 have RLS disabled, `anon`/`authenticated` table grants are 0, public policies are 0, FORCE RLS tables are 0, payment rows are 0 and payment-event rows are 0. Security Advisor reports 0 errors / 0 warnings. Existing order creation and legacy `/api/payments/webhook` behavior remain unchanged.
+- No Wompi calls, Wompi configuration, Client/Admin changes, stock reservation, stock release, payment webhook processing or commercial effects were added. The R12B payment migration independently enables RLS and revokes `anon`/`authenticated` in the same transaction.
+- **R12C:** Next proposed stage is review and approval of the checkout/payment-attempt boundary before any Wompi sandbox adapter or stock-reservation behavior is implemented.

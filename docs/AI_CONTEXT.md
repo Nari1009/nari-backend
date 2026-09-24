@@ -181,3 +181,13 @@ The store launch is now the priority, so R11 development is paused. The local Co
 The proof contains only `search_catalog` and `get_product_information`, a bounded agent loop, canonical Product/card validation, structured Product grounding and the existing HMAC-authenticated ephemeral ConversationState. Routine, compare, compatibility and budget actions remain on the existing architecture. ProductKnowledgeRetrieval, web retrieval, embeddings and permanent history are not implemented.
 
 When R11 resumes, enable the flag only in DEV, deploy and evaluate the bounded smoke conversation before further phrase-level fixes. PostgreSQL remains canonical Product truth, non-AI store releases may proceed independently, and Nari AI is not approved for PROD. R11F remains NOT STARTED.
+
+## R12A/R12B PAYMENT FOUNDATION — 2026-09-23
+
+R12A is complete as a read-only audit of the current demo checkout, order creation, inventory effects, shipping authority, Admin order operations and absence of a real payment entity/provider integration.
+
+R12B is complete in Backend DEV only. The new payment domain is independent from R11 and consists of `payments`, `payment_events`, canonical payment statuses/transitions, canonical-order amount validation and persistent provider/idempotency lookup. `payments.amount` is a positive integer of COP minor units (centavos), compatible with a future `amount_in_cents` provider contract. The migration stores hashes and identifiers only; it does not store provider payloads, card data, CVV or secrets.
+
+Supabase DEV hardening was manually completed and verified. The final DEV state has 24 public tables, 24 RLS-enabled, 0 RLS-disabled, 0 `anon`/`authenticated` table grants, 0 public policies, 0 FORCE RLS tables, 0 payment rows and 0 payment-event rows. Security Advisor reports 0 errors / 0 warnings. Client, customer login, Admin login, Products, Orders and Storage smoke tests passed. The repository records this baseline without touching managed Supabase roles.
+
+Wompi is not integrated, no Wompi keys or configuration were added, no webhook is processed, and no stock/payment commercial effect is connected. The R12B migrations were successfully applied and verified in Supabase DEV; they harden `payments` and `payment_events` in their creation transaction. R12C is not started; its proposed next step is review of the payment-attempt boundary before sandbox integration.
