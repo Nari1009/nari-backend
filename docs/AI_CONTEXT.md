@@ -190,4 +190,16 @@ R12B is complete in Backend DEV only. The new payment domain is independent from
 
 Supabase DEV hardening was manually completed and verified. The final DEV state has 24 public tables, 24 RLS-enabled, 0 RLS-disabled, 0 `anon`/`authenticated` table grants, 0 public policies, 0 FORCE RLS tables, 0 payment rows and 0 payment-event rows. Security Advisor reports 0 errors / 0 warnings. Client, customer login, Admin login, Products, Orders and Storage smoke tests passed. The repository records this baseline without touching managed Supabase roles.
 
-Wompi is not integrated, no Wompi keys or configuration were added, no webhook is processed, and no stock/payment commercial effect is connected. The R12B migrations were successfully applied and verified in Supabase DEV; they harden `payments` and `payment_events` in their creation transaction. R12C is not started; its proposed next step is review of the payment-attempt boundary before sandbox integration.
+Wompi is not integrated, no Wompi keys or configuration were added, no webhook is processed, and no stock/payment commercial effect is connected. The R12B migrations were successfully applied and verified in Supabase DEV; they harden `payments` and `payment_events` in their creation transaction. R12C reservation foundation is complete and verified in DEV, but is not connected to checkout.
+
+## R12C INVENTORY RESERVATION FOUNDATION — DEV ONLY
+
+R12C reservation foundation is COMPLETE / VERIFIED IN DEV. It adds `stock_reservations`, `stock_reservation_items`, canonical reservation statuses and transactional reserve/commit/release/expiration primitives. `products.stock` remains available-to-sell inventory: reserve decreases it, release/expiration restores it, and commit sale does not decrease it again. It is not connected to checkout.
+
+The migration has been manually applied and structurally verified in Supabase DEV: 26 public tables, all 26 RLS-enabled, 0 FORCE RLS, empty reservation tables, and verified indexes, foreign keys and checks. The reservation service is not connected to current checkout/order creation, Client, Admin or the legacy payment webhook. Wompi is not integrated, PROD was not accessed, and R11 remains PAUSED / DEV ONLY.
+
+The R12C correction review recorded a DEV preflight of 67 historical inventory movements with 0 non-null references and 0 duplicate non-null references. Movement-reference conflicts now fail rather than being silently ignored; reservation-finalized sale movements intentionally record quantity 0, and historical movements are not rewritten.
+
+A real PostgreSQL A–E validation passed with outer rollback and cleanup verification.
+
+The separate F validator at `scripts/validateR12CConcurrencyDev.js` passed corrected F1 final-unit and F2 same-Order races using independent bounded transactions and committed isolated fixtures. The first F1 failure was a validator fixture defect, not a production service defect; cleanup was verified at zero rows.

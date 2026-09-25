@@ -98,8 +98,10 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 - **Status:** IN_PROGRESS — DEV ONLY
 - **R12A:** COMPLETE as a read-only checkout/order/payment architecture audit.
 - **R12B:** COMPLETE — DEV. Independent `payments` and `payment_events` schema, canonical payment status transition matrix, idempotency foundation, Backend payment service and same-migration RLS/grant protections are implemented and verified. Supabase DEV final state is 24/24 RLS-enabled public tables, zero anon/authenticated table grants, zero public policies, zero FORCE RLS tables, zero payment rows and zero payment-event rows; Security Advisor is 0/0. No Wompi integration or commercial effects are active.
-- **R12C:** Proposed next stage: review the payment-attempt boundary and then design the Wompi sandbox adapter, without modifying Client/Admin or reserving stock until explicitly approved.
-- **Explicitly not done:** Wompi API calls, keys/configuration, webhook processing, stock reservation/release, Client checkout changes, Admin payment UI, PROD changes and R11 changes.
+- **R12C:** COMPLETE / VERIFIED IN DEV. The isolated inventory reservation migration is applied and structurally verified in DEV. Real PostgreSQL validation A–E passed, and corrected concurrency validation F1/F2 passed with cleanup verification. The service is not connected to checkout; current checkout/order creation remains unchanged.
+- **Explicitly not done:** Wompi API calls, keys/configuration, webhook processing, checkout-connected stock reservation/release, Client checkout changes, Admin payment UI, PROD changes and R11 changes.
+- **R12C correction note:** DEV historical inventory movement preflight found 67 movements, 0 non-null references and 0 duplicates. The foundation fails on movement-reference collisions and records reservation-finalized sales with quantity 0; checkout integration remains pending.
+- **R12C concurrency note:** The first F1 attempt failed because the validator used two different Products; cleanup was manually verified with zero fixtures. The corrected F1/F2 run passed with independent PostgreSQL connections and zero-fixture cleanup verification.
 
 ## R11A — Architecture and Product Audit
 

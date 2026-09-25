@@ -361,3 +361,22 @@ Only decisions supported by available project instructions or code are recorded 
 - **Future rule:** Every new private public-schema migration, including future R12 payment tables, must enable RLS and revoke `anon`/`authenticated` in the same transaction. Default privileges are not relied upon because the managed-role change was not permitted.
 - **Verification:** Manual DEV SQL Editor remediation and functional smoke tests were reported PASS: Security Advisor 0 errors / 0 warnings; Client, customer login, Admin login, Products, Orders and Storage passed. PROD was not accessed.
 - **Final R12B verification:** DEV has 24 public tables, 24 RLS-enabled, 0 RLS-disabled, 0 `anon`/`authenticated` grants, 0 public policies, 0 FORCE RLS tables, 0 payment rows and 0 payment-event rows. The historical baseline remains scoped to its 22 pre-R12B tables; payment tables are hardened by their own creation migration.
+
+## DEC-041 — R12C Uses Order-Owned Available-to-Sell Reservations
+
+- **Date:** 2026-09-24
+- **Area:** R12 inventory reservation foundation
+- **Decision:** Use one reservation per Order and allow multiple Payment attempts to reuse it. `products.stock` remains available-to-sell inventory: reserve decrements it, release/expiration restores it, and sale commit does not decrement it again.
+- **State model:** `ACTIVE → COMMITTED|RELEASED|EXPIRED`; terminal states cannot be resurrected and repeated same-operation calls are idempotent no-ops.
+- **Boundary:** The foundation provides transactional row locking, all-or-nothing reservation, deterministic movement references and expiration primitives. Its migration is applied and structurally verified in DEV, but it does not connect checkout, Client, Admin, payments, the legacy webhook or Wompi. Real PostgreSQL A–E and corrected F1/F2 validation passed.
+- **Audit correction:** The migration preflights duplicate non-null movement references; movement conflicts are integrity errors that roll back the transaction. Only repeating the same terminal operation is a no-op. Reservation-finalized sale movements use quantity `0` because `products.stock` is already available-to-sell inventory.
+- **Concurrency validation:** F1/F2 use independent PostgreSQL transactions and committed, unmistakable validation fixtures because concurrency cannot share the A–E outer rollback. The first F1 fixture defect was corrected; the corrected run passed and exact cleanup was verified.
+- **Status:** COMPLETE / VERIFIED IN DEV. R12 overall remains IN PROGRESS / DEV ONLY.
+
+## DEC-042 — R12C F1 Uses a Shared Final-Unit Fixture
+
+- **Date:** 2026-09-24
+- **Area:** R12C concurrency validation
+- **Decision:** F1 creates one validation Product with stock `1` and two distinct validation Orders whose `order_items` reference that same Product. The reservation attempts remain independent PostgreSQL transactions.
+- **Correction:** The first manual F1 execution used two different Products, so both reservations succeeded legitimately. DEV cleanup was manually verified with zero remaining rows across the six fixture tables. The corrected validator then passed F1/F2 with cleanup verified.
+- **Status:** COMPLETE / VERIFIED IN DEV.

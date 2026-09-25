@@ -199,4 +199,13 @@
 
 - R12B is COMPLETE / DEV. Both payment-domain migrations were successfully applied and verified in Supabase DEV.
 - Final DEV state: 24 public tables, 24 RLS enabled, 0 RLS disabled, 0 `anon`/`authenticated` grants, 0 public policies, 0 FORCE RLS tables, 0 payment rows and 0 payment-event rows.
-- No Wompi integration, real payment activation, Wompi credentials, Wompi webhook, checkout change, stock change or R12C work exists. R11 remains PAUSED / DEV ONLY; R11F is NOT STARTED; PROD was not accessed.
+- No Wompi integration, real payment activation, Wompi credentials, Wompi webhook, checkout change, checkout-connected stock change or R12C implementation existed at the end of R12B. R11 remains PAUSED / DEV ONLY; R11F is NOT STARTED; PROD was not accessed.
+
+### R12C — Inventory Reservation Foundation (2026-09-24)
+
+- Added a local DEV-only reservation domain foundation with one Order-owned reservation and reusable reservation items for multiple Products.
+- Implemented transactional reserve, commit-sale, release and expiration primitives using deterministic Product row locks and defensive stock predicates.
+- `products.stock` remains available-to-sell inventory: reserve decrements it, release/expiration restores it, and commit sale does not decrement it again; `soldCount` and sale movements are applied only at commit.
+- Migration was manually applied and structurally verified in Supabase DEV at 26/26 RLS-enabled public tables, with empty reservation tables at verification and verified indexes, foreign keys and checks. Current checkout/order creation remains unchanged. Client, Admin, legacy payment webhook, Wompi and PROD were not touched. Real PostgreSQL A–E and corrected F1/F2 validation passed with cleanup verified. R12C is COMPLETE / VERIFIED IN DEV; R12 overall remains IN PROGRESS / DEV ONLY.
+- `scripts/validateR12CConcurrencyDev.js` completed F1 final-unit competition and F2 same-Order races using independent transactions, committed fixtures, stale-fixture refusal and exact cleanup. The first F1 failure was a fixture defect, not a production service defect.
+- Correction review: DEV preflight found 67 historical inventory movements, 0 non-null references and 0 duplicate non-null references. Movement-reference conflicts are no longer silently ignored, and reservation-finalized sale movements intentionally use quantity 0; historical movements remain unchanged.

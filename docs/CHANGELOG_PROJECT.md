@@ -439,3 +439,33 @@ SUMMARY:
 - Added a guarded, reproducible baseline migration for future review. Private R12 tables independently apply RLS and grant revocation in their creation migration.
 
 STATE AFTER: DEV hardening is reported verified and functional. PROD was not accessed or modified; R11 remains PAUSED / DEV ONLY.
+
+## 2026-09-24 — R12C Inventory Reservation Foundation
+
+TYPE: BACKEND DEV-ONLY INVENTORY DOMAIN
+
+SUMMARY:
+
+- Added local `stock_reservations` and `stock_reservation_items` schema definitions with same-migration RLS and `anon`/`authenticated` revocation protections.
+- Added canonical reservation states and transactional reserve, commit-sale, release and expiration primitives.
+- Preserved available-to-sell semantics: reservation decreases stock, release restores it, and sale commit increments `soldCount` without decreasing stock again.
+- Added deterministic inventory movement references and uniqueness protection for exactly-once effects, including a duplicate-reference preflight before the partial unique index and explicit rollback-on-conflict behavior.
+- DEV preflight verified 67 historical movements, 0 non-null references and 0 duplicate non-null references. Reservation-finalized `sale` movements intentionally use quantity `0`; legacy historical movements are not rewritten.
+
+BOUNDARIES: The migration was manually applied and structurally verified in Supabase DEV at 26/26 RLS-enabled public tables, with empty reservation tables at verification and verified indexes, foreign keys and checks. Current checkout/order creation remains unchanged; Client, Admin, legacy payment webhook and Wompi are unchanged. Real PostgreSQL A–E and corrected F1/F2 validation passed with cleanup verified. R12C is COMPLETE / VERIFIED IN DEV, R12 overall remains IN PROGRESS / DEV ONLY, R11 remains PAUSED / DEV ONLY and PROD was not accessed.
+
+The separate F concurrency validator was prepared for DEV-only final-unit and same-Order races. It uses committed isolated fixtures, exact cleanup, stale-fixture refusal and bounded independent PostgreSQL transactions. The first F1 attempt used two different Products and failed as a validator fixture defect; cleanup was manually verified at zero rows. The corrected F1/F2 execution passed and cleanup was verified at zero rows.
+
+### R12C Technical Closure (2026-09-24)
+
+- R12C reservation foundation is COMPLETE / VERIFIED IN DEV.
+- Real PostgreSQL validation A–E passed; corrected F1 final-unit competition and F2 same-Order concurrency passed.
+- Structural DEV verification remains 26/26 RLS-enabled public tables, 0 FORCE RLS, no public reservation policies and no `anon`/`authenticated` reservation grants.
+- Checkout integration, replacement of legacy immediate stock decrement, R12B payment/reservation integration, Wompi, Client, Admin, legacy webhook and PROD remain out of scope and unchanged.
+- R12 overall remains IN PROGRESS / DEV ONLY; R11 remains PAUSED / DEV ONLY.
+
+### R12C F1 Validator Correction (2026-09-24)
+
+- The first manual F1 execution failed because its two Orders referenced different stock-1 Products; both reservations therefore succeeded legitimately.
+- Manual DEV read-only cleanup verification confirmed zero remaining rows in `inventory_movements`, `order_items`, `orders`, `products`, `stock_reservation_items` and `stock_reservations`.
+- The local validator was corrected to use one shared stock-1 Product for both F1 Orders. Corrected F1/F2 then passed with cleanup verified; R12C is COMPLETE / VERIFIED IN DEV.
