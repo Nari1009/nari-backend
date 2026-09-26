@@ -418,3 +418,9 @@ Only decisions supported by available project instructions or code are recorded 
 - **Guest access:** Guest widget configuration uses a short-lived HMAC-SHA256 `checkoutAccessToken` scoped to Order, Payment and expiry. It contains no commercial state and requires `CHECKOUT_ACCESS_SECRET` of at least 32 characters.
 - **State boundary:** Widget configuration leaves Payment `CREATED` and Reservation `ACTIVE`. Redirect is informational; Wompi events/webhook remain authoritative and are not implemented in this block.
 - **Status:** IMPLEMENTED LOCALLY / DEV ONLY; Client Widget integration and webhook processing remain pending.
+
+## DEC-047 — R12 Order Received Email Is Payment-Pending
+
+- **Decision:** Keep the immediate `order_received` outbox event, but make its customer-facing message explicitly mean that NARI registered the order and payment is still being verified.
+- **Boundary:** `order_received` does not confirm payment. A future idempotent `payment_approved` communication will be sent only after authoritative payment approval; Wompi webhook processing and that communication are not implemented yet.
+- **Status:** IMPLEMENTED LOCALLY / DEV ONLY.
