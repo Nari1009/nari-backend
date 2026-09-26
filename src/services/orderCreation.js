@@ -6,6 +6,8 @@ const { getShippingQuote } = require('./shippingPolicy');
 const { nextOrderNumber } = require('./orderNumber');
 const { createReservation } = require('./inventoryReservation');
 const { createPaymentAttempt, orderTotalInCents } = require('./paymentService');
+const { enabled: wompiEnabled } = require('./wompiConfig');
+const { TOKEN_TTL_SECONDS, assertCheckoutAccessSecret, createCheckoutAccessToken } = require('./checkoutAccessToken');
 
 const randomId = () => crypto.randomBytes(12).toString('hex');
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
@@ -72,6 +74,7 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
   if (hasDocumentType !== hasDocumentNumber) throw validationError('El tipo y número de documento deben enviarse juntos.');
   if ((hasDocumentType && !validDocumentTypes.has(document.type)) || (hasDocumentNumber && (document.number.length < 3 || document.number.length > 40))) throw validationError('Los datos del documento no son válidos.');
   if (!email || phoneNormalized.length < 7 || !items.length || !payload.shippingAddress) throw validationError('El pedido no tiene productos, correo o dirección.');
+  if (!userId && wompiEnabled()) assertCheckoutAccessSecret();
 
   const now = new Date().toISOString();
   const address = payload.shippingAddress;
@@ -148,10 +151,17 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
     }
     const expiresAt = new Date(Date.now() + CHECKOUT_RESERVATION_TTL_MS).toISOString();
     const reservation = await createReservation({ orderId: id, idempotencyKey: `checkout-reservation/${checkoutIdempotencyKey || id}`, expiresAt }, tx);
-    const payment = await createPaymentAttempt({ orderId: id, provider: 'INTERNAL_CHECKOUT', amount: orderTotalInCents(Number(total).toFixed(2)), currency: 'COP', idempotencyKey: `checkout-payment/${checkoutIdempotencyKey || id}`, expiresAt }, tx);
+    const payment = await createPaymentAttempt({ orderId: id, provider: 'WOMPI', amount: orderTotalInCents(Number(total).toFixed(2)), currency: 'COP', idempotencyKey: `checkout-payment/${checkoutIdempotencyKey || id}`, expiresAt }, tx);
     await enqueueOrderEmail(tx, 'order_received', { id, orderNumber, userId, customerEmailSnapshot: emailSnapshot, customerFirstNameSnapshot: firstNameSnapshot, customerLastNameSnapshot: lastNameSnapshot, shippingAddress: address, subtotal, discountTotal: discount, shippingTotal: shipping, shippingZone: shippingQuote.shippingZone, deliveryType: shippingQuote.deliveryType, sameDayEligible: shippingQuote.sameDayEligible, shippingPolicyVersion: shippingQuote.policyVersion, total }, products.map((product, index) => ({ productName: product.name, quantity: items[index].quantity, unitPrice: product.price })));
     result = { id, orderNumber, date: now, status: 'Pendiente', total, products: products.map((product) => product.name), reservationId: reservation.id, reservationStatus: reservation.status, paymentId: payment.id, paymentStatus: payment.status, paymentProvider: payment.provider, paymentAmount: payment.amount, paymentCurrency: payment.currency, paymentIdempotencyKey: payment.idempotencyKey };
   });
+  if (!userId && wompiEnabled()) {
+    result.checkoutAccessToken = createCheckoutAccessToken({
+      orderId: result.id,
+      paymentId: result.paymentId,
+      expiresAt: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
+    });
+  }
   return result;
 };
 

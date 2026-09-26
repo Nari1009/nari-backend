@@ -1,5 +1,6 @@
 const crypto = require('crypto');
 const { PAYMENT_STATUS_VALUES, canTransitionPayment } = require('../domain/paymentStatus');
+const { wompiReferenceForPaymentId } = require('./wompiSignature');
 
 const resolveRepository = (repository) => repository || require('../db/init');
 
@@ -78,11 +79,12 @@ async function createPaymentAttempt({ orderId, provider, amount, currency = 'COP
   if (orderTotalInCents(order.total) !== normalizedAmount) throw conflict('El monto no coincide con el total canónico del pedido.');
 
   const id = randomId('payment');
+  const providerReference = normalizedProvider === 'WOMPI' ? wompiReferenceForPaymentId(id) : null;
   await repository.run(`INSERT INTO payments
-    (id, orderid, provider, status, amount, currency, idempotencykey, expiresat)
-    VALUES (?, ?, ?, 'CREATED', ?, ?, ?, ?)
+    (id, orderid, provider, status, amount, currency, idempotencykey, providerreference, expiresat)
+    VALUES (?, ?, ?, 'CREATED', ?, ?, ?, ?, ?)
     ON CONFLICT (provider, idempotencykey) DO NOTHING`,
-  [id, normalizedOrderId, normalizedProvider, normalizedAmount, normalizedCurrency, normalizedKey, expiresAt]);
+  [id, normalizedOrderId, normalizedProvider, normalizedAmount, normalizedCurrency, normalizedKey, providerReference, expiresAt]);
 
   const existing = await repository.get(`${paymentSelect} WHERE provider = ? AND idempotencykey = ?`, [normalizedProvider, normalizedKey]);
   if (!existing) throw new Error('No fue posible persistir el intento de pago.');

@@ -410,3 +410,11 @@ Only decisions supported by available project instructions or code are recorded 
 - **Identity separation:** `orders.id` is the technical relational identity; `ordernumber` remains the unique customer-facing business reference; `checkoutIdempotencyKey` remains the logical replay identity; a future Wompi/provider reference must be separate and Backend-owned.
 - **Compatibility:** Historical Order IDs remain unchanged. Existing API `id` fields and URLs remain supported. No migration is required.
 - **Status:** IMPLEMENTED LOCALLY / DEV ONLY; Wompi integration remains NOT STARTED.
+
+## DEC-046 — Wompi Sandbox Widget Foundation
+
+- **Decision:** Real checkout Payment attempts use provider `WOMPI`; each attempt persists `providerreference` as `NARI-PAY-<payment-id>`. `Order.id`, `orderNumber`, checkout idempotency and provider reference remain separate identities.
+- **Security:** Widget configuration is generated only by the Backend. The Client receives the Sandbox public key, canonical COP amount, reference, integrity signature and informational redirect URL; integrity, private and events secrets remain Backend-only.
+- **Guest access:** Guest widget configuration uses a short-lived HMAC-SHA256 `checkoutAccessToken` scoped to Order, Payment and expiry. It contains no commercial state and requires `CHECKOUT_ACCESS_SECRET` of at least 32 characters.
+- **State boundary:** Widget configuration leaves Payment `CREATED` and Reservation `ACTIVE`. Redirect is informational; Wompi events/webhook remain authoritative and are not implemented in this block.
+- **Status:** IMPLEMENTED LOCALLY / DEV ONLY; Client Widget integration and webhook processing remain pending.

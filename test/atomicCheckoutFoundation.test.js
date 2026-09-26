@@ -30,7 +30,7 @@ test('checkout foundation composes order, reservation and payment in one transac
   assert.match(source, /createPaymentAttempt\(\{ orderId: id/);
   assert.match(source, /amount: orderTotalInCents\(Number\(total\)\.toFixed\(2\)\)/);
   assert.doesNotMatch(source, /amount:\s*payload/i);
-  assert.match(source, /provider: 'INTERNAL_CHECKOUT'/);
+  assert.match(source, /provider: 'WOMPI'/);
   assert.match(source, /status: 'Pendiente'/);
   assert.match(source, /SAVEPOINT checkout_idempotency/);
   assert.match(source, /ROLLBACK TO SAVEPOINT checkout_idempotency/);

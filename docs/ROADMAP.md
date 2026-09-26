@@ -102,6 +102,7 @@ Historical release boundaries before R10 are reconstructed from Git and availabl
 - **Explicitly not done:** Wompi API calls, keys/configuration, webhook processing, checkout-connected stock reservation/release, Client checkout changes, Admin payment UI, PROD changes and R11 changes.
 - **R12C correction note:** DEV historical inventory movement preflight found 67 movements, 0 non-null references and 0 duplicates. The foundation fails on movement-reference collisions and records reservation-finalized sales with quantity 0; checkout integration remains pending.
 - **R12C concurrency note:** The first F1 attempt failed because the validator used two different Products; cleanup was manually verified with zero fixtures. The corrected F1/F2 run passed with independent PostgreSQL connections and zero-fixture cleanup verification.
+- **Wompi Sandbox Widget foundation:** COMPLETE locally / DEV ONLY. Initial attempts use provider `WOMPI`, Backend-owned `NARI-PAY-<payment-id>` references, server-side integrity signatures and a canonical widget-config endpoint. Webhook/event processing and Client Widget integration remain pending.
 
 ## R11A — Architecture and Product Audit
 

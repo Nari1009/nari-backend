@@ -228,3 +228,9 @@ The first manual DEV attempt found and locally corrected a missing initial-Payme
 - New Order primary keys are Backend-generated. `payload.reference` is legacy, accepted but non-authoritative and is not persisted as Order identity.
 - `orderNumber` remains the customer-facing business reference; `checkoutIdempotencyKey` remains the logical replay identity.
 - Historical IDs, current API responses and URLs remain unchanged. No migration is required before Wompi Sandbox.
+
+### R12 Wompi Sandbox Widget Foundation — 2026-09-26
+
+- Backend-only Wompi Widget foundation uses `WOMPI` Payment attempts and `NARI-PAY-<payment-id>` references. Server-side integrity signing and the canonical widget-config endpoint are implemented locally for Sandbox.
+- Guest access uses a short-lived HMAC checkout token; no amount, currency or customer data is trusted from the token. Widget configuration leaves Payment `CREATED` and Reservation `ACTIVE`; redirect is informational.
+- No Wompi API transaction, webhook/event processor, Client Widget integration, private key or events secret was added. R12 remains DEV ONLY.

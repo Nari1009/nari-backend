@@ -192,3 +192,9 @@ Code/schema/Git wins for implementation truth. `DECISIONS.md` records human deci
 - `orderNumber` remains the unique customer-facing business reference. `checkoutIdempotencyKey` remains independent replay identity.
 - Historical Order IDs, current API responses and Order URLs remain unchanged. No migration is required.
 - A future Wompi/provider reference must be a separate Backend-owned payment identity.
+
+### Wompi Sandbox Widget Foundation — 2026-09-26
+
+- Initial real checkout attempts now use Payment provider `WOMPI` and persist the stable Backend-owned reference `NARI-PAY-<payment-id>`.
+- Added server-side Sandbox integrity signing and `POST /api/payments/wompi/widget-config`. The endpoint reloads canonical Payment/Order data and authorizes authenticated ownership or a short-lived guest checkout access token.
+- Widget configuration does not transition Payment or Reservation state. Redirect remains informational; Wompi webhook/event processing, provider API calls and Client Widget integration remain pending.
