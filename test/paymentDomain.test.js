@@ -45,9 +45,9 @@ const createFakeRepository = () => {
     },
     async run(sql, params = []) {
       if (/INSERT INTO payments/i.test(sql)) {
-        const [id, orderId, provider, amount, currency, idempotencyKey, expiresAt] = params;
+        const [id, orderId, provider, amount, currency, idempotencyKey, providerReference, expiresAt] = params;
         const duplicate = [...state.payments.values()].some((row) => row.provider === provider && row.idempotencyKey === idempotencyKey);
-        if (!duplicate) state.payments.set(id, paymentRow({ id, orderId, provider, amount, currency, idempotencyKey, expiresAt }));
+        if (!duplicate) state.payments.set(id, paymentRow({ id, orderId, provider, amount, currency, idempotencyKey, providerReference, expiresAt }));
         return { changes: duplicate ? 0 : 1 };
       }
       if (/UPDATE payments/i.test(sql)) {
@@ -140,6 +140,8 @@ test('creating an attempt uses the canonical order amount and is idempotent', as
   const first = await createPaymentAttempt({ orderId: 'order-1', provider: 'wompi', amount: '12500000', idempotencyKey: 'checkout-1' }, repository);
   const second = await createPaymentAttempt({ orderId: 'order-1', provider: 'WOMPI', amount: '12500000', idempotencyKey: 'checkout-1' }, repository);
   assert.equal(first.id, second.id);
+  assert.match(first.providerReference, /^NARI-PAY-payment-[a-f0-9]{24}$/);
+  assert.equal(first.providerReference, second.providerReference);
   assert.equal(state.payments.size, 1);
   await assert.rejects(() => createPaymentAttempt({ orderId: 'order-1', provider: 'WOMPI', amount: '12500001', idempotencyKey: 'checkout-2' }, repository), /monto no coincide/i);
   await assert.rejects(() => createPaymentAttempt({ orderId: 'order-1', provider: 'WOMPI', amount: '0', idempotencyKey: 'checkout-3' }, repository), /monto/i);
