@@ -151,3 +151,37 @@ Code/schema/Git wins for implementation truth. `DECISIONS.md` records human deci
 - Real PostgreSQL A–E validation passed with outer rollback and cleanup verification.
 - Corrected real PostgreSQL concurrency validation F1 final-unit competition and F2 same-Order reservation passed with cleanup verification. The first F1 failure was a validator fixture defect, not a production service failure.
 - The first manual F1 attempt failed because its two Orders referenced different Products; DEV cleanup was manually verified with zero remaining fixture rows. The validator was corrected to use one shared stock-1 Product for both F1 Orders, and corrected F1/F2 passed with cleanup verified.
+
+## R12 ATOMIC CHECKOUT FOUNDATION — DEV ONLY
+
+- **Status:** IMPLEMENTED LOCALLY / DEV ONLY. Initial checkout now creates the Order, OrderItems, one ACTIVE Order-owned reservation and one CREATED internal payment attempt in one Backend PostgreSQL transaction.
+- Added nullable `orders.checkoutidempotencykey` with a duplicate preflight and partial unique index. A supplied key is resolved through the database constraint/savepoint path; absent keys remain backward-compatible but do not claim strong duplicate-submit protection until Client sends one.
+- Canonical Products, prices and shipping are read inside the transaction. Reservation is the only initial stock decrement; initial checkout does not increment `soldCount`, write a legacy sale movement, update purchase metrics or commercially convert abandoned carts.
+- Reservation expiry defaults to 30 minutes and is persisted, but no automatic expiration worker exists. Payment status is `CREATED` with provider `INTERNAL_CHECKOUT`; Wompi, approval orchestration, Client key transport and Admin payment UI remain future work.
+
+### R12 strict movement insert correction — 2026-09-24
+
+- The pre-PostgreSQL review found that the legacy `run()` translation could append `ON CONFLICT DO NOTHING` to movement inserts. R12C movement writes now use a strict transaction insert primitive so reference collisions propagate and roll back the operation.
+- The correction is local only. Migration `20260926_checkout_idempotency.sql` remains unapplied and real PostgreSQL validation of the atomic checkout remains pending.
+
+### Checkout repository injection — 2026-09-24
+
+- `createOrder` now accepts an optional trusted internal repository and resolves `repository || defaultDb()` once. Existing HTTP routes remain unchanged and continue using the application repository; real DEV validation can later bind the checkout to a dedicated client without exposing database selection to clients.
+- The migration remains unapplied and real PostgreSQL validation remains pending.
+
+### Atomic checkout validator preparation — 2026-09-24
+
+- Prepared `scripts/validateAtomicCheckoutDev.js` for manual DEV execution only. It uses `DEV_DATABASE_URL`, the injected repository path, structural/stale-fixture gates, independent concurrency sessions, exact-ID cleanup and fresh-connection cleanup verification.
+- The validator has not been executed. Migration `20260926_checkout_idempotency.sql` remains unapplied and the atomic checkout foundation is not verified.
+
+### Initial payment amount correction — 2026-09-24
+
+- The first manual PostgreSQL DEV attempt exposed that atomic checkout omitted the initial Payment amount. `createOrder` now derives COP minor units with the canonical `orderTotalInCents` conversion before creating the `CREATED` Payment.
+- DEV fixtures were manually cleaned and verified empty. Real PostgreSQL validation remains pending; atomic checkout is not yet verified.
+
+## R12 FINAL DEV VALIDATION — 2026-09-25
+
+- R12B payment foundation and R12C reservation foundation remain complete; the strict movement-integrity correction is included.
+- The atomic checkout foundation is complete locally and the manually executed real PostgreSQL DEV A–M validator passed. Final cleanup verified zero current-run fixtures.
+- The validator-only nested-transaction defect was corrected; production `src/db/init.js` already had nested transaction passthrough behavior. No production transaction defect was found.
+- The checkout-idempotency migration was manually applied and structurally verified in DEV. Wompi is not integrated; the next major R12 block is Wompi Sandbox. R12 remains the current phase.

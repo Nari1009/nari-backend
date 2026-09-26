@@ -59,6 +59,10 @@ const createTransactionAdapter = (client) => {
       const result = await client.query(translate(sql), params);
       return { changes: result.rowCount, lastID: result.rows[0]?.id };
     },
+    runStrict: async (sql, params = []) => {
+      const result = await client.query(translate(sql), params);
+      return { changes: result.rowCount, lastID: result.rows[0]?.id };
+    },
     // Each operation owns its own outer transaction. Never nest or commit here.
     withTransaction: (callback) => callback(adapter),
   };

@@ -22,6 +22,7 @@ const makeRepository = () => {
     reservations: new Map(),
     reservationItems: new Map(),
     movements: new Map(),
+    failMovementInserts: false,
   };
   const cloneReservation = (row) => row && ({ ...row });
   const repository = {
@@ -87,6 +88,7 @@ const makeRepository = () => {
         return { changes: 1 };
       }
       if (/INSERT INTO inventory_movements/i.test(sql)) {
+        if (state.failMovementInserts) throw new Error('strict movement insert failed');
         const [id, productId, quantity, type, description, stockBefore, stockAfter, reason, reference, orderId] = params;
         if (state.movements.has(reference)) throw new Error('duplicate movement reference');
         state.movements.set(reference, { id, productId, quantity, type, description, stockBefore, stockAfter, reason, reference, orderId });
@@ -103,6 +105,9 @@ const makeRepository = () => {
         return { changes: 1 };
       }
       throw new Error(`Unexpected SQL: ${sql}`);
+    },
+    async runStrict(sql, params = []) {
+      return this.run(sql, params);
     },
   };
   return { repository, state };
@@ -186,6 +191,28 @@ test('movement collision aborts commit without persisting stock, soldCount, or s
   assert.equal(state.reservations.get(reservation.id).status, 'ACTIVE');
 });
 
+test('strict movement insertion propagates reserve, release and expiration failures', async () => {
+  const reserveSetup = makeRepository();
+  reserveSetup.state.failMovementInserts = true;
+  await assert.rejects(() => createReservation({ orderId: 'order-1', idempotencyKey: 'strict-reserve', expiresAt: future() }, reserveSetup.repository), /strict movement insert failed/i);
+  assert.equal(reserveSetup.state.products.get('product-a').stock, 1);
+  assert.equal(reserveSetup.state.reservations.size, 0);
+
+  const releaseSetup = makeRepository();
+  const releaseReservationRow = await createReservation({ orderId: 'order-1', idempotencyKey: 'strict-release', expiresAt: future() }, releaseSetup.repository);
+  releaseSetup.state.failMovementInserts = true;
+  await assert.rejects(() => releaseReservation({ reservationId: releaseReservationRow.id }, releaseSetup.repository), /strict movement insert failed/i);
+  assert.equal(releaseSetup.state.products.get('product-a').stock, 0);
+  assert.equal(releaseSetup.state.reservations.get(releaseReservationRow.id).status, 'ACTIVE');
+
+  const expireSetup = makeRepository();
+  const expireReservationRow = await createReservation({ orderId: 'order-1', idempotencyKey: 'strict-expire', expiresAt: future() }, expireSetup.repository);
+  expireSetup.state.failMovementInserts = true;
+  await assert.rejects(() => expireReservation({ reservationId: expireReservationRow.id, now: new Date(Date.now() + 2 * 60 * 60 * 1000) }, expireSetup.repository), /strict movement insert failed/i);
+  assert.equal(expireSetup.state.products.get('product-a').stock, 0);
+  assert.equal(expireSetup.state.reservations.get(expireReservationRow.id).status, 'ACTIVE');
+});
+
 test('release restores stock once and terminal states cannot resurrect', async () => {
   const { repository, state } = makeRepository();
   const reservation = await createReservation({ orderId: 'order-1', idempotencyKey: 'checkout-4', expiresAt: future() }, repository);
@@ -220,10 +247,14 @@ test('terminal operations are idempotent only for the same semantic operation', 
 
 test('status and product mutation affected-row checks are present', () => {
   const service = fs.readFileSync(path.join(__dirname, '../src/services/inventoryReservation.js'), 'utf8');
+  const db = fs.readFileSync(path.join(__dirname, '../src/db/init.js'), 'utf8');
   assert.match(service, /soldCountResult\.changes !== 1/);
   assert.match(service, /stockResult\.changes !== 1/);
   assert.match(service, /transitionResult\.changes !== 1/);
   assert.doesNotMatch(service, /ON CONFLICT \(reference\) DO NOTHING/i);
+  assert.match(service, /tx\.runStrict\(/i);
+  assert.match(db, /runStrict:/i);
+  assert.match(db, /translateStrict/i);
 });
 
 test('expiration requires a passed expiry and restores stock exactly once', async () => {

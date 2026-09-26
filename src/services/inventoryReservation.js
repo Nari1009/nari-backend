@@ -82,7 +82,8 @@ const lockProducts = async (tx, items) => {
 };
 
 const insertMovement = async (tx, { id, productId, quantity, type, description, stockBefore, stockAfter, reason, reference, orderId }) => {
-  return tx.run(`INSERT INTO inventory_movements
+  if (typeof tx.runStrict !== 'function') throw new Error('The reservation repository must provide strict movement inserts.');
+  return tx.runStrict(`INSERT INTO inventory_movements
     (id, productid, quantity, type, description, stockbefore, stockafter, reason, reference, orderid)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,

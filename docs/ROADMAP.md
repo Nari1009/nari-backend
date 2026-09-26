@@ -250,3 +250,20 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 - It has not received Render DEV configuration, real-provider DEV smoke QA, or production approval.
 - Resume with DEV-only enablement and the bounded conversation: start skincare, report oily skin, request recommendations, ask about the second, ask for others, then ask about the first.
 - Non-AI store work may move independently. Nari AI must remain disabled/not exposed in PROD until explicitly approved. R11F remains **NOT STARTED**.
+
+## R12 ATOMIC CHECKOUT FOUNDATION — 2026-09-24
+
+- Implemented locally in Backend DEV only: atomic Order/OrderItems/reservation/initial-Payment creation, canonical in-transaction Product and shipping reads, and optional checkout idempotency persistence.
+- The existing Client does not yet send `checkoutIdempotencyKey`; Wompi, payment approval effects, reservation expiration worker, Admin payment UI and checkout release remain unimplemented. R12 remains IN PROGRESS / DEV ONLY.
+
+- A local strict-inventory-movement correction prevents the legacy implicit conflict suppression from hiding R12C movement-reference collisions. Real PostgreSQL validation remains pending; this foundation is not marked verified.
+- Added the minimal internal repository-injection seam required for a future dedicated DEV PostgreSQL validator. No route, Client, Admin or production database-selection behavior changed.
+- Prepared the real PostgreSQL DEV atomic-checkout validator locally. It is not executed and R12 remains IN PROGRESS / DEV ONLY.
+- Corrected the missing canonical initial-Payment amount found during the first manual DEV attempt. PostgreSQL validation must still be retried only after review.
+
+## R12 FINAL DEV VALIDATION — 2026-09-25
+
+- R12B and R12C are complete; the strict movement-integrity correction is included.
+- The atomic checkout foundation and checkout-idempotency migration are complete for DEV. The real PostgreSQL A–M validation passed, including concurrent replay and payment-conflict rollback, with zero-fixture cleanup.
+- The nested-transaction issue was harness-only and corrected in the validator; no production transaction defect was found.
+- Wompi is not integrated. The next major R12 block is Wompi Sandbox. R12 remains the current phase.

@@ -469,3 +469,19 @@ The separate F concurrency validator was prepared for DEV-only final-unit and sa
 - The first manual F1 execution failed because its two Orders referenced different stock-1 Products; both reservations therefore succeeded legitimately.
 - Manual DEV read-only cleanup verification confirmed zero remaining rows in `inventory_movements`, `order_items`, `orders`, `products`, `stock_reservation_items` and `stock_reservations`.
 - The local validator was corrected to use one shared stock-1 Product for both F1 Orders. Corrected F1/F2 then passed with cleanup verified; R12C is COMPLETE / VERIFIED IN DEV.
+
+### R12 Atomic Checkout Foundation — 2026-09-24
+
+- Added `migrations/20260926_checkout_idempotency.sql` for nullable checkout idempotency keys and a partial unique index.
+- Integrated the existing reservation and payment services into one atomic Backend checkout transaction using canonical in-transaction Product, price and shipping data.
+- Initial checkout now leaves payment `CREATED`, reserves available-to-sell stock, and defers sale metrics, `soldCount`, legacy sale movement, abandoned-cart conversion and approval email effects. The Client has not yet been updated to send the key; Wompi and PROD remain untouched.
+- Corrected R12C inventory movement inserts to use strict transaction semantics; duplicate deterministic references now propagate an integrity error and roll back instead of being silently ignored. Real PostgreSQL validation remains pending.
+- Added the minimal optional repository dependency to `createOrder`; existing routes continue using the default application database while future DEV validation can supply a dedicated transaction adapter.
+- Added `scripts/validateAtomicCheckoutDev.js` as an unexecuted DEV-only validator. Migration application and real PostgreSQL validation remain pending.
+- Corrected atomic checkout to pass the canonical Order total in COP minor units to the initial Payment. The first DEV validation failure was cleaned and verified manually; retry remains pending.
+
+### R12 Atomic Checkout DEV Closure (2026-09-25)
+
+- Real PostgreSQL DEV A–M validation passed, including concurrent same-key replay, strict movement collisions and payment-conflict rollback; final cleanup returned zero validator fixtures.
+- The nested-transaction issue was harness-only and corrected in the validator. No production transaction defect was found.
+- R12B and R12C are complete, Wompi is not integrated, and Wompi Sandbox is the next major R12 block. R12 remains the current phase.

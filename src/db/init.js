@@ -6,27 +6,38 @@ if (!/^postgres(ql)?:\/\//i.test(connectionString)) {
 }
 
 const pool = new Pool({ connectionString, ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : undefined, max: 10 });
-const translate = (sql) => {
+const translateSql = (sql, { ignoreInsertConflicts = true } = {}) => {
   let translated = String(sql)
     .replace(/\bdatetime\('now',\s*'-1 day'\)/gi, `(CURRENT_TIMESTAMP - INTERVAL '1 day')`)
     .replace(/\bdatetime\('now',\s*'-3 days'\)/gi, `(CURRENT_TIMESTAMP - INTERVAL '3 days')`)
     .replace(/\bdatetime\(([^)]+)\)/gi, '$1')
     .replace(/\bCOLLATE\s+NOCASE\b/gi, '')
     .replace(/INSERT\s+OR\s+IGNORE\s+INTO/gi, 'INSERT INTO');
-  if (/INSERT\s+INTO/i.test(translated) && !/ON\s+CONFLICT/i.test(translated)) translated += ' ON CONFLICT DO NOTHING';
+  if (ignoreInsertConflicts && /INSERT\s+INTO/i.test(translated) && !/ON\s+CONFLICT/i.test(translated)) translated += ' ON CONFLICT DO NOTHING';
   return translated.replace(/\?/g, (_, offset, text) => `$${(text.slice(0, offset).match(/\?/g) || []).length + 1}`);
 };
+const translate = (sql) => translateSql(sql);
+const translateStrict = (sql) => translateSql(sql, { ignoreInsertConflicts: false });
 const run = (sql, params = []) => pool.query(translate(sql), params).then((result) => ({ changes: result.rowCount, lastID: result.rows[0]?.id }));
+const runStrict = (sql, params = []) => pool.query(translateStrict(sql), params).then((result) => ({ changes: result.rowCount, lastID: result.rows[0]?.id }));
 const get = (sql, params = []) => pool.query(translate(sql), params).then((result) => result.rows[0]);
 const all = (sql, params = []) => pool.query(translate(sql), params).then((result) => result.rows);
-const withTransaction = async (callback) => {
-  const client = await pool.connect();
+const createTransactionAdapter = (client) => {
   const tx = {
     query: (sql, params = []) => client.query(translate(sql), params),
     get: async (sql, params = []) => (await client.query(translate(sql), params)).rows[0],
     all: async (sql, params = []) => (await client.query(translate(sql), params)).rows,
     run: async (sql, params = []) => { const result = await client.query(translate(sql), params); return { changes: result.rowCount, lastID: result.rows[0]?.id }; },
+    runStrict: async (sql, params = []) => { const result = await client.query(translateStrict(sql), params); return { changes: result.rowCount, lastID: result.rows[0]?.id }; },
+    // Allows domain services to compose into an already-open transaction.
+    withTransaction: async (callback) => callback(tx),
   };
+  return tx;
+};
+
+const withTransaction = async (callback) => {
+  const client = await pool.connect();
+  const tx = createTransactionAdapter(client);
   try {
     await client.query('BEGIN');
     const result = await callback(tx);

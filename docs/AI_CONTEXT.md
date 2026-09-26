@@ -203,3 +203,22 @@ The R12C correction review recorded a DEV preflight of 67 historical inventory m
 A real PostgreSQL A–E validation passed with outer rollback and cleanup verification.
 
 The separate F validator at `scripts/validateR12CConcurrencyDev.js` passed corrected F1 final-unit and F2 same-Order races using independent bounded transactions and committed isolated fixtures. The first F1 failure was a validator fixture defect, not a production service defect; cleanup was verified at zero rows.
+
+## R12 ATOMIC CHECKOUT FOUNDATION — DEV ONLY
+
+The Backend now has a local atomic checkout foundation. It composes Order, OrderItems, an ACTIVE stock reservation and a CREATED internal payment attempt on one transaction. `orders.checkoutidempotencykey` is optional until Client transport is updated; provided keys are protected by a unique partial index and concurrent replay handling. Wompi and payment approval are not integrated, automatic reservation expiration is not implemented, and PROD/R11 remain untouched.
+
+The R12C movement-insert correction is local: reservation, release/expiration and sale movements bypass the legacy implicit `ON CONFLICT DO NOTHING` translation so collisions abort their transaction. Real PostgreSQL validation is still pending.
+
+`createOrder` also has a trusted optional repository-injection seam for future dedicated DEV validation. Existing routes remain on the default application repository; no Client-controlled database selection exists.
+
+The atomic-checkout DEV validator is prepared but not executed. It does not load `.env`, use `DATABASE_URL`, apply migrations or access PROD.
+
+The first manual DEV attempt found and locally corrected a missing initial-Payment amount. DEV fixtures were cleaned and verified empty; real validation remains pending.
+
+### R12 Final DEV Validation Closure (2026-09-25)
+
+- R12B payment foundation and R12C reservation foundation are complete, including strict movement integrity.
+- The atomic checkout foundation and checkout-idempotency migration were validated by the manual real PostgreSQL DEV A–M run. Cleanup verified zero validator fixtures.
+- The nested-transaction failure was a validator harness defect and was corrected; no production transaction defect was found.
+- Wompi remains unintegrated. The next major block is Wompi Sandbox; R12 remains the current phase and PROD is untouched.

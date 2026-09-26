@@ -209,3 +209,19 @@
 - Migration was manually applied and structurally verified in Supabase DEV at 26/26 RLS-enabled public tables, with empty reservation tables at verification and verified indexes, foreign keys and checks. Current checkout/order creation remains unchanged. Client, Admin, legacy payment webhook, Wompi and PROD were not touched. Real PostgreSQL A–E and corrected F1/F2 validation passed with cleanup verified. R12C is COMPLETE / VERIFIED IN DEV; R12 overall remains IN PROGRESS / DEV ONLY.
 - `scripts/validateR12CConcurrencyDev.js` completed F1 final-unit competition and F2 same-Order races using independent transactions, committed fixtures, stale-fixture refusal and exact cleanup. The first F1 failure was a fixture defect, not a production service defect.
 - Correction review: DEV preflight found 67 historical inventory movements, 0 non-null references and 0 duplicate non-null references. Movement-reference conflicts are no longer silently ignored, and reservation-finalized sale movements intentionally use quantity 0; historical movements remain unchanged.
+
+### R12 Atomic Checkout Foundation (2026-09-24)
+
+- Implemented locally in Backend DEV only. The checkout service now performs canonical Product/price/shipping reads and creates Order, OrderItems, one ACTIVE reservation and one CREATED `INTERNAL_CHECKOUT` payment attempt inside one shared transaction.
+- Added `orders.checkoutidempotencykey` migration with duplicate preflight and partial unique index. Strong replay protection applies only when a caller supplies the key; the existing Client has not yet been changed to send it.
+- Removed initial legacy sale effects from this path: no direct stock decrement, `soldCount` increment, sale movement, purchase metrics or abandoned-cart commercial conversion. Wompi, approval orchestration, expiration worker, Client, Admin, legacy webhook and PROD remain out of scope.
+- Corrected the local R12C movement-write path so deterministic inventory-movement reference conflicts throw instead of being silently suppressed by the legacy generic insert translator. PostgreSQL validation remains pending.
+- Added optional server-side repository injection to `createOrder` so future DEV validation can use a dedicated transaction adapter. Production routes remain unchanged and the checkout migration is still unapplied.
+- Prepared the manual atomic-checkout DEV validator with structural preflight, stale-fixture guard, real service calls, concurrency scenarios and exact cleanup. It remains unexecuted.
+- The first manual DEV attempt exposed a missing initial Payment amount; the checkout now uses the canonical major-unit-to-COP-minor-unit conversion. No Wompi or production deployment is involved.
+
+### R12 Atomic Checkout DEV Closure (2026-09-25)
+
+- Real PostgreSQL DEV A–M validation passed, including concurrent replay, strict movement collisions and payment-conflict rollback, with zero-fixture cleanup.
+- The validator nested-transaction defect was harness-only and corrected; no production transaction defect was found.
+- R12B/R12C remain complete, Wompi is not integrated, and Wompi Sandbox is the next major R12 block.

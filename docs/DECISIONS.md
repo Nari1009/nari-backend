@@ -380,3 +380,24 @@ Only decisions supported by available project instructions or code are recorded 
 - **Decision:** F1 creates one validation Product with stock `1` and two distinct validation Orders whose `order_items` reference that same Product. The reservation attempts remain independent PostgreSQL transactions.
 - **Correction:** The first manual F1 execution used two different Products, so both reservations succeeded legitimately. DEV cleanup was manually verified with zero remaining rows across the six fixture tables. The corrected validator then passed F1/F2 with cleanup verified.
 - **Status:** COMPLETE / VERIFIED IN DEV.
+
+## DEC-043 — Atomic Checkout Foundation Uses Order-Owned Reservation
+
+- **Date:** 2026-09-24
+- **Area:** R12 checkout integration
+- **Decision:** Initial checkout creates the Order, OrderItems, one ACTIVE reservation and one CREATED `INTERNAL_CHECKOUT` payment attempt in one shared PostgreSQL transaction. `products.stock` is decremented only by reservation; purchase metrics, `soldCount`, legacy sale movement and abandoned-cart commercial conversion wait for trusted approval/commit.
+- **Idempotency:** `orders.checkoutidempotencykey` is nullable for historical/backward-compatible requests and protected by a partial unique index. Requests that provide a key resolve concurrent duplicates through the database constraint and savepoint path.
+- **Boundary:** No Wompi calls, approval lifecycle, automatic expiration worker, Client/Admin changes or PROD access are included.
+- **Status:** IMPLEMENTED LOCALLY / DEV ONLY; real PostgreSQL integration validation remains pending.
+- **Strict movement writes:** R12C reservation, release/expiration and sale movements use a strict transaction insert path; deterministic reference conflicts are integrity errors, not idempotent skips. The legacy generic insert behavior remains unchanged for unrelated callers.
+- **Composition boundary:** `createOrder` accepts an optional server-side repository dependency and otherwise uses `defaultDb()`. Routes do not pass repository values from HTTP input; the seam exists only for trusted transaction composition and DEV validation.
+- **Validator boundary:** `scripts/validateAtomicCheckoutDev.js` uses only dedicated clients from `DEV_DATABASE_URL`, performs read-only structural/stale-fixture checks before mutation, and cleans only exact current-run IDs. It is preparation only; no real PostgreSQL validation has run.
+- **Initial Payment amount:** Atomic checkout passes `orderTotalInCents(Number(total).toFixed(2))` to the initial `INTERNAL_CHECKOUT` Payment. The Payment service continues independently verifying the amount against the canonical persisted Order total.
+
+## DEC-044 — R12 Atomic Checkout DEV Closure
+
+- **Date:** 2026-09-25
+- **Area:** R12 atomic checkout validation
+- **Decision:** Treat the atomic checkout foundation as validated in DEV after the manually executed real PostgreSQL A–M run passed. Preserve one transaction for Order, reservation, initial Payment and outbox effects.
+- **Harness boundary:** The nested real-transaction defect was confined to the DEV validator repository adapter and was corrected there. Production `src/db/init.js` already used nested passthrough behavior; no production transaction defect was found.
+- **Next block:** Wompi Sandbox. Wompi is not integrated, and R12 remains the active phase.

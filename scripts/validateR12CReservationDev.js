@@ -58,6 +58,10 @@ const createTransactionAdapter = (client) => {
       const result = await client.query(translate(sql), params);
       return { changes: result.rowCount, lastID: result.rows[0]?.id };
     },
+    runStrict: async (sql, params = []) => {
+      const result = await client.query(translate(sql), params);
+      return { changes: result.rowCount, lastID: result.rows[0]?.id };
+    },
     // The outer harness owns BEGIN/ROLLBACK. Never nest or commit here.
     withTransaction: (callback) => callback(adapter),
   };
