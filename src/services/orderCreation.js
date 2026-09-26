@@ -73,7 +73,6 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
   if ((hasDocumentType && !validDocumentTypes.has(document.type)) || (hasDocumentNumber && (document.number.length < 3 || document.number.length > 40))) throw validationError('Los datos del documento no son válidos.');
   if (!email || phoneNormalized.length < 7 || !items.length || !payload.shippingAddress) throw validationError('El pedido no tiene productos, correo o dirección.');
 
-  const id = String(payload.reference || `NARI-${Date.now()}-${randomId()}`).replace(/[^A-Za-z0-9-]/g, '').slice(0, 50);
   const now = new Date().toISOString();
   const address = payload.shippingAddress;
   const db = repository || defaultDb();
@@ -90,6 +89,9 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
       return;
     }
 
+    // Order identity is Backend-owned. payload.reference is a legacy Client
+    // field and is intentionally not used as the relational primary key.
+    const id = `order-${randomId()}`;
     const productIds = [...new Set(items.map((item) => item.productId))];
     const productRows = await tx.all(`SELECT id, name, price, cost, stock, status FROM products WHERE id IN (${productIds.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`, productIds);
     const productById = new Map(productRows.map((product) => [product.id, product]));

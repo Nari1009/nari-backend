@@ -267,3 +267,10 @@ The controlled DEV write is an operational checkpoint under R11B2, not a new num
 - The atomic checkout foundation and checkout-idempotency migration are complete for DEV. The real PostgreSQL A–M validation passed, including concurrent replay and payment-conflict rollback, with zero-fixture cleanup.
 - The nested-transaction issue was harness-only and corrected in the validator; no production transaction defect was found.
 - Wompi is not integrated. The next major R12 block is Wompi Sandbox. R12 remains the current phase.
+
+### Order identity correction before Wompi — 2026-09-26
+
+- New `orders.id` values are Backend-owned; legacy `payload.reference` is no longer authoritative for Order identity.
+- Existing `ordernumber` remains the public business reference and `checkoutIdempotencyKey` remains the replay identity.
+- Historical IDs and current API/URL shapes remain compatible. No schema migration is required.
+- Future Wompi/provider references remain separate Backend-owned payment identities.

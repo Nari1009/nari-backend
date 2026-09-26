@@ -225,3 +225,9 @@
 - Real PostgreSQL DEV A–M validation passed, including concurrent replay, strict movement collisions and payment-conflict rollback, with zero-fixture cleanup.
 - The validator nested-transaction defect was harness-only and corrected; no production transaction defect was found.
 - R12B/R12C remain complete, Wompi is not integrated, and Wompi Sandbox is the next major R12 block.
+
+### R12 Order Identity Correction Before Wompi (2026-09-26)
+
+- Corrected new Order creation so `orders.id` is Backend-owned and cannot be selected or collided through caller-supplied `payload.reference`.
+- Preserved the existing public `ordernumber`, checkout idempotency behavior, historical IDs, API responses and Order URLs. No migration was required.
+- Wompi/provider references remain a future separate Backend-owned payment identity.

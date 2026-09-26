@@ -401,3 +401,12 @@ Only decisions supported by available project instructions or code are recorded 
 - **Decision:** Treat the atomic checkout foundation as validated in DEV after the manually executed real PostgreSQL A–M run passed. Preserve one transaction for Order, reservation, initial Payment and outbox effects.
 - **Harness boundary:** The nested real-transaction defect was confined to the DEV validator repository adapter and was corrected there. Production `src/db/init.js` already used nested passthrough behavior; no production transaction defect was found.
 - **Next block:** Wompi Sandbox. Wompi is not integrated, and R12 remains the active phase.
+
+## DEC-045 — Backend-Owned Order Identity Before Wompi
+
+- **Date:** 2026-09-26
+- **Area:** R12 order identity
+- **Decision:** New `orders.id` values are generated exclusively by the Backend. Caller-supplied `payload.reference` is legacy, non-authoritative input and is not persisted or used as the Order primary key.
+- **Identity separation:** `orders.id` is the technical relational identity; `ordernumber` remains the unique customer-facing business reference; `checkoutIdempotencyKey` remains the logical replay identity; a future Wompi/provider reference must be separate and Backend-owned.
+- **Compatibility:** Historical Order IDs remain unchanged. Existing API `id` fields and URLs remain supported. No migration is required.
+- **Status:** IMPLEMENTED LOCALLY / DEV ONLY; Wompi integration remains NOT STARTED.

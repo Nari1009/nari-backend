@@ -185,3 +185,10 @@ Code/schema/Git wins for implementation truth. `DECISIONS.md` records human deci
 - The atomic checkout foundation is complete locally and the manually executed real PostgreSQL DEV A–M validator passed. Final cleanup verified zero current-run fixtures.
 - The validator-only nested-transaction defect was corrected; production `src/db/init.js` already had nested transaction passthrough behavior. No production transaction defect was found.
 - The checkout-idempotency migration was manually applied and structurally verified in DEV. Wompi is not integrated; the next major R12 block is Wompi Sandbox. R12 remains the current phase.
+
+### Order identity correction before Wompi — 2026-09-26
+
+- New Order IDs are Backend-generated and no longer derive from caller-controlled `payload.reference`.
+- `orderNumber` remains the unique customer-facing business reference. `checkoutIdempotencyKey` remains independent replay identity.
+- Historical Order IDs, current API responses and Order URLs remain unchanged. No migration is required.
+- A future Wompi/provider reference must be a separate Backend-owned payment identity.

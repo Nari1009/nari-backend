@@ -222,3 +222,9 @@ The first manual DEV attempt found and locally corrected a missing initial-Payme
 - The atomic checkout foundation and checkout-idempotency migration were validated by the manual real PostgreSQL DEV A–M run. Cleanup verified zero validator fixtures.
 - The nested-transaction failure was a validator harness defect and was corrected; no production transaction defect was found.
 - Wompi remains unintegrated. The next major block is Wompi Sandbox; R12 remains the current phase and PROD is untouched.
+
+### R12 Order Identity Correction — 2026-09-26
+
+- New Order primary keys are Backend-generated. `payload.reference` is legacy, accepted but non-authoritative and is not persisted as Order identity.
+- `orderNumber` remains the customer-facing business reference; `checkoutIdempotencyKey` remains the logical replay identity.
+- Historical IDs, current API responses and URLs remain unchanged. No migration is required before Wompi Sandbox.
