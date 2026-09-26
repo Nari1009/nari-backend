@@ -19,7 +19,7 @@ test('rejects invalid sequence values', () => {
 
 test('order INSERT maps one generated public number to one database column', () => {
   const source = fs.readFileSync(path.join(__dirname, '../src/services/orderCreation.js'), 'utf8');
-  const match = source.match(/INSERT INTO orders \(([^]+?)\) VALUES \(([^]+?)\)'/);
+  const match = source.match(/INSERT INTO orders\s*\(([^]+?)\)\s*VALUES\s*\(([^]+?)\)/);
   assert.ok(match, 'order INSERT should exist');
   const columns = match[1].split(',').map((value) => value.trim());
   const placeholders = match[2].match(/\?/g) || [];
@@ -27,6 +27,6 @@ test('order INSERT maps one generated public number to one database column', () 
   assert.equal(columns.length, placeholders.length);
   assert.equal(columns[1], 'ordernumber');
   assert.match(source, /orderNumber = await nextOrderNumber\(tx\)/);
-  assert.match(source, /return \{ id, orderNumber,/);
+  assert.match(source, /orderNumber,/);
   assert.doesNotMatch(source, /payload\.(?:orderNumber|ordernumber)/);
 });

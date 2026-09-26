@@ -5,6 +5,7 @@ const test = require('node:test');
 const { PAYMENT_STATUSES, canTransitionPayment } = require('../src/domain/paymentStatus');
 const {
   createPaymentAttempt,
+  orderTotalInCents,
   findByIdempotencyKey,
   listPaymentsForOrder,
   recordPaymentEvent,
@@ -144,6 +145,13 @@ test('creating an attempt uses the canonical order amount and is idempotent', as
   await assert.rejects(() => createPaymentAttempt({ orderId: 'order-1', provider: 'WOMPI', amount: '0', idempotencyKey: 'checkout-3' }, repository), /monto/i);
   await assert.rejects(() => createPaymentAttempt({ orderId: 'order-1', provider: 'WOMPI', amount: '-1', idempotencyKey: 'checkout-4' }, repository), /monto/i);
   assert.equal((await findByIdempotencyKey('WOMPI', 'checkout-1', repository)).id, first.id);
+});
+
+test('canonical COP totals convert to minor units without floating-point arithmetic', () => {
+  assert.equal(orderTotalInCents('120000'), '12000000');
+  assert.equal(orderTotalInCents('120000.00'), '12000000');
+  assert.equal(orderTotalInCents('120000.50'), '12000050');
+  assert.equal(orderTotalInCents('0.10'), '10');
 });
 
 test('one order can have multiple attempts and transitions remain monotonic', async () => {

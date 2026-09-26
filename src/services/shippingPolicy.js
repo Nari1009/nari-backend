@@ -90,9 +90,9 @@ const calculateShipping = ({ department, city, now = new Date(), standardCost })
   };
 };
 
-const configuredNationalShippingCost = async () => {
-  const { get } = require('../db/init');
-  const row = await get('SELECT value FROM public_settings WHERE key = ?', ['settings:shipping']);
+const configuredNationalShippingCost = async (repository) => {
+  const reader = repository || require('../db/init');
+  const row = await reader.get('SELECT value FROM public_settings WHERE key = ?', ['settings:shipping']);
   if (!row) throw new ShippingPolicyError('La tarifa nacional de envío no está configurada.', 503, 'SHIPPING_CONFIGURATION_INVALID');
   let settings;
   try { settings = JSON.parse(row.value); } catch { throw new ShippingPolicyError('La configuración nacional de envío no es válida.', 503, 'SHIPPING_CONFIGURATION_INVALID'); }
@@ -101,10 +101,10 @@ const configuredNationalShippingCost = async () => {
   return fee;
 };
 
-const getShippingQuote = async ({ department, city, now = new Date() }) => {
+const getShippingQuote = async ({ department, city, now = new Date() }, repository) => {
   const location = validateLocation({ department, city });
   const local = location.departmentKey === normalizeLocation(LOCAL_DEPARTMENT) && LOCAL_MUNICIPALITIES.has(location.cityKey);
-  const standardCost = local ? undefined : await configuredNationalShippingCost();
+  const standardCost = local ? undefined : await configuredNationalShippingCost(repository);
   return calculateShipping({ department, city, now, standardCost });
 };
 
