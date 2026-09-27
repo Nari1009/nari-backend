@@ -24,18 +24,26 @@ const sendEmail = async ({ to, subject, htmlBody, textBody, idempotencyKey }) =>
     'Content-Type': 'application/json',
   };
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  const response = await fetch(resendEndpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      from: config.from,
-      to: [to],
-      reply_to: config.replyTo,
-      subject,
-      html: htmlBody,
-      text: textBody,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch(resendEndpoint, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        from: config.from,
+        to: [to],
+        reply_to: config.replyTo,
+        subject,
+        html: htmlBody,
+        text: textBody,
+      }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     const error = new Error(`Transactional email request failed with status ${response.status}.`);
     error.status = response.status;
@@ -126,6 +134,23 @@ const sendPaymentApprovedEmail = ({ to, order, items, accountUrl = null, idempot
   const email = String(to || order?.customerEmailSnapshot || '').trim();
   if (!email) throw new Error('Order email snapshot is missing.');
   return sendEmail({ to: email, ...buildPaymentApprovedEmail({ order, items, accountUrl }), idempotencyKey });
+};
+
+const buildPaymentDeclinedEmail = ({ order }) => {
+  const orderNumber = String(order?.orderNumber || order?.id || '').trim();
+  const firstName = String(order?.customerFirstNameSnapshot || '').trim();
+  const total = formatCop(order?.total);
+  return {
+    subject: `No pudimos aprobar tu pago para el pedido NARI #${orderNumber}`,
+    htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35;line-height:1.5"><h1 style="color:#064c3e">NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p><strong>No pudimos aprobar tu pago.</strong></p><p>El pago del pedido NARI <strong>#${escapeHtml(orderNumber)}</strong> fue rechazado.</p><p style="padding:12px 16px;background:#fff4ed;border-left:4px solid #b45309"><strong>Estado del pago: Rechazado</strong><br>Total del pedido: ${escapeHtml(total)}</p><p>Este pedido no está confirmado como pagado y NARI no está confirmando un cobro exitoso.</p><p>Si tu entidad financiera muestra una autorización o retención temporal, los tiempos de liberación o reversión dependen de esa entidad.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p><p style="color:#587169">NARI<br>Skincare coreano</p></div>`,
+    textBody: `Hola ${firstName || ''},\n\nNo pudimos aprobar tu pago.\n\nEl pago del pedido NARI #${orderNumber} fue rechazado.\n\nEstado del pago: Rechazado\nTotal del pedido: ${total}\n\nEste pedido no está confirmado como pagado y NARI no está confirmando un cobro exitoso.\n\nSi tu entidad financiera muestra una autorización o retención temporal, los tiempos de liberación o reversión dependen de esa entidad.\n\nSi necesitas ayuda, escríbenos a ${supportEmail()}.\n\nNARI · Skincare coreano`,
+  };
+};
+
+const sendPaymentDeclinedEmail = ({ to, order, idempotencyKey }) => {
+  const email = String(to || order?.customerEmailSnapshot || '').trim();
+  if (!email) throw new Error('Order email snapshot is missing.');
+  return sendEmail({ to: email, ...buildPaymentDeclinedEmail({ order }), idempotencyKey });
 };
 
 const buildOrderShippedEmail = ({ order, items, accountUrl = null }) => {
@@ -225,4 +250,4 @@ const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber,
   idempotencyKey,
 });
 
-module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildPaymentApprovedEmail, sendPaymentApprovedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, buildReviewRequestEmail, sendReviewRequestEmail, sendAbandonedCartEmail };
+module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildPaymentApprovedEmail, sendPaymentApprovedEmail, buildPaymentDeclinedEmail, sendPaymentDeclinedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, buildReviewRequestEmail, sendReviewRequestEmail, sendAbandonedCartEmail };

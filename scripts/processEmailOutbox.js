@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 require('dotenv').config();
 const { pool, withTransaction, run } = require('../src/db/init');
-const { sendOrderReceivedEmail, sendOrderShippedEmail, sendOrderDeliveredEmail, sendPaymentApprovedEmail } = require('../src/services/email');
+const { sendOrderReceivedEmail, sendOrderShippedEmail, sendOrderDeliveredEmail, sendPaymentApprovedEmail, sendPaymentDeclinedEmail } = require('../src/services/email');
 
 const LIMIT = 20;
 const LEASE_MINUTES = 10;
@@ -9,13 +9,15 @@ const MAX_ATTEMPTS = 8;
 const BACKOFF_MINUTES = [5, 15, 60, 360];
 const validEmail = (value) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
 
-const claimNext = () => withTransaction(async (tx) => {
+const claimNext = ({ idempotencyKey = null } = {}) => withTransaction(async (tx) => {
+  const targetClause = idempotencyKey ? ' AND idempotencykey = ?' : '';
+  const targetParams = idempotencyKey ? [idempotencyKey] : [];
   const row = await tx.get(`SELECT id, eventtype AS "eventType", orderid AS "orderId", recipientemail AS "recipientEmail", payload, idempotencykey AS "idempotencyKey", attemptcount AS "attemptCount"
     FROM email_outbox
-    WHERE (status = 'pending' AND eligibleat <= CURRENT_TIMESTAMP)
-       OR (status = 'processing' AND processingat < CURRENT_TIMESTAMP - INTERVAL '${LEASE_MINUTES} minutes')
+    WHERE ((status = 'pending' AND eligibleat <= CURRENT_TIMESTAMP)
+       OR (status = 'processing' AND processingat < CURRENT_TIMESTAMP - INTERVAL '${LEASE_MINUTES} minutes'))${targetClause}
     ORDER BY eligibleat, createdat
-    FOR UPDATE SKIP LOCKED LIMIT 1`);
+    FOR UPDATE SKIP LOCKED LIMIT 1`, targetParams);
   if (!row) return null;
   const claimed = await tx.run(`UPDATE email_outbox SET status = 'processing', processingat = CURRENT_TIMESTAMP, attemptcount = attemptcount + 1, updatedat = CURRENT_TIMESTAMP
     WHERE id = ? AND (status = 'pending' OR (status = 'processing' AND processingat < CURRENT_TIMESTAMP - INTERVAL '${LEASE_MINUTES} minutes'))`, [row.id]);
@@ -31,7 +33,7 @@ const markRetry = (id, attempt, code) => run(`UPDATE email_outbox SET status = ?
 const markSent = (id, providerMessageId) => run(`UPDATE email_outbox SET status = 'sent', processingat = NULL, sentat = CURRENT_TIMESTAMP, lastError = NULL, providerMessageId = ?, updatedat = CURRENT_TIMESTAMP WHERE id = ? AND status = 'processing'`, [providerMessageId || null, id]);
 
 const sendEvent = async (row) => {
-  if (!['order_received', 'order_shipped', 'order_delivered', 'payment_approved'].includes(row.eventType)) throw Object.assign(new Error('event_type_invalid'), { permanent: true });
+  if (!['order_received', 'order_shipped', 'order_delivered', 'payment_approved', 'payment_declined'].includes(row.eventType)) throw Object.assign(new Error('event_type_invalid'), { permanent: true });
   if (!validEmail(row.recipientEmail)) throw Object.assign(new Error('recipient_email_invalid'), { permanent: true });
   const payload = row.payload;
   if (!payload || !payload.order || !Array.isArray(payload.items)) throw Object.assign(new Error('payload_invalid'), { permanent: true });
@@ -39,6 +41,7 @@ const sendEvent = async (row) => {
   if (row.eventType === 'order_received') return sendOrderReceivedEmail(args);
   if (row.eventType === 'order_shipped') return sendOrderShippedEmail(args);
   if (row.eventType === 'payment_approved') return sendPaymentApprovedEmail(args);
+  if (row.eventType === 'payment_declined') return sendPaymentDeclinedEmail({ order: payload.order, to: row.recipientEmail, idempotencyKey: row.idempotencyKey });
   return sendOrderDeliveredEmail(args);
 };
 
@@ -58,10 +61,10 @@ const processOne = async (row) => {
   }
 };
 
-const processEmailOutbox = async ({ limit = LIMIT } = {}) => {
+const processEmailOutbox = async ({ limit = LIMIT, idempotencyKey = null } = {}) => {
   const results = [];
   for (let index = 0; index < limit; index += 1) {
-    const row = await claimNext();
+    const row = await claimNext({ idempotencyKey });
     if (!row) break;
     results.push({ id: row.id, result: await processOne(row) });
   }

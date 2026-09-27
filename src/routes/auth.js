@@ -6,6 +6,7 @@ const { sendPasswordResetEmail, sendEmailVerification, sendWelcomeEmail, sendPas
 const { VERIFICATION_TTL_MS, clientAppUrl, createEmailVerification, canResendEmailVerification } = require('../services/emailVerification');
 const { requireUser, cookieValue } = require('../middleware/clientAuth');
 const { createOrder } = require('../services/orderCreation');
+const { dispatchEmailOutboxAfterCommit } = require('../services/emailDispatcher');
 const { getAppUrl } = require('../services/appUrl');
 const router = express.Router();
 
@@ -244,14 +245,18 @@ router.get('/orders/:id', requireUser, async (req, res, next) => {
 
 router.post('/orders', requireUser, async (req, res, next) => {
   try {
-    res.status(201).json(await createOrder({ payload: req.body || {}, userId: req.user.id }));
+    const result = await createOrder({ payload: req.body || {}, userId: req.user.id });
+    dispatchEmailOutboxAfterCommit(`order_received/${result.id}`);
+    res.status(201).json(result);
   } catch (error) { next(error); }
 });
 
 // El checkout invitado no crea una cuenta: guarda el cliente por correo y el pedido queda visible para administración.
 router.post('/guest-orders', async (req, res, next) => {
   try {
-    res.status(201).json(await createOrder({ payload: req.body || {} }));
+    const result = await createOrder({ payload: req.body || {} });
+    dispatchEmailOutboxAfterCommit(`order_received/${result.id}`);
+    res.status(201).json(result);
   } catch (error) { next(error); }
 });
 

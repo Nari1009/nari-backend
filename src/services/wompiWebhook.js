@@ -134,6 +134,7 @@ const processWompiEvent = async ({ body, checksumHeader = null, repository = nul
       failureMessage: incoming.failureMessage,
     }, tx);
 
+    let emailIdempotencyKey = null;
     if (incoming.status === 'APPROVED') {
       const reservation = await tx.get('SELECT id, status FROM stock_reservations WHERE orderid = ? FOR UPDATE', [payment.orderId]);
       if (!reservation) throw createError('La aprobación requiere conciliación: no existe la reserva.', 409, 'WOMPI_RECONCILIATION_REQUIRED');
@@ -141,14 +142,20 @@ const processWompiEvent = async ({ body, checksumHeader = null, repository = nul
       if (reservation.status === 'ACTIVE') await commitReservationSale({ reservationId: reservation.id }, tx);
       const { order, items } = await orderForEmail(tx, payment.orderId);
       await enqueueOrderEmail(tx, 'payment_approved', { ...order, paymentId: payment.id }, items);
+      emailIdempotencyKey = `payment_approved/${payment.id}`;
     } else if (['DECLINED', 'ERROR', 'VOIDED'].includes(incoming.status)) {
       const reservation = await tx.get('SELECT id, status FROM stock_reservations WHERE orderid = ? FOR UPDATE', [payment.orderId]);
       if (!reservation) throw createError('El rechazo requiere conciliación: no existe la reserva.', 409, 'WOMPI_RECONCILIATION_REQUIRED');
       if (reservation.status === 'COMMITTED') throw createError('El rechazo requiere conciliación: la reserva ya está comprometida.', 409, 'WOMPI_RECONCILIATION_REQUIRED');
       if (reservation.status === 'ACTIVE') await releaseReservation({ reservationId: reservation.id }, tx);
+      if (incoming.status === 'DECLINED') {
+        const { order, items } = await orderForEmail(tx, payment.orderId);
+        await enqueueOrderEmail(tx, 'payment_declined', { ...order, paymentId: payment.id }, items);
+        emailIdempotencyKey = `payment_declined/${payment.id}`;
+      }
     }
     await markEvent(tx, eventRow.id, incoming.status, payment.id, incoming.id, 'PROCESSED');
-    return { duplicate: false, payment: updatedPayment, status: incoming.status };
+    return { duplicate: false, payment: updatedPayment, status: incoming.status, emailIdempotencyKey };
   });
 };
 
