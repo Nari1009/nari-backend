@@ -157,11 +157,11 @@ const buildAnalytics = ({ orders = [], items = [], products = [], from, to }) =>
 const getAnalytics = async ({ period, from, to, now } = {}) => {
   const { all } = require('../db/init');
   const ranges = analyticsPeriod({ period, from, to, now });
-  const rows = await all(`SELECT id, customerId, status, isTest, subtotal, shippingTotal, total, shippingCost, paymentFee, refundedTotal, createdAt,
+  const rows = await all(`SELECT id, customerId AS "customerId", status, isTest AS "isTest", subtotal, shippingTotal AS "shippingTotal", total, shippingCost AS "shippingCost", paymentFee AS "paymentFee", refundedTotal AS "refundedTotal", createdAt AS "createdAt",
     EXISTS (SELECT 1 FROM payments p WHERE p.orderid = orders.id) AS "hasPayments",
     EXISTS (SELECT 1 FROM payments p WHERE p.orderid = orders.id AND p.status = 'APPROVED') AS "hasApprovedPayment"
     FROM orders WHERE isTest = FALSE`);
-  const items = await all('SELECT orderId, productId, productName, quantity, unitPrice, unitCost FROM order_items');
+  const items = await all('SELECT orderId AS "orderId", productId AS "productId", productName AS "productName", quantity, unitPrice AS "unitPrice", unitCost AS "unitCost" FROM order_items');
   const products = await all('SELECT id, name FROM products');
   const metrics = buildAnalytics({ orders: rows, items, products, from: ranges.current.from, to: ranges.current.to });
   const previous = buildAnalytics({ orders: rows, items, products, from: ranges.previous.from, to: ranges.previous.to });
