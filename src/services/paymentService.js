@@ -99,22 +99,25 @@ const listPaymentsForOrder = async (orderId, repository) => { repository = resol
 const findByProviderTransactionId = async (provider, transactionId, repository) => { repository = resolveRepository(repository); return mapPayment(await repository.get(`${paymentSelect} WHERE provider = ? AND providertransactionid = ?`, [validProvider(provider), requiredText(transactionId, 'La transacción del proveedor', 200)])); };
 const findByIdempotencyKey = async (provider, idempotencyKey, repository) => { repository = resolveRepository(repository); return mapPayment(await repository.get(`${paymentSelect} WHERE provider = ? AND idempotencykey = ?`, [validProvider(provider), requiredText(idempotencyKey, 'La clave de idempotencia', 200)])); };
 
-async function transitionPaymentStatus({ paymentId, status, providerStatus = null, providerTransactionId = null, failureCode = null, failureMessage = null }, repository) {
+async function transitionPaymentStatus({ paymentId, status, providerStatus = null, providerTransactionId = null, paymentMethodType = null, failureCode = null, failureMessage = null }, repository) {
   repository = resolveRepository(repository);
   const nextStatus = String(status || '').trim().toUpperCase();
   if (!PAYMENT_STATUS_VALUES.includes(nextStatus)) throw createError('El estado de pago no es válido.', 400);
   const current = await repository.get(`${paymentSelect} WHERE id = ?`, [paymentId]);
   if (!current) throw createError('El intento de pago no existe.', 404);
-  if (current.status === nextStatus) return mapPayment(current);
+  if (current.status === nextStatus) {
+    await repository.run(`UPDATE payments SET providerstatus = COALESCE(?, providerstatus), providertransactionid = COALESCE(?, providertransactionid), paymentmethodtype = COALESCE(?, paymentmethodtype), failurecode = COALESCE(?, failurecode), failuremessage = COALESCE(?, failuremessage), updatedat = CURRENT_TIMESTAMP WHERE id = ? AND status = ?`, [providerStatus, providerTransactionId, paymentMethodType, failureCode, failureMessage, paymentId, current.status]);
+    return getPayment(paymentId, repository);
+  }
   if (!canTransitionPayment(current.status, nextStatus)) throw conflict(`La transición ${current.status} → ${nextStatus} no está permitida.`);
   const now = new Date().toISOString();
   const approvedAt = nextStatus === 'APPROVED' ? now : null;
   const failedAt = ['DECLINED', 'ERROR'].includes(nextStatus) ? now : null;
   const result = await repository.run(`UPDATE payments SET status = ?, providerstatus = COALESCE(?, providerstatus),
-    providertransactionid = COALESCE(?, providertransactionid), failurecode = COALESCE(?, failurecode),
+    providertransactionid = COALESCE(?, providertransactionid), paymentmethodtype = COALESCE(?, paymentmethodtype), failurecode = COALESCE(?, failurecode),
     failuremessage = COALESCE(?, failuremessage), approvedat = COALESCE(?, approvedat),
     failedat = COALESCE(?, failedat), updatedat = CURRENT_TIMESTAMP WHERE id = ? AND status = ?`,
-  [nextStatus, providerStatus, providerTransactionId, failureCode, failureMessage, approvedAt, failedAt, paymentId, current.status]);
+  [nextStatus, providerStatus, providerTransactionId, paymentMethodType, failureCode, failureMessage, approvedAt, failedAt, paymentId, current.status]);
   if (!result.changes) throw conflict('El intento de pago cambió; vuelve a consultar su estado.');
   return getPayment(paymentId, repository);
 }
@@ -131,7 +134,7 @@ async function recordPaymentEvent({ provider, providerEventId = null, providerTr
   const sql = `INSERT INTO payment_events
     (id, provider, providereventid, providertransactionid, paymentid, eventtype, status, payloadhash, processingstatus)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT (provider, providereventid) DO NOTHING`;
+    ON CONFLICT (provider, providereventid) WHERE providereventid IS NOT NULL DO NOTHING`;
   await repository.run(sql, [id, normalizedProvider, providerEventId, providerTransactionId, paymentId, normalizedEventType, normalizedStatus, payloadHash || null, normalizedProcessingStatus]);
   if (providerEventId) return repository.get('SELECT id, provider, providereventid AS "providerEventId", providertransactionid AS "providerTransactionId", paymentid AS "paymentId", eventtype AS "eventType", status, payloadhash AS "payloadHash", receivedat AS "receivedAt", processedat AS "processedAt", processingstatus AS "processingStatus" FROM payment_events WHERE provider = ? AND providereventid = ?', [normalizedProvider, providerEventId]);
   return repository.get('SELECT id, provider, providereventid AS "providerEventId", providertransactionid AS "providerTransactionId", paymentid AS "paymentId", eventtype AS "eventType", status, payloadhash AS "payloadHash", receivedat AS "receivedAt", processedat AS "processedAt", processingstatus AS "processingStatus" FROM payment_events WHERE id = ?', [id]);

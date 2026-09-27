@@ -424,3 +424,13 @@ Only decisions supported by available project instructions or code are recorded 
 - **Decision:** Keep the immediate `order_received` outbox event, but make its customer-facing message explicitly mean that NARI registered the order and payment is still being verified.
 - **Boundary:** `order_received` does not confirm payment. A future idempotent `payment_approved` communication will be sent only after authoritative payment approval; Wompi webhook processing and that communication are not implemented yet.
 - **Status:** IMPLEMENTED LOCALLY / DEV ONLY.
+
+## DEC-048 — R12E Wompi Authoritative Webhook
+
+- **Decision:** Add a dedicated `POST /api/payments/wompi/webhook` for signed `transaction.updated` events. The legacy generic payment webhook remains compatibility-only.
+- **Integrity:** Verify Wompi's dynamic `signature.properties` checksum with `WOMPI_EVENTS_SECRET`; use the validated checksum as the event identity when no stable provider event ID exists.
+- **Payment boundary:** Allow `CREATED → APPROVED`, preserve all other monotonic Payment transitions, and ignore stale non-approved events after approval.
+- **Approval boundary:** `APPROVED` commits the existing ACTIVE reservation, increments `soldCount`, creates the sale movement and enqueues one `payment_approved/<payment.id>` email in one PostgreSQL transaction.
+- **Non-approved boundary:** `PENDING`, `DECLINED`, `ERROR` and `VOIDED` do not release the reservation or create commercial sale effects; the reservation remains subject to its normal expiration behavior.
+- **Reconciliation:** An approval for an `EXPIRED` or `RELEASED` reservation fails as reconciliation-required and does not partially approve or fulfill the Order.
+- **Scope:** Sandbox DEV only. Redirect/callback remains non-authoritative, no expiration worker or PROD behavior is added.

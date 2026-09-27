@@ -51,10 +51,10 @@ const createFakeRepository = () => {
         return { changes: duplicate ? 0 : 1 };
       }
       if (/UPDATE payments/i.test(sql)) {
-        const [status, providerStatus, providerTransactionId, failureCode, failureMessage, approvedAt, failedAt, id, currentStatus] = params;
+        const [status, providerStatus, providerTransactionId, paymentMethodType, failureCode, failureMessage, approvedAt, failedAt, id, currentStatus] = params;
         const row = state.payments.get(id);
         if (!row || row.status !== currentStatus) return { changes: 0 };
-        Object.assign(row, { status, providerStatus: providerStatus || row.providerStatus, providerTransactionId: providerTransactionId || row.providerTransactionId, failureCode: failureCode || row.failureCode, failureMessage: failureMessage || row.failureMessage, approvedAt: approvedAt || row.approvedAt, failedAt: failedAt || row.failedAt });
+        Object.assign(row, { status, providerStatus: providerStatus || row.providerStatus, providerTransactionId: providerTransactionId || row.providerTransactionId, paymentMethodType: paymentMethodType || row.paymentMethodType, failureCode: failureCode || row.failureCode, failureMessage: failureMessage || row.failureMessage, approvedAt: approvedAt || row.approvedAt, failedAt: failedAt || row.failedAt });
         return { changes: 1 };
       }
       if (/INSERT INTO payment_events/i.test(sql)) {
@@ -130,6 +130,7 @@ test('payment order relationship is non-cascading for payment history', () => {
 test('payment statuses expose one canonical transition matrix', () => {
   assert.deepEqual(Object.keys(PAYMENT_STATUSES), ['CREATED', 'PENDING', 'APPROVED', 'DECLINED', 'VOIDED', 'ERROR', 'REFUNDED']);
   assert.equal(canTransitionPayment('CREATED', 'PENDING'), true);
+  assert.equal(canTransitionPayment('CREATED', 'APPROVED'), true);
   assert.equal(canTransitionPayment('PENDING', 'APPROVED'), true);
   assert.equal(canTransitionPayment('APPROVED', 'PENDING'), false);
   assert.equal(canTransitionPayment('REFUNDED', 'APPROVED'), false);
@@ -178,4 +179,9 @@ test('payment events deduplicate by provider event id without storing provider p
   assert.equal(state.events.size, 2);
   assert.ok(!Object.hasOwn(first, 'payload'));
   await assert.rejects(() => recordPaymentEvent({ provider: 'WOMPI', providerEventId: 'evt-2', eventType: 'transaction.updated', status: 'PENDING', payloadHash: 'not-a-hash' }, repository), /hash/i);
+});
+
+test('payment event dedupe targets the existing partial unique index', () => {
+  const service = fs.readFileSync(path.join(__dirname, '../src/services/paymentService.js'), 'utf8');
+  assert.match(service, /ON CONFLICT \(provider, providereventid\) WHERE providereventid IS NOT NULL DO NOTHING/i);
 });

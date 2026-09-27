@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const { getAppUrl } = require('./appUrl');
 
-const EVENT_TYPES = new Set(['order_received', 'order_shipped', 'order_delivered']);
+const EVENT_TYPES = new Set(['order_received', 'order_shipped', 'order_delivered', 'payment_approved']);
 const randomId = () => `email-${crypto.randomBytes(12).toString('hex')}`;
 
 const snapshotOrder = (eventType, order) => {
@@ -12,7 +12,7 @@ const snapshotOrder = (eventType, order) => {
     customerFirstNameSnapshot: String(order?.customerFirstNameSnapshot || '').trim(),
     customerLastNameSnapshot: String(order?.customerLastNameSnapshot || '').trim(),
   };
-  if (eventType === 'order_received') {
+  if (eventType === 'order_received' || eventType === 'payment_approved') {
     Object.assign(payload, {
       shippingAddress: order?.shippingAddress || null,
       subtotal: order?.subtotal,
@@ -38,13 +38,16 @@ const snapshotOrder = (eventType, order) => {
 
 const enqueueOrderEmail = async (tx, eventType, order, items) => {
   if (!EVENT_TYPES.has(eventType)) throw new Error('Unknown email outbox event type.');
-  const idempotencyKey = `${eventType}/${order.id}`;
+  const idempotencyKey = eventType === 'payment_approved'
+    ? `${eventType}/${order.paymentId}`
+    : `${eventType}/${order.id}`;
+  if (eventType === 'payment_approved' && !order.paymentId) throw new Error('Payment id is required for approved payment email.');
   const payload = {
     order: snapshotOrder(eventType, order),
     items: (Array.isArray(items) ? items : []).map((item) => ({
       productName: String(item?.productName || '').trim(),
       quantity: Number(item?.quantity || 0),
-      ...(eventType === 'order_received' ? { unitPrice: Number(item?.unitPrice || 0) } : {}),
+      ...(['order_received', 'payment_approved'].includes(eventType) ? { unitPrice: Number(item?.unitPrice || 0) } : {}),
     })),
   };
   const result = await tx.run(`INSERT INTO email_outbox
