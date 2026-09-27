@@ -24,7 +24,7 @@ const makeBody = ({ status = 'APPROVED', properties = ['transaction.id', 'transa
 
 const clone = (value) => JSON.parse(JSON.stringify(value));
 
-const makeRepository = ({ reservationStatus = 'ACTIVE' } = {}) => {
+const makeRepository = ({ reservationStatus = 'ACTIVE', failRelease = false } = {}) => {
   const state = {
     payment: { id: 'payment-aaaaaaaaaaaaaaaaaaaaaaaa', orderId: 'order-1', provider: 'WOMPI', status: 'CREATED', amount: '125000', currency: 'COP', providerReference: 'NARI-PAY-payment-aaaaaaaaaaaaaaaaaaaaaaaa', providerTransactionId: null, providerStatus: null, paymentMethodType: null },
     reservation: { id: 'reservation-1', orderId: 'order-1', status: reservationStatus, expiresAt: '2099-01-01T00:00:00.000Z' },
@@ -80,9 +80,15 @@ const makeRepository = ({ reservationStatus = 'ACTIVE' } = {}) => {
         Object.assign(state.payment, { providerStatus, providerTransactionId, paymentMethodType, failureCode, failureMessage });
         return { changes: 1 };
       }
+      if (/UPDATE products SET stock = stock \+ \?/i.test(sql)) {
+        if (failRelease) throw new Error('release_failed');
+        state.products[0].stock += params[0];
+        return { changes: 1 };
+      }
       if (/UPDATE products SET soldcount/i.test(sql)) { state.products[0].soldCount += params[0]; return { changes: 1 }; }
       if (/INSERT INTO inventory_movements/i.test(sql)) { state.movements.push({ reference: params[8], type: params[3] }); return { changes: 1 }; }
       if (/UPDATE stock_reservations SET status = 'COMMITTED'/i.test(sql)) { state.reservation.status = 'COMMITTED'; return { changes: 1 }; }
+      if (/UPDATE stock_reservations SET status = \?/i.test(sql)) { state.reservation.status = params[0]; return { changes: 1 }; }
       if (/INSERT INTO email_outbox/i.test(sql)) { state.outbox.set(params[5], { eventType: params[1], idempotencyKey: params[5] }); return { changes: 1 }; }
       return { changes: 0 };
     },
@@ -139,14 +145,17 @@ test('processes PENDING then APPROVED, and ignores a stale PENDING after approva
   assert.equal(state.products[0].soldCount, 1);
 });
 
-test('processes DECLINED and ERROR without committing the reservation', async () => {
+test('processes DECLINED and ERROR by releasing the reservation without sale effects', async () => {
   for (const status of ['DECLINED', 'ERROR']) {
     const { repository, state } = makeRepository();
     const body = makeBody({ status });
     await processWompiEvent({ body, checksumHeader: body.signature.checksum, repository });
     assert.equal(state.payment.status, status);
-    assert.equal(state.reservation.status, 'ACTIVE');
+    assert.equal(state.reservation.status, 'RELEASED');
+    assert.equal(state.products[0].stock, 1);
     assert.equal(state.products[0].soldCount, 0);
+    assert.equal(state.movements.filter((row) => row.type === 'reservation_release').length, 1);
+    assert.equal(state.movements.filter((row) => row.type === 'sale').length, 0);
     assert.equal(state.outbox.size, 0);
   }
 });
@@ -158,7 +167,56 @@ test('processes VOIDED from PENDING without commercial effects', async () => {
   await processWompiEvent({ body: pending, checksumHeader: pending.signature.checksum, repository });
   await processWompiEvent({ body: voided, checksumHeader: voided.signature.checksum, repository });
   assert.equal(state.payment.status, 'VOIDED');
+  assert.equal(state.reservation.status, 'RELEASED');
+  assert.equal(state.products[0].stock, 1);
+  assert.equal(state.movements.filter((row) => row.type === 'reservation_release').length, 1);
+  assert.equal(state.products[0].soldCount, 0);
+  assert.equal(state.outbox.size, 0);
+});
+
+test('PENDING to DECLINED releases the reservation exactly once across duplicate terminal events', async () => {
+  const { repository, state } = makeRepository();
+  const pending = makeBody({ status: 'PENDING' });
+  const declined = makeBody({ status: 'DECLINED', timestamp: 1727000001 });
+  const duplicateDeclined = makeBody({ status: 'DECLINED', timestamp: 1727000002 });
+  await processWompiEvent({ body: pending, checksumHeader: pending.signature.checksum, repository });
+  await processWompiEvent({ body: declined, checksumHeader: declined.signature.checksum, repository });
+  await processWompiEvent({ body: duplicateDeclined, checksumHeader: duplicateDeclined.signature.checksum, repository });
+  assert.equal(state.payment.status, 'DECLINED');
+  assert.equal(state.reservation.status, 'RELEASED');
+  assert.equal(state.products[0].stock, 1);
+  assert.equal(state.products[0].soldCount, 0);
+  assert.equal(state.movements.filter((row) => row.type === 'reservation_release').length, 1);
+  assert.equal(state.outbox.size, 0);
+});
+
+test('APPROVED followed by stale terminal events never releases the committed reservation', async () => {
+  for (const status of ['DECLINED', 'ERROR', 'VOIDED']) {
+    const { repository, state } = makeRepository();
+    const approved = makeBody();
+    const stale = makeBody({ status, timestamp: 1727000001 });
+    await processWompiEvent({ body: approved, checksumHeader: approved.signature.checksum, repository });
+    const result = await processWompiEvent({ body: stale, checksumHeader: stale.signature.checksum, repository });
+    assert.equal(result.ignored, true);
+    assert.equal(state.payment.status, 'APPROVED');
+    assert.equal(state.reservation.status, 'COMMITTED');
+    assert.equal(state.products[0].stock, 0);
+    assert.equal(state.products[0].soldCount, 1);
+    assert.equal(state.movements.filter((row) => row.type === 'reservation_release').length, 0);
+  }
+});
+
+test('terminal reservation-release failure rolls back Payment and event changes', async () => {
+  const { repository, state } = makeRepository({ failRelease: true });
+  const body = makeBody({ status: 'DECLINED' });
+  await assert.rejects(() => processWompiEvent({ body, checksumHeader: body.signature.checksum, repository }), /release_failed/i);
+  assert.equal(state.payment.status, 'CREATED');
+  assert.equal(state.payment.providerTransactionId, null);
   assert.equal(state.reservation.status, 'ACTIVE');
+  assert.equal(state.products[0].stock, 0);
+  assert.equal(state.products[0].soldCount, 0);
+  assert.equal(state.movements.length, 0);
+  assert.equal(state.events.size, 0);
   assert.equal(state.outbox.size, 0);
 });
 

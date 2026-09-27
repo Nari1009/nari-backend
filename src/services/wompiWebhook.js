@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const defaultDb = () => require('../db/init');
 const { getWompiEventsConfig } = require('./wompiConfig');
 const { transitionPaymentStatus } = require('./paymentService');
-const { commitReservationSale } = require('./inventoryReservation');
+const { commitReservationSale, releaseReservation } = require('./inventoryReservation');
 const { enqueueOrderEmail } = require('./emailOutbox');
 
 const createError = (message, status, code) => Object.assign(new Error(message), { status, code });
@@ -141,6 +141,11 @@ const processWompiEvent = async ({ body, checksumHeader = null, repository = nul
       if (reservation.status === 'ACTIVE') await commitReservationSale({ reservationId: reservation.id }, tx);
       const { order, items } = await orderForEmail(tx, payment.orderId);
       await enqueueOrderEmail(tx, 'payment_approved', { ...order, paymentId: payment.id }, items);
+    } else if (['DECLINED', 'ERROR', 'VOIDED'].includes(incoming.status)) {
+      const reservation = await tx.get('SELECT id, status FROM stock_reservations WHERE orderid = ? FOR UPDATE', [payment.orderId]);
+      if (!reservation) throw createError('El rechazo requiere conciliación: no existe la reserva.', 409, 'WOMPI_RECONCILIATION_REQUIRED');
+      if (reservation.status === 'COMMITTED') throw createError('El rechazo requiere conciliación: la reserva ya está comprometida.', 409, 'WOMPI_RECONCILIATION_REQUIRED');
+      if (reservation.status === 'ACTIVE') await releaseReservation({ reservationId: reservation.id }, tx);
     }
     await markEvent(tx, eventRow.id, incoming.status, payment.id, incoming.id, 'PROCESSED');
     return { duplicate: false, payment: updatedPayment, status: incoming.status };
