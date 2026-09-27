@@ -12,6 +12,8 @@ const { getReportData } = require('../services/reportData');
 const { makeWorkbook } = require('../services/xlsxReports');
 const { uploadProductImage } = require('../services/storage');
 const { getAnalytics } = require('../services/analyticsService');
+const { commercialOrderClause, commercialOrderParams } = require('../services/commercialOrder');
+const { latestPaymentForOrder, paymentAttemptsForOrder } = require('../services/adminPayment');
 const { getSetting, updateSetting, validSections } = require('./settings');
 const { ContractValidationError } = require('../services/settingsContract');
 const {
@@ -35,8 +37,6 @@ const serializeList = (value) => {
 const serializeCanonicalList = (value) => (value === null || value === undefined ? value : JSON.stringify(value));
 const listColumns = new Set(['skinTypes', 'concerns', 'ingredients', 'featuredIngredients', 'benefits', 'howToUse', 'images', 'suitableSkinTypes', 'suitableConditions', 'targets']);
 // DEV/mock: una orden no cancelada representa una venta registrada; el pago real queda pendiente de paymentStatus.
-const validSaleStatuses = ['Pendiente', 'Preparando', 'Enviado', 'Entregado'];
-const saleStatusSql = `(${validSaleStatuses.map(() => '?').join(',')})`;
 const customerAccountState = (customer) => {
   const hasCustomerAuthUser = Boolean(String(customer.authUserId || '').trim());
   const hasAuthUserRecord = Boolean(String(customer.authUserRecordId || '').trim());
@@ -265,23 +265,23 @@ router.get('/dashboard', async (req, res, next) => {
     const previousTo = dashboardDate(req.query.previousTo, new Date(from));
     const lowStockThreshold = Math.max(0, Number.isFinite(Number(req.query.lowStockThreshold)) ? Number(req.query.lowStockThreshold) : 3);
     const period = [from, to]; const previousPeriod = [previousFrom, previousTo];
-    const periodWhere = `o.status IN ${saleStatusSql} AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`;
-    const orderParams = [...validSaleStatuses, ...period]; const previousParams = [...validSaleStatuses, ...previousPeriod];
+    const periodWhere = `${commercialOrderClause('o')} AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`;
+    const orderParams = [...commercialOrderParams(), ...period]; const previousParams = [...commercialOrderParams(), ...previousPeriod];
     const [current, previous, chart, inventory, top, recent, customers, financial, previousCosts] = await Promise.all([
       get(`SELECT COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS sales FROM orders o WHERE ${periodWhere}`, orderParams),
       get(`SELECT COUNT(*) AS orders, COALESCE(SUM(o.total), 0) AS sales FROM orders o WHERE ${periodWhere}`, previousParams),
       all(`SELECT date(o.createdAt) AS label, COALESCE(SUM(o.total), 0) AS sales, COUNT(*) AS orders FROM orders o WHERE ${periodWhere} GROUP BY date(o.createdAt) ORDER BY label`, orderParams),
       all(`SELECT id, name, brand, stock, minimumStock, status FROM products WHERE stock = 0 OR (stock > 0 AND stock <= COALESCE(minimumStock, ?)) ORDER BY stock ASC, name ASC`, [lowStockThreshold]),
       all(`SELECT oi.productId, oi.productName, SUM(oi.quantity) AS units, SUM(oi.quantity * oi.unitPrice) AS sales, SUM(oi.quantity * (oi.unitPrice - COALESCE(oi.unitCost, p.cost, 0))) AS profit FROM order_items oi JOIN orders o ON o.id = oi.orderId LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere} GROUP BY oi.productId, oi.productName ORDER BY units DESC LIMIT 5`, orderParams),
-      all(`SELECT o.id, o.ordernumber AS "orderNumber", o.createdAt AS date, o.status, o.total, COALESCE(o.customerFirstNameSnapshot, c.firstName) AS firstName, COALESCE(o.customerLastNameSnapshot, c.lastName) AS lastName, COALESCE(o.customerEmailSnapshot, c.email) AS email FROM orders o LEFT JOIN customers c ON c.id = o.customerId OR c.authUserId = o.userId ORDER BY o.createdAt DESC LIMIT 5`),
+      all(`SELECT o.id, o.ordernumber AS "orderNumber", o.createdAt AS date, o.status, o.total, (SELECT p.status FROM payments p WHERE p.orderid = o.id ORDER BY p.createdat DESC, p.id DESC LIMIT 1) AS "paymentStatus", COALESCE(o.customerFirstNameSnapshot, c.firstName) AS firstName, COALESCE(o.customerLastNameSnapshot, c.lastName) AS lastName, COALESCE(o.customerEmailSnapshot, c.email) AS email FROM orders o LEFT JOIN customers c ON c.id = o.customerId OR c.authUserId = o.userId ORDER BY o.createdAt DESC LIMIT 5`),
       get(`SELECT
         (SELECT COUNT(*) FROM customers) AS total,
         (SELECT COUNT(*) FROM customers WHERE NULLIF(trim(CAST(authUserId AS TEXT)), '') IS NULL) AS "guestCustomers",
         (SELECT COUNT(*) FROM abandoned_carts WHERE convertedAt IS NULL OR trim(CAST(convertedAt AS TEXT)) = '') AS "abandonedCarts",
-        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} AND NOT EXISTS (SELECT 1 FROM orders older WHERE older.customerId = o.customerId AND older.status IN ${saleStatusSql} AND datetime(older.createdAt) < datetime(o.createdAt)) GROUP BY o.customerId) AS customer_new) AS "newCustomers",
+        (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} AND NOT EXISTS (SELECT 1 FROM orders older WHERE older.customerId = o.customerId AND ${commercialOrderClause('older')} AND datetime(older.createdAt) < datetime(o.createdAt)) GROUP BY o.customerId) AS customer_new) AS "newCustomers",
         (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId HAVING COUNT(*) > 1) AS customer_recurrent) AS "recurrentCustomers",
         (SELECT COUNT(*) FROM (SELECT o.customerId FROM orders o WHERE o.customerId IS NOT NULL AND ${periodWhere} GROUP BY o.customerId) AS customer_with_orders) AS "customersWithOrders"
-      `, [...orderParams, ...validSaleStatuses, ...orderParams, ...orderParams]),
+      `, [...orderParams, ...commercialOrderParams(), ...orderParams, ...orderParams]),
       get(`SELECT
         (SELECT COALESCE(SUM(o.subtotal), 0) FROM orders o WHERE ${periodWhere}) AS grossSales,
         (SELECT COALESCE(SUM(o.discountTotal), 0) FROM orders o WHERE ${periodWhere}) AS discounts,
@@ -291,7 +291,7 @@ router.get('/dashboard', async (req, res, next) => {
         (SELECT COALESCE(SUM(oi.quantity * COALESCE(oi.unitCost, p.cost, 0)), 0) FROM orders o JOIN order_items oi ON oi.orderId = o.id LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere}) AS productCost`, [...orderParams, ...orderParams, ...orderParams, ...orderParams, ...orderParams, ...orderParams]),
       get(`SELECT COALESCE(SUM(oi.quantity * COALESCE(oi.unitCost, p.cost, 0)), 0) AS productCost FROM orders o JOIN order_items oi ON oi.orderId = o.id LEFT JOIN products p ON p.id = oi.productId WHERE ${periodWhere}`, previousParams),
     ]);
-    const attention = { outOfStock: inventory.filter((product) => product.stock === 0).length, lowStock: inventory.filter((product) => product.stock > 0).length, pendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pendiente' AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`, period).then((row) => row.count), oldPendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pendiente' AND datetime(o.createdAt) < datetime('now', '-1 day')`, []).then((row) => row.count), paymentIssues: 0 };
+    const attention = { outOfStock: inventory.filter((product) => product.stock === 0).length, lowStock: inventory.filter((product) => product.stock > 0).length, pendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pendiente' AND ${commercialOrderClause('o')} AND datetime(o.createdAt) >= datetime(?) AND datetime(o.createdAt) < datetime(?)`, [...commercialOrderParams(), ...period]).then((row) => row.count), oldPendingPreparation: await get(`SELECT COUNT(*) AS count FROM orders o WHERE o.status = 'Pendiente' AND ${commercialOrderClause('o')} AND datetime(o.createdAt) < datetime('now', '-1 day')`, commercialOrderParams()).then((row) => row.count), paymentIssues: 0 };
     const totalWithOrders = { count: Number(customers.customersWithOrders || 0) };
     const margin = Number(current.sales || 0) - Number(financial.productCost || 0) - Number(financial.paymentFees || 0) - Number(financial.shippingCosts || 0) - Number(financial.refunds || 0);
     const previousMargin = Number(previous.sales || 0) - Number(previousCosts.productCost || 0);
@@ -343,7 +343,7 @@ router.get('/customers/:id', async (req, res) => {
 router.get('/orders', async (req, res) => {
   const orders = await all(`SELECT orders.id, orders.ordernumber AS "orderNumber", orders.createdat AS date, orders.status, orders.deliveredat AS "deliveredAt", orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid ORDER BY orders.createdat DESC`);
-  const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
+  const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', payment: await latestPaymentForOrder({ get }, order.id), products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
   res.json(result);
 });
 
@@ -352,10 +352,11 @@ router.get('/orders/:id', async (req, res) => {
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid WHERE orders.id = ?`, [req.params.id]);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
+  const payments = await paymentAttemptsForOrder({ all }, order.id);
   let shippingAddress = {};
   try { shippingAddress = typeof order.shippingAddress === 'string' ? JSON.parse(order.shippingAddress) : order.shippingAddress || {}; } catch { /* mantiene dirección vacía si un registro antiguo está incompleto */ }
   delete order.shippingAddress;
-  res.json({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', shippingAddress, products });
+  res.json({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', shippingAddress, products, payments });
 });
 
 router.patch('/orders/:id/shipping', async (req, res) => {
