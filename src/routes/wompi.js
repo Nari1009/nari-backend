@@ -1,5 +1,5 @@
 const express = require('express');
-const { get } = require('../db/init');
+const { all, get } = require('../db/init');
 const { SESSION_COOKIE, hashToken } = require('../services/auth');
 const { cookieValue } = require('../middleware/clientAuth');
 const { getAppUrl } = require('../services/appUrl');
@@ -65,6 +65,12 @@ router.post('/status', async (req, res, next) => {
     if (!payment) return res.status(404).json({ error: 'El intento de pago no existe.' });
     if (!sessionUser && access.orderId !== payment.orderId) return res.status(401).json({ error: 'Se requiere autorización del checkout.' });
 
+    const items = await all(`SELECT productid AS "productId", productname AS "productName", quantity,
+      unitprice AS "unitPrice", (unitprice * quantity) AS "lineTotal"
+      FROM order_items WHERE orderid = ? ORDER BY id`, [payment.orderId]);
+    const orderTotals = await get(`SELECT subtotal, discounttotal AS "discountTotal", shippingtotal AS "shippingTotal", total
+      FROM orders WHERE id = ?`, [payment.orderId]);
+
     return res.json({
       paymentId: payment.id,
       paymentStatus: payment.paymentStatus,
@@ -72,6 +78,19 @@ router.post('/status', async (req, res, next) => {
       orderId: payment.orderId,
       orderNumber: payment.orderNumber,
       reservationStatus: payment.reservationStatus || null,
+      orderSummary: {
+        subtotal: Number(orderTotals?.subtotal || 0),
+        discountTotal: Number(orderTotals?.discountTotal || 0),
+        shippingTotal: Number(orderTotals?.shippingTotal || 0),
+        total: Number(orderTotals?.total || 0),
+        items: items.map((item) => ({
+          productId: item.productId,
+          productName: item.productName,
+          quantity: Number(item.quantity),
+          unitPrice: Number(item.unitPrice),
+          lineTotal: Number(item.lineTotal),
+        })),
+      },
     });
   } catch (error) { return next(error); }
 });
