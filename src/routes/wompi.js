@@ -24,8 +24,11 @@ router.post('/wompi/widget-config', async (req, res, next) => {
     const paymentId = String(req.body?.paymentId || '').trim();
     if (!/^payment-[a-f0-9]{24}$/.test(paymentId)) return res.status(400).json({ error: 'El Payment ID no es válido.' });
     const payment = await get(`SELECT p.id, p.orderid AS "orderId", p.provider, p.status, p.amount, p.currency,
-      p.providerreference AS "providerReference", o.userid AS "userId"
-      FROM payments p JOIN orders o ON o.id = p.orderid WHERE p.id = ?`, [paymentId]);
+      p.providerreference AS "providerReference", o.userid AS "userId",
+      r.status AS "reservationStatus", r.expiresat > CURRENT_TIMESTAMP AS "reservationUsable"
+      FROM payments p JOIN orders o ON o.id = p.orderid
+      LEFT JOIN stock_reservations r ON r.orderid = p.orderid
+      WHERE p.id = ?`, [paymentId]);
     if (!payment) return res.status(404).json({ error: 'El intento de pago no existe.' });
 
     const sessionUser = await findSessionUser(req);
@@ -37,7 +40,7 @@ router.post('/wompi/widget-config', async (req, res, next) => {
     }
 
     if (payment.provider !== 'WOMPI') return res.status(409).json({ error: 'El intento no está configurado para Wompi.' });
-    if (payment.status !== 'CREATED') return res.status(409).json({ error: 'El intento de pago ya no está disponible.' });
+    if (payment.status !== 'CREATED' || payment.reservationStatus !== 'ACTIVE' || payment.reservationUsable !== true) return res.status(409).json({ error: 'El intento de pago ya no está disponible.' });
     if (payment.currency !== 'COP' || !payment.providerReference) return res.status(409).json({ error: 'El intento de pago no tiene datos Wompi válidos.' });
     const reference = wompiReferenceForPaymentId(payment.id);
     if (payment.providerReference !== reference) return res.status(409).json({ error: 'La referencia Wompi no coincide con el Payment.' });
