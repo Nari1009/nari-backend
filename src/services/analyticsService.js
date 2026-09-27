@@ -1,5 +1,5 @@
 const ANALYTICS_TIME_ZONE = 'America/Bogota';
-const COMMERCIAL_ORDER_STATUSES = Object.freeze(['Pagado', 'Preparando', 'Enviado', 'Entregado']);
+const { COMMERCIAL_ORDER_STATUSES, isCommercialOrder } = require('./commercialOrder');
 
 const roundCop = (value) => {
   const number = Number(value);
@@ -75,8 +75,23 @@ const analyticsPeriod = ({ period = '30d', from, to, now = new Date() } = {}) =>
   return { current, previous: periodFromDates(previousLocalFrom, previousLocalTo), timeZone: ANALYTICS_TIME_ZONE };
 };
 
-const isCommercialOrder = (order) => COMMERCIAL_ORDER_STATUSES.includes(order.status) && order.isTest !== true;
 const rankTopProducts = (rows, metric = 'unitsSold') => [...rows].sort((a, b) => Number(b[metric] || 0) - Number(a[metric] || 0));
+const summarizePaymentAnalytics = (payments = []) => {
+  const result = payments.reduce((summary, payment) => {
+    summary.attempts += 1;
+    if (payment.status === 'APPROVED') summary.approved += 1;
+    else if (payment.status === 'DECLINED') summary.declined += 1;
+    else if (payment.status === 'ERROR') summary.error += 1;
+    else if (payment.status === 'VOIDED') summary.voided += 1;
+    else if (payment.status === 'CREATED' || payment.status === 'PENDING') summary.pending += 1;
+    const method = String(payment.paymentMethodType || '').trim() || 'Sin especificar';
+    summary.byMethod[method] = (summary.byMethod[method] || 0) + 1;
+    return summary;
+  }, { attempts: 0, approved: 0, declined: 0, pending: 0, error: 0, voided: 0, approvalRate: 0, byMethod: {} });
+  const terminalAttempts = result.approved + result.declined + result.error + result.voided;
+  result.approvalRate = terminalAttempts ? result.approved / terminalAttempts : 0;
+  return result;
+};
 
 const buildAnalytics = ({ orders = [], items = [], products = [], from, to }) => {
   const qualifying = orders.filter(isCommercialOrder);
@@ -142,12 +157,19 @@ const buildAnalytics = ({ orders = [], items = [], products = [], from, to }) =>
 const getAnalytics = async ({ period, from, to, now } = {}) => {
   const { all } = require('../db/init');
   const ranges = analyticsPeriod({ period, from, to, now });
-  const rows = await all(`SELECT id, customerId, status, isTest, subtotal, shippingTotal, total, shippingCost, paymentFee, refundedTotal, createdAt FROM orders WHERE isTest = FALSE`);
+  const rows = await all(`SELECT id, customerId, status, isTest, subtotal, shippingTotal, total, shippingCost, paymentFee, refundedTotal, createdAt,
+    EXISTS (SELECT 1 FROM payments p WHERE p.orderid = orders.id) AS "hasPayments",
+    EXISTS (SELECT 1 FROM payments p WHERE p.orderid = orders.id AND p.status = 'APPROVED') AS "hasApprovedPayment"
+    FROM orders WHERE isTest = FALSE`);
   const items = await all('SELECT orderId, productId, productName, quantity, unitPrice, unitCost FROM order_items');
   const products = await all('SELECT id, name FROM products');
   const metrics = buildAnalytics({ orders: rows, items, products, from: ranges.current.from, to: ranges.current.to });
   const previous = buildAnalytics({ orders: rows, items, products, from: ranges.previous.from, to: ranges.previous.to });
-  return { ...metrics, previous, period: ranges.current, previousPeriod: ranges.previous, timeZone: ranges.timeZone, commercialStatuses: COMMERCIAL_ORDER_STATUSES };
+  const periodPayments = await all(`SELECT p.status, p.paymentmethodtype AS "paymentMethodType"
+    FROM payments p JOIN orders o ON o.id = p.orderid
+    WHERE o.isTest = FALSE AND o.createdat >= ? AND o.createdat < ?`, [ranges.current.from, ranges.current.to]);
+  const paymentAnalytics = summarizePaymentAnalytics(periodPayments);
+  return { ...metrics, paymentAnalytics, previous, period: ranges.current, previousPeriod: ranges.previous, timeZone: ranges.timeZone, commercialStatuses: COMMERCIAL_ORDER_STATUSES };
 };
 
-module.exports = { ANALYTICS_TIME_ZONE, COMMERCIAL_ORDER_STATUSES, analyticsPeriod, buildAnalytics, getAnalytics, isCommercialOrder, rankTopProducts, roundCop, roundRatio, zonedBoundary };
+module.exports = { ANALYTICS_TIME_ZONE, COMMERCIAL_ORDER_STATUSES, analyticsPeriod, buildAnalytics, getAnalytics, isCommercialOrder, rankTopProducts, roundCop, roundRatio, summarizePaymentAnalytics, zonedBoundary };
