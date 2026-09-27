@@ -1,9 +1,11 @@
 #!/usr/bin/env node
 require('dotenv').config();
 
-const { pool } = require('../src/db/init');
-const { processEmailOutbox } = require('./processEmailOutbox');
-const { runReviewRequestWorker } = require('./processReviewRequests');
+const { processExpiredReservations } = require('./processExpiredReservations');
+
+const defaultClosePool = () => require('../src/db/init').pool.end();
+const defaultEmailWorker = (options) => require('./processEmailOutbox').processEmailOutbox(options);
+const defaultReviewWorker = (options) => require('./processReviewRequests').runReviewRequestWorker(options);
 
 const summarize = (results) => results.reduce((counts, item) => {
   counts[item.result] = (counts[item.result] || 0) + 1;
@@ -11,14 +13,16 @@ const summarize = (results) => results.reduce((counts, item) => {
 }, {});
 
 const runScheduledJobs = async ({
-  emailWorker = processEmailOutbox,
-  reviewWorker = runReviewRequestWorker,
-  closePool = () => pool.end(),
+  emailWorker = defaultEmailWorker,
+  reviewWorker = defaultReviewWorker,
+  reservationWorker = processExpiredReservations,
+  closePool = defaultClosePool,
   limit = 20,
 } = {}) => {
   const outcome = {
     email: { ok: false, results: [] },
     reviews: { ok: false, results: [] },
+    reservations: { ok: false, results: [] },
   };
 
   try {
@@ -37,6 +41,14 @@ const runScheduledJobs = async ({
     console.error('Scheduled review worker failed:', error.message);
   }
 
+  try {
+    outcome.reservations.results = await reservationWorker({ limit });
+    outcome.reservations.ok = true;
+  } catch (error) {
+    outcome.reservations.error = error;
+    console.error('Scheduled reservation expiration failed:', error.message);
+  }
+
   await closePool();
   return outcome;
 };
@@ -47,8 +59,9 @@ if (require.main === module) {
       console.log('Scheduled workers finished.', {
         email: outcome.email.ok ? summarize(outcome.email.results) : 'failed',
         reviews: outcome.reviews.ok ? summarize(outcome.reviews.results) : 'failed',
+        reservations: outcome.reservations.ok ? summarize(outcome.reservations.results) : 'failed',
       });
-      if (!outcome.email.ok || !outcome.reviews.ok) process.exitCode = 1;
+      if (!outcome.email.ok || !outcome.reviews.ok || !outcome.reservations.ok) process.exitCode = 1;
     })
     .catch((error) => {
       console.error('Scheduled workers failed:', error.message);
