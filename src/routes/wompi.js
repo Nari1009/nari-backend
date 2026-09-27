@@ -6,6 +6,7 @@ const { getAppUrl } = require('../services/appUrl');
 const { getWompiConfig } = require('../services/wompiConfig');
 const { createIntegritySignature, wompiReferenceForPaymentId } = require('../services/wompiSignature');
 const { verifyCheckoutAccessToken } = require('../services/checkoutAccessToken');
+const { verifyPaymentRecoveryToken } = require('../services/paymentRecoveryToken');
 
 const router = express.Router();
 
@@ -56,7 +57,9 @@ router.post('/status', async (req, res, next) => {
     const paymentId = String(req.body?.paymentId || '').trim();
     if (!/^payment-[a-f0-9]{24}$/.test(paymentId)) return res.status(400).json({ error: 'El Payment ID no es válido.' });
     const sessionUser = await findSessionUser(req);
-    const access = sessionUser ? null : verifyCheckoutAccessToken(req.body?.checkoutAccessToken);
+    const recoveryAccess = sessionUser ? null : verifyPaymentRecoveryToken(req.body?.paymentRecoveryToken);
+    const checkoutAccess = sessionUser ? null : verifyCheckoutAccessToken(req.body?.checkoutAccessToken);
+    const access = recoveryAccess || checkoutAccess;
     if (!sessionUser && (!access || access.paymentId !== paymentId)) return res.status(401).json({ error: 'Se requiere autorización del checkout.' });
     const scopeValue = sessionUser ? sessionUser.id : access.orderId;
     const scopeClause = sessionUser ? 'o.userid = ?' : 'p.orderid = ?';
