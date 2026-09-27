@@ -103,6 +103,10 @@ test('widget endpoint is mounted separately from the legacy webhook and uses can
   assert.match(route, /payment\.userId !== sessionUser\.id/);
   assert.match(route, /verifyCheckoutAccessToken/);
   assert.match(route, /access\.paymentId !== payment\.id/);
+  assert.match(route, /reservationStatus/);
+  assert.match(route, /reservationUsable/);
+  assert.match(route, /payment\.reservationStatus !== 'ACTIVE'/);
+  assert.match(route, /payment\.reservationUsable !== true/);
   assert.doesNotMatch(route, /req\.body\?\.(amount|amountInCents|currency|reference)/);
   assert.doesNotMatch(route, /UPDATE\s+payments|UPDATE\s+stock_reservations|UPDATE\s+products/i);
   assert.match(route, /payment\.amount/);
