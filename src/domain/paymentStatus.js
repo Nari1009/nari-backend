@@ -11,7 +11,7 @@ const PAYMENT_STATUSES = Object.freeze({
 const PAYMENT_STATUS_VALUES = Object.freeze(Object.values(PAYMENT_STATUSES));
 
 const PAYMENT_TRANSITIONS = Object.freeze({
-  CREATED: Object.freeze(['PENDING', 'DECLINED', 'ERROR']),
+  CREATED: Object.freeze(['PENDING', 'APPROVED', 'DECLINED', 'ERROR']),
   PENDING: Object.freeze(['APPROVED', 'DECLINED', 'VOIDED', 'ERROR']),
   APPROVED: Object.freeze(['REFUNDED']),
   DECLINED: Object.freeze([]),
