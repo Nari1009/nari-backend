@@ -49,6 +49,15 @@ const dashboardDate = (value, fallback) => {
   const parsed = value ? new Date(value) : fallback;
   return Number.isNaN(parsed.getTime()) ? fallback.toISOString() : parsed.toISOString();
 };
+const fulfillmentStatusesRequiringApproval = new Set(['Preparando', 'Enviado', 'Entregado']);
+const paymentApprovalGuard = async (tx, orderId, targetStatus) => {
+  if (!fulfillmentStatusesRequiringApproval.has(targetStatus)) return null;
+  const paymentState = await tx.get(`SELECT
+    EXISTS (SELECT 1 FROM payments WHERE orderid = ?) AS "hasPayments",
+    EXISTS (SELECT 1 FROM payments WHERE orderid = ? AND status = 'APPROVED') AS "hasApprovedPayment"`, [orderId, orderId]);
+  if (paymentState?.hasPayments && !paymentState.hasApprovedPayment) return 'El pedido no puede avanzar mientras el pago no esté aprobado.';
+  return null;
+};
 
 router.use(requireAdmin);
 
@@ -370,6 +379,8 @@ router.patch('/orders/:id/shipping', async (req, res) => {
       const order = await tx.get('SELECT id, status FROM orders WHERE id = ? FOR UPDATE', [req.params.id]);
       if (!order) return { changes: -1 };
       if (!['Preparando', 'Enviado'].includes(order.status)) return { changes: -2, status: order.status };
+      const paymentError = await paymentApprovalGuard(tx, req.params.id, 'Enviado');
+      if (paymentError) return { changes: -3, error: paymentError };
       const transitioningToShipped = order.status === 'Preparando';
       const updated = transitioningToShipped
         ? await tx.run("UPDATE orders SET shippingProvider = ?, trackingNumber = ?, status = 'Enviado' WHERE id = ? AND status = 'Preparando'", [shippingProvider, trackingNumber, req.params.id])
@@ -385,6 +396,7 @@ router.patch('/orders/:id/shipping', async (req, res) => {
   } catch (error) { return res.status(error.status || 500).json({ error: error.message }); }
   if (result.changes === -1) return res.status(404).json({ error: 'Pedido no encontrado.' });
   if (result.changes === -2) return res.status(409).json({ error: result.status === 'Pendiente' ? 'Cambia primero el pedido a Preparando.' : 'El seguimiento es de solo lectura para este estado.' });
+  if (result.changes === -3) return res.status(409).json({ error: result.error });
   if (!result.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
   res.json({ id: req.params.id, status: 'Enviado', shippingProvider, trackingNumber });
 });
@@ -430,6 +442,8 @@ router.patch('/orders/:id/status', async (req, res, next) => {
     transition = await withTransaction(async (tx) => {
       const locked = await tx.get('SELECT id, status, userid AS "userId", deliveredat AS "deliveredAt" FROM orders WHERE id = ? FOR UPDATE', [req.params.id]);
       if (!locked || locked.status !== order.currentStatus) return { changes: 0 };
+      const paymentError = await paymentApprovalGuard(tx, req.params.id, status);
+      if (paymentError) return { changes: -3, error: paymentError };
       if (status === 'Entregado') {
         const updated = await tx.run("UPDATE orders SET status = 'Entregado', deliveredat = COALESCE(deliveredat, CURRENT_TIMESTAMP) WHERE id = ? AND status = 'Enviado'", [req.params.id]);
         if (updated.changes !== 1) return { changes: 0 };
@@ -443,6 +457,7 @@ router.patch('/orders/:id/status', async (req, res, next) => {
       return { changes: updated.changes };
     });
   } catch (error) { return next(error); }
+  if (transition?.changes === -3) return res.status(409).json({ error: transition.error });
   if (!transition?.changes) return res.status(409).json({ error: 'El pedido cambió de estado. Recarga e inténtalo nuevamente.' });
   const updatedOrder = await get('SELECT id, createdat AS date, status, total, deliveredat AS "deliveredAt" FROM orders WHERE id = ?', [req.params.id]);
   res.json(updatedOrder);

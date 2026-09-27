@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const { analyticsPeriod, buildAnalytics, zonedBoundary } = require('../src/services/analyticsService');
 
 const range = { from: '2026-09-01T05:00:00.000Z', to: '2026-10-01T05:00:00.000Z' };
@@ -55,4 +56,30 @@ test('top products preserve snapshot names and support safe catalog display fall
 test('new customers are based on first qualifying order, not customer creation', () => {
   const result = buildAnalytics({ orders: [order({ id: 'o-old', customerId: 'c-1', createdAt: '2026-08-20T15:00:00.000Z' }), order({ id: 'o-new', customerId: 'c-2' }), order({ id: 'o-test', customerId: 'c-3', isTest: true })], items: [], products: [], ...range });
   assert.equal(result.newCustomers, 1);
+});
+
+test('analytics SQL preserves the camelCase fields consumed by buildAnalytics', () => {
+  const source = fs.readFileSync(require.resolve('../src/services/analyticsService'), 'utf8');
+  for (const field of ['customerId', 'isTest', 'shippingTotal', 'shippingCost', 'paymentFee', 'refundedTotal', 'createdAt']) {
+    assert.match(source, new RegExp(`${field} AS "${field}"`));
+  }
+  for (const field of ['orderId', 'productId', 'productName', 'unitPrice', 'unitCost']) {
+    assert.match(source, new RegExp(`${field} AS "${field}"`));
+  }
+});
+
+test('approved payment counts while fulfillment remains Pendiente and failed payment does not', () => {
+  const result = buildAnalytics({
+    orders: [
+      order({ id: 'declined', status: 'Pendiente', subtotal: 160000, total: 160000, hasPayments: true, hasApprovedPayment: false }),
+      order({ id: 'approved', status: 'Pendiente', subtotal: 160000, total: 160000, hasPayments: true, hasApprovedPayment: true }),
+    ],
+    items: [item({ orderId: 'declined' }), item({ orderId: 'approved' })],
+    products: [],
+    ...range,
+  });
+  assert.equal(result.commercialOrders, 1);
+  assert.equal(result.productSales, 160000);
+  assert.equal(result.unitsSold, 2);
+  assert.equal(result.topProducts[0].orders, 1);
 });
