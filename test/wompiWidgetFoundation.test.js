@@ -92,4 +92,15 @@ test('widget endpoint is mounted separately from the legacy webhook and uses can
   assert.match(orderCreation, /if \(!userId && wompiEnabled\(\)\)/);
 });
 
+test('payment status endpoint is read-only and scopes authenticated and guest access', () => {
+  const route = fs.readFileSync(path.join(__dirname, '../src/routes/wompi.js'), 'utf8');
+  assert.match(route, /router\.post\('\/status'/);
+  assert.match(route, /payment\.userId !== sessionUser\.id/);
+  assert.match(route, /access\.paymentId !== payment\.id/);
+  assert.match(route, /access\.orderId !== payment\.orderId/);
+  assert.match(route, /paymentStatus: payment\.paymentStatus/);
+  assert.doesNotMatch(route, /UPDATE\s+(payments|orders|stock_reservations|products)/i);
+  assert.doesNotMatch(route, /INSERT\s+INTO\s+(payments|orders|stock_reservations|payment_events|email_outbox)/i);
+});
+
 console.log('wompiWidgetFoundation tests: PASS');
