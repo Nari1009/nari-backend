@@ -125,6 +125,10 @@ test('payment status endpoint is read-only and scopes authenticated and guest ac
   const widgetRoute = route.slice(route.indexOf("router.post('/wompi/widget-config'"), route.indexOf("router.post('/status'"));
   assert.doesNotMatch(widgetRoute, /req\.body\?\.paymentRecoveryToken|verifyPaymentRecoveryToken/);
   assert.match(route, /paymentStatus: payment\.paymentStatus/);
+  assert.match(route, /orderSummary/);
+  assert.match(route, /productName/);
+  assert.match(route, /lineTotal/);
+  assert.match(route, /subtotal/);
   assert.doesNotMatch(route, /UPDATE\s+(payments|orders|stock_reservations|products)/i);
   assert.doesNotMatch(route, /INSERT\s+INTO\s+(payments|orders|stock_reservations|payment_events|email_outbox)/i);
 });
