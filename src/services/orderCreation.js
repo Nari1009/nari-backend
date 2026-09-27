@@ -8,6 +8,7 @@ const { createReservation } = require('./inventoryReservation');
 const { createPaymentAttempt, orderTotalInCents } = require('./paymentService');
 const { enabled: wompiEnabled } = require('./wompiConfig');
 const { TOKEN_TTL_SECONDS, assertCheckoutAccessSecret, createCheckoutAccessToken } = require('./checkoutAccessToken');
+const { RECOVERY_TOKEN_TTL_SECONDS, assertPaymentRecoverySecret, createPaymentRecoveryToken } = require('./paymentRecoveryToken');
 
 const randomId = () => crypto.randomBytes(12).toString('hex');
 const normalizePhone = (value) => String(value || '').replace(/\D/g, '');
@@ -74,7 +75,10 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
   if (hasDocumentType !== hasDocumentNumber) throw validationError('El tipo y número de documento deben enviarse juntos.');
   if ((hasDocumentType && !validDocumentTypes.has(document.type)) || (hasDocumentNumber && (document.number.length < 3 || document.number.length > 40))) throw validationError('Los datos del documento no son válidos.');
   if (!email || phoneNormalized.length < 7 || !items.length || !payload.shippingAddress) throw validationError('El pedido no tiene productos, correo o dirección.');
-  if (!userId && wompiEnabled()) assertCheckoutAccessSecret();
+  if (!userId && wompiEnabled()) {
+    assertCheckoutAccessSecret();
+    assertPaymentRecoverySecret();
+  }
 
   const now = new Date().toISOString();
   const address = payload.shippingAddress;
@@ -160,6 +164,11 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
       orderId: result.id,
       paymentId: result.paymentId,
       expiresAt: Math.floor(Date.now() / 1000) + TOKEN_TTL_SECONDS,
+    });
+    result.paymentRecoveryToken = createPaymentRecoveryToken({
+      orderId: result.id,
+      paymentId: result.paymentId,
+      expiresAt: Math.floor(Date.now() / 1000) + RECOVERY_TOKEN_TTL_SECONDS,
     });
   }
   return result;

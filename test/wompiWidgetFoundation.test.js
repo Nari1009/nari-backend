@@ -6,6 +6,7 @@ const crypto = require('node:crypto');
 const { createIntegritySignature, wompiReferenceForPaymentId } = require('../src/services/wompiSignature');
 const { getWompiConfig } = require('../src/services/wompiConfig');
 const { createCheckoutAccessToken, verifyCheckoutAccessToken } = require('../src/services/checkoutAccessToken');
+const { RECOVERY_TOKEN_TTL_SECONDS, TOKEN_SCOPE, createPaymentRecoveryToken, verifyPaymentRecoveryToken } = require('../src/services/paymentRecoveryToken');
 
 const withEnv = async (values, callback) => {
   const previous = Object.fromEntries(Object.keys(values).map((key) => [key, process.env[key]]));
@@ -73,6 +74,26 @@ test('guest checkout access tokens are scoped, expiring and tamper-resistant', a
   });
 });
 
+test('payment recovery tokens are read-only scoped, 48-hour and tamper-resistant', async () => {
+  const secret = 'checkout_recovery_secret_fixture_32_chars!';
+  const orderId = 'order-0123456789abcdef01234567';
+  const paymentId = 'payment-0123456789abcdef01234567';
+  await withEnv({ CHECKOUT_RECOVERY_SECRET: secret }, async () => {
+    const expiresAt = Math.floor(Date.now() / 1000) + RECOVERY_TOKEN_TTL_SECONDS;
+    const token = createPaymentRecoveryToken({ orderId, paymentId, expiresAt });
+    assert.deepEqual(verifyPaymentRecoveryToken(token), { version: 1, scope: TOKEN_SCOPE, orderId, paymentId, expiresAt });
+    const parts = token.split('.');
+    assert.equal(verifyPaymentRecoveryToken(`${parts[0]}.${parts[1]}.tampered`), null);
+    assert.throws(() => createPaymentRecoveryToken({ orderId, paymentId, expiresAt: Math.floor(Date.now() / 1000) - 1 }), /recuperación/i);
+  });
+});
+
+test('payment recovery token creation fails closed without its dedicated secret', async () => {
+  await withEnv({ CHECKOUT_RECOVERY_SECRET: undefined }, async () => {
+    assert.throws(() => createPaymentRecoveryToken({ orderId: 'order-0123456789abcdef01234567', paymentId: 'payment-0123456789abcdef01234567' }), /CHECKOUT_RECOVERY_SECRET/i);
+  });
+});
+
 test('widget endpoint is mounted separately from the legacy webhook and uses canonical fields', () => {
   const route = fs.readFileSync(path.join(__dirname, '../src/routes/wompi.js'), 'utf8');
   const server = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
@@ -89,6 +110,7 @@ test('widget endpoint is mounted separately from the legacy webhook and uses can
   assert.match(server, /wompiRouter/);
   assert.match(orderCreation, /provider: 'WOMPI'/);
   assert.match(orderCreation, /createCheckoutAccessToken/);
+  assert.match(orderCreation, /createPaymentRecoveryToken/);
   assert.match(orderCreation, /if \(!userId && wompiEnabled\(\)\)/);
 });
 
@@ -98,6 +120,10 @@ test('payment status endpoint is read-only and scopes authenticated and guest ac
   assert.match(route, /payment\.userId !== sessionUser\.id/);
   assert.match(route, /access\.paymentId !== payment\.id/);
   assert.match(route, /access\.orderId !== payment\.orderId/);
+  assert.match(route, /verifyPaymentRecoveryToken/);
+  assert.match(route, /paymentRecoveryToken/);
+  const widgetRoute = route.slice(route.indexOf("router.post('/wompi/widget-config'"), route.indexOf("router.post('/status'"));
+  assert.doesNotMatch(widgetRoute, /req\.body\?\.paymentRecoveryToken|verifyPaymentRecoveryToken/);
   assert.match(route, /paymentStatus: payment\.paymentStatus/);
   assert.doesNotMatch(route, /UPDATE\s+(payments|orders|stock_reservations|products)/i);
   assert.doesNotMatch(route, /INSERT\s+INTO\s+(payments|orders|stock_reservations|payment_events|email_outbox)/i);
