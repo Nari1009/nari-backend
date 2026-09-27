@@ -48,4 +48,32 @@ router.post('/wompi/widget-config', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.post('/status', async (req, res, next) => {
+  try {
+    const paymentId = String(req.body?.paymentId || '').trim();
+    if (!/^payment-[a-f0-9]{24}$/.test(paymentId)) return res.status(400).json({ error: 'El Payment ID no es válido.' });
+    const sessionUser = await findSessionUser(req);
+    const access = sessionUser ? null : verifyCheckoutAccessToken(req.body?.checkoutAccessToken);
+    if (!sessionUser && (!access || access.paymentId !== paymentId)) return res.status(401).json({ error: 'Se requiere autorización del checkout.' });
+    const scopeValue = sessionUser ? sessionUser.id : access.orderId;
+    const scopeClause = sessionUser ? 'o.userid = ?' : 'p.orderid = ?';
+    const payment = await get(`SELECT p.id, p.orderid AS "orderId", p.status AS "paymentStatus", p.providerstatus AS "providerStatus",
+      o.ordernumber AS "orderNumber", o.userid AS "userId", r.status AS "reservationStatus"
+      FROM payments p JOIN orders o ON o.id = p.orderid
+      LEFT JOIN stock_reservations r ON r.orderid = p.orderid
+      WHERE p.id = ? AND ${scopeClause}`, [paymentId, scopeValue]);
+    if (!payment) return res.status(404).json({ error: 'El intento de pago no existe.' });
+    if (!sessionUser && access.orderId !== payment.orderId) return res.status(401).json({ error: 'Se requiere autorización del checkout.' });
+
+    return res.json({
+      paymentId: payment.id,
+      paymentStatus: payment.paymentStatus,
+      providerStatus: payment.providerStatus || null,
+      orderId: payment.orderId,
+      orderNumber: payment.orderNumber,
+      reservationStatus: payment.reservationStatus || null,
+    });
+  } catch (error) { return next(error); }
+});
+
 module.exports = router;
