@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const { verifyWompiEvent, processWompiEvent } = require('../src/services/wompiWebhook');
-const { buildPaymentApprovedEmail } = require('../src/services/email');
+const { buildPaymentApprovedEmail, buildPaymentDeclinedEmail } = require('../src/services/email');
 
 const SECRET = 'test_events_fixture_only';
 
@@ -156,7 +156,7 @@ test('processes DECLINED and ERROR by releasing the reservation without sale eff
     assert.equal(state.products[0].soldCount, 0);
     assert.equal(state.movements.filter((row) => row.type === 'reservation_release').length, 1);
     assert.equal(state.movements.filter((row) => row.type === 'sale').length, 0);
-    assert.equal(state.outbox.size, 0);
+    assert.equal(state.outbox.size, status === 'DECLINED' ? 1 : 0);
   }
 });
 
@@ -187,7 +187,7 @@ test('PENDING to DECLINED releases the reservation exactly once across duplicate
   assert.equal(state.products[0].stock, 1);
   assert.equal(state.products[0].soldCount, 0);
   assert.equal(state.movements.filter((row) => row.type === 'reservation_release').length, 1);
-  assert.equal(state.outbox.size, 0);
+  assert.equal(state.outbox.size, 1);
 });
 
 test('APPROVED followed by stale terminal events never releases the committed reservation', async () => {
@@ -247,6 +247,14 @@ test('payment approved email is explicit and contains order summary without ship
   assert.match(email.textBody, /no el despacho/);
 });
 
+test('payment declined email is informational and has no retry CTA', () => {
+  const message = buildPaymentDeclinedEmail({ order: { id: 'order-1', orderNumber: 'NAR-1', total: '16000', customerFirstNameSnapshot: 'Test' } });
+  assert.match(message.subject, /No pudimos aprobar tu pago/);
+  assert.match(message.textBody, /Estado del pago: Rechazado/);
+  assert.match(message.textBody, /no está confirmado como pagado/);
+  assert.doesNotMatch(`${message.htmlBody}\n${message.textBody}`, /Intentar pagar nuevamente|retry|reintentar/i);
+});
+
 test('APPROVED with EXPIRED or RELEASED reservation rolls back the Payment transition and effects', async () => {
   for (const reservationStatus of ['EXPIRED', 'RELEASED']) {
     const { repository, state } = makeRepository({ reservationStatus });
@@ -261,14 +269,18 @@ test('APPROVED with EXPIRED or RELEASED reservation rolls back the Payment trans
 
 test('migration and outbox worker include payment_approved without changing the legacy webhook', () => {
   const migration = fs.readFileSync(path.join(__dirname, '../migrations/20260926_wompi_webhook.sql'), 'utf8');
+  const declinedMigration = fs.readFileSync(path.join(__dirname, '../migrations/20260927_payment_declined_email.sql'), 'utf8');
   const outbox = fs.readFileSync(path.join(__dirname, '../src/services/emailOutbox.js'), 'utf8');
   const worker = fs.readFileSync(path.join(__dirname, '../scripts/processEmailOutbox.js'), 'utf8');
   const legacy = fs.readFileSync(path.join(__dirname, '../src/routes/paymentWebhook.js'), 'utf8');
   assert.match(migration, /payments_provider_reference_unique/i);
   assert.match(migration, /duplicate non-null provider references exist/i);
   assert.match(migration, /payment_approved/);
+  assert.match(declinedMigration, /payment_declined/);
   assert.match(outbox, /payment_approved/);
+  assert.match(outbox, /payment_declined/);
   assert.match(worker, /sendPaymentApprovedEmail/);
+  assert.match(worker, /sendPaymentDeclinedEmail/);
   assert.match(legacy, /PAYMENT_WEBHOOK_SECRET/);
 });
 

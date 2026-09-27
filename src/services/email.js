@@ -24,18 +24,26 @@ const sendEmail = async ({ to, subject, htmlBody, textBody, idempotencyKey }) =>
     'Content-Type': 'application/json',
   };
   if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
-  const response = await fetch(resendEndpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      from: config.from,
-      to: [to],
-      reply_to: config.replyTo,
-      subject,
-      html: htmlBody,
-      text: textBody,
-    }),
-  });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15000);
+  let response;
+  try {
+    response = await fetch(resendEndpoint, {
+      method: 'POST',
+      headers,
+      signal: controller.signal,
+      body: JSON.stringify({
+        from: config.from,
+        to: [to],
+        reply_to: config.replyTo,
+        subject,
+        html: htmlBody,
+        text: textBody,
+      }),
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
   if (!response.ok) {
     const error = new Error(`Transactional email request failed with status ${response.status}.`);
     error.status = response.status;
@@ -106,6 +114,43 @@ const sendOrderReceivedEmail = ({ order, items, accountUrl = null, idempotencyKe
   if (!email) throw new Error('Order email snapshot is missing.');
   const message = buildOrderReceivedEmail({ order, items, accountUrl });
   return sendEmail({ to: email, ...message, idempotencyKey });
+};
+
+const buildPaymentApprovedEmail = ({ order, items, accountUrl = null }) => {
+  const orderItems = Array.isArray(items) ? items : [];
+  const shipping = Number(order?.shippingTotal || 0);
+  const orderNumber = String(order?.orderNumber || order?.id || '').trim();
+  const firstName = String(order?.customerFirstNameSnapshot || '').trim();
+  const itemRows = orderItems.map((item) => `- ${item.productName || 'Producto'} · Cantidad: ${Number(item.quantity || 0)} · ${formatCop(Number(item.unitPrice || 0) * Number(item.quantity || 0))}`).join('\n');
+  const accountText = accountUrl ? `\nConsulta tus pedidos: ${accountUrl}` : '';
+  return {
+    subject: `Pago confirmado para tu pedido NARI #${orderNumber}`,
+    htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35;line-height:1.5"><h1 style="color:#064c3e">NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p><strong>¡Tu pago fue confirmado!</strong></p><p>Recibimos la confirmación de pago de tu pedido NARI <strong>#${escapeHtml(orderNumber)}</strong>. Continuaremos con la preparación y el despacho de tu pedido.</p><p style="padding:12px 16px;background:#eef7f3;border-left:4px solid #064c3e"><strong>Pago aprobado</strong><br>Tu pago fue confirmado correctamente.</p><h2 style="font-size:18px;color:#064c3e">Productos</h2><ul>${orderItems.map((item) => `<li>${escapeHtml(item.productName || 'Producto')} · Cantidad: ${Number(item.quantity || 0)}</li>`).join('')}</ul><h2 style="font-size:18px;color:#064c3e">Resumen</h2><p>Subtotal productos: ${formatCop(order?.subtotal)}<br>${shipping > 0 ? `Envío: ${formatCop(shipping)}` : 'Envío: Gratis'}<br><strong>Total: ${formatCop(order?.total)}</strong></p>${accountUrl ? `<p><a href="${escapeHtml(accountUrl)}">Ver mis pedidos</a></p>` : ''}<p>Este mensaje confirma el pago, no el despacho. Te informaremos cuando el pedido avance en su preparación.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p><p style="color:#587169">NARI<br>Skincare coreano</p></div>`,
+    textBody: `Hola ${firstName || ''},\n\n¡Tu pago fue confirmado!\n\nRecibimos la confirmación de pago de tu pedido NARI #${orderNumber}. Continuaremos con la preparación y el despacho de tu pedido.\n\nPago aprobado\nTu pago fue confirmado correctamente.\n\nProductos:\n${itemRows}\n\nSubtotal productos: ${formatCop(order?.subtotal)}\nEnvío: ${shipping > 0 ? formatCop(shipping) : 'Gratis'}\nTotal: ${formatCop(order?.total)}\n\nEste mensaje confirma el pago, no el despacho.${accountText}\n\nSi necesitas ayuda, escríbenos a ${supportEmail()}.\n\nNARI · Skincare coreano`,
+  };
+};
+
+const sendPaymentApprovedEmail = ({ to, order, items, accountUrl = null, idempotencyKey }) => {
+  const email = String(to || order?.customerEmailSnapshot || '').trim();
+  if (!email) throw new Error('Order email snapshot is missing.');
+  return sendEmail({ to: email, ...buildPaymentApprovedEmail({ order, items, accountUrl }), idempotencyKey });
+};
+
+const buildPaymentDeclinedEmail = ({ order }) => {
+  const orderNumber = String(order?.orderNumber || order?.id || '').trim();
+  const firstName = String(order?.customerFirstNameSnapshot || '').trim();
+  const total = formatCop(order?.total);
+  return {
+    subject: `No pudimos aprobar tu pago para el pedido NARI #${orderNumber}`,
+    htmlBody: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;color:#123f35;line-height:1.5"><h1 style="color:#064c3e">NARI</h1><p>Hola ${escapeHtml(firstName)},</p><p><strong>No pudimos aprobar tu pago.</strong></p><p>El pago del pedido NARI <strong>#${escapeHtml(orderNumber)}</strong> fue rechazado.</p><p style="padding:12px 16px;background:#fff4ed;border-left:4px solid #b45309"><strong>Estado del pago: Rechazado</strong><br>Total del pedido: ${escapeHtml(total)}</p><p>Este pedido no está confirmado como pagado y NARI no está confirmando un cobro exitoso.</p><p>Si tu entidad financiera muestra una autorización o retención temporal, los tiempos de liberación o reversión dependen de esa entidad.</p><p>Si necesitas ayuda, escríbenos a <a href="mailto:${escapeHtml(supportEmail())}">${escapeHtml(supportEmail())}</a>.</p><p style="color:#587169">NARI<br>Skincare coreano</p></div>`,
+    textBody: `Hola ${firstName || ''},\n\nNo pudimos aprobar tu pago.\n\nEl pago del pedido NARI #${orderNumber} fue rechazado.\n\nEstado del pago: Rechazado\nTotal del pedido: ${total}\n\nEste pedido no está confirmado como pagado y NARI no está confirmando un cobro exitoso.\n\nSi tu entidad financiera muestra una autorización o retención temporal, los tiempos de liberación o reversión dependen de esa entidad.\n\nSi necesitas ayuda, escríbenos a ${supportEmail()}.\n\nNARI · Skincare coreano`,
+  };
+};
+
+const sendPaymentDeclinedEmail = ({ to, order, idempotencyKey }) => {
+  const email = String(to || order?.customerEmailSnapshot || '').trim();
+  if (!email) throw new Error('Order email snapshot is missing.');
+  return sendEmail({ to: email, ...buildPaymentDeclinedEmail({ order }), idempotencyKey });
 };
 
 const buildOrderShippedEmail = ({ order, items, accountUrl = null }) => {
@@ -205,4 +250,4 @@ const sendAbandonedCartEmail = ({ to, firstName, cartUrl, items, reminderNumber,
   idempotencyKey,
 });
 
-module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, buildReviewRequestEmail, sendReviewRequestEmail, sendAbandonedCartEmail };
+module.exports = { buildOrderReceivedEmail, sendOrderReceivedEmail, buildPaymentApprovedEmail, sendPaymentApprovedEmail, buildPaymentDeclinedEmail, sendPaymentDeclinedEmail, buildOrderShippedEmail, sendOrderShippedEmail, buildOrderDeliveredEmail, sendOrderDeliveredEmail, sendWelcomeEmail, sendPasswordResetEmail, sendEmailVerification, sendPasswordChangedEmail, sendReviewLinkEmail, buildReviewRequestEmail, sendReviewRequestEmail, sendAbandonedCartEmail };
