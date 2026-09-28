@@ -103,7 +103,12 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
     if (productRows.length !== productIds.length || productRows.some((product) => product.status !== 'active')) throw conflictError('Uno de los productos ya no está disponible.');
     const products = items.map((item) => productById.get(item.productId));
     const subtotal = products.reduce((sum, product, index) => sum + Number(product.price) * items[index].quantity, 0);
-    const shippingQuote = await getShippingQuote({ department: address.department, city: address.city }, tx);
+    const shippingQuote = await getShippingQuote({
+      country: address.country,
+      department: address.department,
+      city: address.city,
+      merchandiseSubtotal: subtotal,
+    }, tx);
     const shipping = shippingQuote.shippingTotal;
     // R4 has no active discount system. Never trust client-supplied discounts.
     const discount = 0;

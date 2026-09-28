@@ -46,7 +46,8 @@ test('reservation expiration has a bounded 30-minute default and shared transact
   const dbSource = read('src/db/init.js');
   assert.match(dbSource, /withTransaction: async \(callback\) => callback\(tx\)/);
   const shippingSource = read('src/services/shippingPolicy.js');
-  assert.match(shippingSource, /configuredNationalShippingCost = async \(repository\)/);
+  assert.match(shippingSource, /POLICY_VERSION = 'R12G_SHIPPING_V1'/);
+  assert.match(shippingSource, /BASE_RATES/);
 });
 
 console.log('atomicCheckoutFoundation tests: PASS');

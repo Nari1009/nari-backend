@@ -1,48 +1,35 @@
 const assert = require('node:assert/strict');
 const { calculateShipping, ShippingPolicyError } = require('../src/services/shippingPolicy');
 
-const beforeCutoff = new Date('2026-09-07T15:59:59.000Z');
-const atCutoff = new Date('2026-09-07T16:00:00.000Z');
-const nationalFee = 18000;
+const quote = (department, city, merchandiseSubtotal = 100000) => calculateShipping({
+  country: 'Colombia', department, city, merchandiseSubtotal,
+});
 
-const localBefore = calculateShipping({ department: 'Antioquia', city: 'Medellín', now: beforeCutoff, standardCost: nationalFee });
-assert.equal(localBefore.shippingZone, 'LOCAL');
-assert.equal(localBefore.shippingTotal, 0);
-assert.equal(localBefore.deliveryType, 'SAME_DAY');
-assert.equal(localBefore.sameDayEligible, true);
+const bello = quote('Antioquia', 'Bello');
+assert.deepEqual({ zone: bello.shippingZone, base: bello.baseRate, variable: bello.variableCharge, total: bello.shippingTotal }, { zone: 'LOCAL', base: 9000, variable: 1000, total: 10000 });
 
-const localAtCutoff = calculateShipping({ department: 'Antioquia', city: 'Medellín', now: atCutoff, standardCost: nationalFee });
-assert.equal(localAtCutoff.shippingTotal, 0);
-assert.equal(localAtCutoff.deliveryType, 'STANDARD');
-assert.equal(localAtCutoff.sameDayEligible, false);
+const medellin = quote('Antioquia', 'Medellín');
+assert.deepEqual({ zone: medellin.shippingZone, base: medellin.baseRate, variable: medellin.variableCharge, total: medellin.shippingTotal }, { zone: 'REGIONAL', base: 10450, variable: 1000, total: 11450 });
 
-const bello = calculateShipping({ department: 'Antioquia', city: 'Bello', now: beforeCutoff, standardCost: nationalFee });
-assert.equal(bello.shippingZone, 'LOCAL');
-assert.equal(bello.shippingTotal, 0);
-assert.equal(bello.sameDayEligible, true);
+assert.equal(quote('Antioquia', 'Envigado').shippingZone, 'REGIONAL');
+assert.equal(quote('Antioquia', 'Sabaneta').shippingZone, 'REGIONAL');
+assert.equal(quote('Antioquia', 'Itagüí').shippingZone, 'REGIONAL');
+assert.equal(quote('Antioquia', 'La Estrella').shippingZone, 'REGIONAL');
 
-const laEstrella = calculateShipping({ department: 'Antioquia', city: 'La Estrella', now: atCutoff, standardCost: nationalFee });
-assert.equal(laEstrella.shippingZone, 'LOCAL');
-assert.equal(laEstrella.shippingTotal, 0);
-assert.equal(laEstrella.sameDayEligible, false);
+const bogota = quote('Cundinamarca', 'Bogotá, D.C.');
+assert.deepEqual({ zone: bogota.shippingZone, base: bogota.baseRate, variable: bogota.variableCharge, total: bogota.shippingTotal }, { zone: 'NATIONAL', base: 17830, variable: 1000, total: 18830 });
+assert.equal(quote('Valle del Cauca', 'Cali').shippingZone, 'NATIONAL');
 
-const national = calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff, standardCost: nationalFee });
-assert.equal(national.shippingZone, 'NATIONAL');
-assert.equal(national.shippingTotal, nationalFee);
-assert.equal(national.deliveryType, 'STANDARD');
-assert.equal(national.sameDayEligible, false);
+const sanAndres = quote('Archipiélago de San Andrés, Providencia y Santa Catalina', 'San Andrés');
+assert.deepEqual({ zone: sanAndres.shippingZone, base: sanAndres.baseRate, variable: sanAndres.variableCharge, total: sanAndres.shippingTotal }, { zone: 'OTHER', base: 27560, variable: 1000, total: 28560 });
 
-const wrongDepartment = calculateShipping({ department: 'Cundinamarca', city: 'Medellín', now: beforeCutoff, standardCost: nationalFee });
-assert.equal(wrongDepartment.shippingZone, 'NATIONAL');
-assert.equal(wrongDepartment.sameDayEligible, false);
-
-const accentMatch = calculateShipping({ department: 'Antioquia', city: 'Medellin', now: beforeCutoff, standardCost: nationalFee });
-assert.equal(accentMatch.shippingZone, 'LOCAL');
-
-assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff }), ShippingPolicyError);
-assert.throws(() => calculateShipping({ department: 'Unknown', city: 'Medellín', now: beforeCutoff, standardCost: nationalFee }), ShippingPolicyError);
-assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff, standardCost: 'abc' }), ShippingPolicyError);
-assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff, standardCost: 0 }), ShippingPolicyError);
-assert.throws(() => calculateShipping({ department: 'Cundinamarca', city: 'Bogotá, D.C.', now: beforeCutoff, standardCost: -1 }), ShippingPolicyError);
+assert.equal(quote(' antioquia ', '  MEDellin  ').shippingZone, 'REGIONAL');
+assert.equal(quote('ANTIOQUIA', 'BÉLLO').shippingZone, 'LOCAL');
+assert.equal(quote('Antioquia', 'Bello', 1).shippingTotal, 9000);
+assert.equal(quote('Antioquia', 'Bello', 149).variableCharge, 1);
+assert.equal(quote('Antioquia', 'Bello', 150).variableCharge, 2);
+assert.throws(() => calculateShipping({ country: 'Ecuador', department: 'Pichincha', city: 'Quito', merchandiseSubtotal: 100000 }), ShippingPolicyError);
+assert.throws(() => calculateShipping({ country: 'Colombia', department: 'Unknown', city: 'Bogotá', merchandiseSubtotal: 100000 }), ShippingPolicyError);
+assert.throws(() => calculateShipping({ country: 'Colombia', department: 'Antioquia', city: 'Bello', merchandiseSubtotal: -1 }), ShippingPolicyError);
 
 console.log('shippingPolicy tests: PASS');
