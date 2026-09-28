@@ -27,3 +27,10 @@ test('Admin list payment summary gives an existing APPROVED attempt precedence',
   assert.match(query, /CASE WHEN status = 'APPROVED' THEN 0 ELSE 1 END/);
   assert.match(query, /createdat DESC, id DESC/);
 });
+
+test('Admin Dashboard recent orders project reservation lifecycle state', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../src/routes/admin.js'), 'utf8');
+  assert.match(source, /AS "reservationStatus"/);
+  assert.match(source, /FROM stock_reservations r WHERE r\.orderid = o\.id/);
+  assert.match(source, /CASE WHEN p\.status = 'APPROVED' THEN 0 ELSE 1 END, p\.createdat DESC/);
+});
