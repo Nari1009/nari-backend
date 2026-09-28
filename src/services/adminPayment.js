@@ -8,6 +8,7 @@ const SAFE_PAYMENT_SELECT = `
   providerreference AS "providerReference",
   amount,
   currency,
+  (SELECT r.status FROM stock_reservations r WHERE r.orderid = payments.orderid LIMIT 1) AS "reservationStatus",
   createdat AS "createdAt",
   updatedat AS "updatedAt",
   approvedat AS "approvedAt",

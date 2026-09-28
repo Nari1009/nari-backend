@@ -50,6 +50,16 @@ const dashboardDate = (value, fallback) => {
   return Number.isNaN(parsed.getTime()) ? fallback.toISOString() : parsed.toISOString();
 };
 const fulfillmentStatusesRequiringApproval = new Set(['Preparando', 'Enviado', 'Entregado']);
+const adminOrderStatus = `(CASE
+  WHEN orders.status <> 'Cancelado'
+    AND EXISTS (SELECT 1 FROM payments expired_payment JOIN stock_reservations expired_reservation ON expired_reservation.orderid = expired_payment.orderid
+      WHERE expired_payment.orderid = orders.id
+        AND expired_payment.status = 'CREATED'
+        AND expired_reservation.status IN ('EXPIRED', 'RELEASED'))
+    AND NOT EXISTS (SELECT 1 FROM payments approved_payment WHERE approved_payment.orderid = orders.id AND approved_payment.status = 'APPROVED')
+  THEN 'Cancelado'
+  ELSE orders.status
+END)`;
 const paymentApprovalGuard = async (tx, orderId, targetStatus) => {
   if (!fulfillmentStatusesRequiringApproval.has(targetStatus)) return null;
   const paymentState = await tx.get(`SELECT
@@ -350,14 +360,14 @@ router.get('/customers/:id', async (req, res) => {
 });
 
 router.get('/orders', async (req, res) => {
-  const orders = await all(`SELECT orders.id, orders.ordernumber AS "orderNumber", orders.createdat AS date, orders.status, orders.deliveredat AS "deliveredAt", orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
+  const orders = await all(`SELECT orders.id, orders.ordernumber AS "orderNumber", orders.createdat AS date, ${adminOrderStatus} AS status, orders.deliveredat AS "deliveredAt", orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid ORDER BY orders.createdat DESC`);
   const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', payment: await latestPaymentForOrder({ get }, order.id), products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
   res.json(result);
 });
 
 router.get('/orders/:id', async (req, res) => {
-  const order = await get(`SELECT orders.id, orders.ordernumber AS "orderNumber", orders.createdat AS date, orders.status, orders.deliveredat AS "deliveredAt", orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingzone AS "shippingZone", orders.deliverytype AS "deliveryType", orders.samedayeligible AS "sameDayEligible", orders.shippingpolicyversion AS "shippingPolicyVersion", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", orders.documenttypesnapshot AS "documentTypeSnapshot", orders.documentnumbersnapshot AS "documentNumberSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
+  const order = await get(`SELECT orders.id, orders.ordernumber AS "orderNumber", orders.createdat AS date, ${adminOrderStatus} AS status, orders.deliveredat AS "deliveredAt", orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingzone AS "shippingZone", orders.deliverytype AS "deliveryType", orders.samedayeligible AS "sameDayEligible", orders.shippingpolicyversion AS "shippingPolicyVersion", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", orders.documenttypesnapshot AS "documentTypeSnapshot", orders.documentnumbersnapshot AS "documentNumberSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid WHERE orders.id = ?`, [req.params.id]);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
   const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);

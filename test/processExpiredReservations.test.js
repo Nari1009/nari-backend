@@ -6,6 +6,7 @@ const makeRepository = ({ paymentStatus = 'CREATED', reservationStatus = 'ACTIVE
   const state = {
     payment: { id: 'payment-1', orderId: 'order-1', status: paymentStatus },
     reservation: { id: 'reservation-1', orderId: 'order-1', status: reservationStatus, expiresAt },
+    order: { id: 'order-1', status: 'Pendiente' },
     now,
     releases: 0,
   };
@@ -26,6 +27,13 @@ const makeRepository = ({ paymentStatus = 'CREATED', reservationStatus = 'ACTIVE
       if (/FROM stock_reservations/i.test(sql)) return params[0] === state.reservation.id ? { ...state.reservation } : null;
       if (/CURRENT_TIMESTAMP/i.test(sql)) return { now: state.now };
       return null;
+    },
+    async run(sql, params = []) {
+      if (/UPDATE orders\s+SET status = 'Cancelado'/i.test(sql) && params[0] === state.order.id && state.order.status === 'Pendiente') {
+        state.order.status = 'Cancelado';
+        return { changes: 1 };
+      }
+      return { changes: 0 };
     },
   };
   return { repository, state };
@@ -60,6 +68,7 @@ test('expired CREATED reservation is expired once and stock-domain primitive is 
   assert.equal(result[0].result, 'expired');
   assert.equal(state.reservation.status, 'EXPIRED');
   assert.equal(state.releases, 1);
+  assert.equal(state.order.status, 'Cancelado');
 });
 
 test('duplicate worker execution does not restore the same reservation twice', async () => {
@@ -69,6 +78,7 @@ test('duplicate worker execution does not restore the same reservation twice', a
   assert.equal(first[0].result, 'expired');
   assert.equal(second[0].result, 'skipped');
   assert.equal(state.releases, 1);
+  assert.equal(state.order.status, 'Cancelado');
 });
 
 test('overlapping worker executions serialize and expire once', async () => {
