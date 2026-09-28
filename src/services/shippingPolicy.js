@@ -1,18 +1,21 @@
-const POLICY_VERSION = 'R5_V1';
-const BOGOTA_TIME_ZONE = 'America/Bogota';
+const POLICY_VERSION = 'R12G_SHIPPING_V1';
 const LOCAL_DEPARTMENT = 'Antioquia';
-const LOCAL_MUNICIPALITIES = new Set(['medellin', 'bello', 'envigado', 'sabaneta', 'itagui', 'la estrella']);
+const BASE_RATES = Object.freeze({ LOCAL: 9000, REGIONAL: 10450, NATIONAL: 17830, OTHER: 27560 });
+const COLOMBIA_KEYS = new Set(['colombia', 'co']);
+const OTHER_DEPARTMENT_KEYS = new Set([
+  'san andres, providencia y santa catalina',
+  'archipielago de san andres, providencia y santa catalina',
+]);
 
-// This list protects the policy from accepting an arbitrary department label.
-// Municipality names remain canonical in the client location catalog; R5 only
-// needs the six Antioquia pairs for local eligibility.
+// This is NARI's provisional commercial classification, not Coordinadora's
+// official origin/destination classification.
 const KNOWN_DEPARTMENTS = new Set([
   'amazonas', 'antioquia', 'arauca', 'atlantico', 'bolivar', 'boyaca', 'caldas',
   'caqueta', 'casanare', 'cauca', 'cesar', 'choco', 'cordoba', 'cundinamarca',
   'guainia', 'guaviare', 'huila', 'la guajira', 'magdalena', 'meta', 'narino',
   'norte de santander', 'putumayo', 'quindio', 'risaralda', 'san andres',
   'santander', 'sucre', 'tolima', 'valle del cauca', 'vaupes', 'vichada',
-  'bogota, d.c.', 'archipielago de san andres, providencia y santa catalina',
+  'bogota, d.c.', 'bogota d.c.', ...OTHER_DEPARTMENT_KEYS,
 ]);
 
 class ShippingPolicyError extends Error {
@@ -30,7 +33,16 @@ const normalizeLocation = (value) => String(value || '')
   .replace(/\s+/g, ' ')
   .toLowerCase();
 
-const validateLocation = ({ department, city }) => {
+const validateCountry = (country) => {
+  const countryText = String(country || '').trim();
+  if (!countryText || !COLOMBIA_KEYS.has(normalizeLocation(countryText))) {
+    throw new ShippingPolicyError('Por ahora solo realizamos envíos dentro de Colombia.', 400, 'SHIPPING_COUNTRY_UNSUPPORTED');
+  }
+  return countryText;
+};
+
+const validateLocation = ({ country, department, city }) => {
+  const countryText = validateCountry(country);
   const departmentText = String(department || '').trim();
   const cityText = String(city || '').trim();
   const departmentKey = normalizeLocation(departmentText);
@@ -38,86 +50,93 @@ const validateLocation = ({ department, city }) => {
   if (!departmentText || !cityText || !KNOWN_DEPARTMENTS.has(departmentKey)) {
     throw new ShippingPolicyError('Selecciona un departamento y municipio válidos.', 400, 'INVALID_SHIPPING_LOCATION');
   }
-  return { department: departmentText, city: cityText, departmentKey, cityKey };
+  return { country: countryText, department: departmentText, city: cityText, departmentKey, cityKey };
 };
 
-const bogotaTimeParts = (now = new Date()) => {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: BOGOTA_TIME_ZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(now);
-  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
-  return { hour: values.hour, minute: values.minute, second: values.second };
+const validateMerchandiseSubtotal = (value) => {
+  const subtotal = Number(value);
+  if (!Number.isFinite(subtotal) || subtotal < 0) {
+    throw new ShippingPolicyError('El subtotal de productos no es válido.', 400, 'INVALID_SHIPPING_SUBTOTAL');
+  }
+  return subtotal;
 };
 
-const calculateShipping = ({ department, city, now = new Date(), standardCost }) => {
-  const location = validateLocation({ department, city });
-  const local = location.departmentKey === normalizeLocation(LOCAL_DEPARTMENT) && LOCAL_MUNICIPALITIES.has(location.cityKey);
-  if (local) {
-    const time = bogotaTimeParts(now);
-    const sameDayEligible = time.hour < 11;
-    return {
-      shippingZone: 'LOCAL',
-      deliveryType: sameDayEligible ? 'SAME_DAY' : 'STANDARD',
-      sameDayEligible,
-      shippingTotal: 0,
-      minDays: sameDayEligible ? 0 : 2,
-      maxDays: sameDayEligible ? 0 : 5,
-      estimatedTime: sameDayEligible ? 'Puede llegar hoy hasta las 10:00 p. m.' : 'Entrega en los próximos días',
-      policyVersion: POLICY_VERSION,
-      department: location.department,
-      city: location.city,
-    };
-  }
-  const fee = Number(standardCost);
-  if (!Number.isFinite(fee) || fee <= 0) {
-    throw new ShippingPolicyError('El costo nacional de envío no está disponible.', 503, 'SHIPPING_CONFIGURATION_INVALID');
-  }
+const calculateShipping = ({ country, department, city, merchandiseSubtotal }) => {
+  const location = validateLocation({ country, department, city });
+  const declaredValue = validateMerchandiseSubtotal(merchandiseSubtotal);
+  const isAntioquia = location.departmentKey === normalizeLocation(LOCAL_DEPARTMENT);
+  let shippingZone = 'NATIONAL';
+  if (isAntioquia && location.cityKey === 'bello') shippingZone = 'LOCAL';
+  else if (isAntioquia) shippingZone = 'REGIONAL';
+  else if (OTHER_DEPARTMENT_KEYS.has(location.departmentKey) || location.departmentKey === 'san andres') shippingZone = 'OTHER';
+
+  const baseRate = BASE_RATES[shippingZone];
+  const variableCharge = Math.round(declaredValue * 0.01);
+  const shippingTotal = baseRate + variableCharge;
   return {
-    shippingZone: 'NATIONAL',
+    shippingZone,
+    baseRate,
+    declaredValue,
+    variableCharge,
+    shippingTotal,
     deliveryType: 'STANDARD',
     sameDayEligible: false,
-    shippingTotal: fee,
     minDays: 2,
     maxDays: 5,
-    estimatedTime: 'Entrega en los próximos días',
+    estimatedTime: 'Entrega estándar en los próximos días',
     policyVersion: POLICY_VERSION,
+    country: location.country,
     department: location.department,
     city: location.city,
   };
 };
 
-const configuredNationalShippingCost = async (repository) => {
+const canonicalMerchandiseSubtotal = async (items, repository) => {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new ShippingPolicyError('Agrega productos para cotizar el envío.', 400, 'INVALID_SHIPPING_ITEMS');
+  }
+  const normalizedItems = items.map((item) => {
+    const productId = String(item?.productId || '').trim();
+    const quantity = Number(item?.quantity);
+    if (!productId || !Number.isInteger(quantity) || quantity <= 0) {
+      throw new ShippingPolicyError('Los productos para cotizar el envío no son válidos.', 400, 'INVALID_SHIPPING_ITEMS');
+    }
+    return { productId, quantity };
+  });
   const reader = repository || require('../db/init');
-  const row = await reader.get('SELECT value FROM public_settings WHERE key = ?', ['settings:shipping']);
-  if (!row) throw new ShippingPolicyError('La tarifa nacional de envío no está configurada.', 503, 'SHIPPING_CONFIGURATION_INVALID');
-  let settings;
-  try { settings = JSON.parse(row.value); } catch { throw new ShippingPolicyError('La configuración nacional de envío no es válida.', 503, 'SHIPPING_CONFIGURATION_INVALID'); }
-  const fee = Number(settings?.standardCost);
-  if (!Number.isFinite(fee) || fee <= 0) throw new ShippingPolicyError('La tarifa nacional de envío no es válida.', 503, 'SHIPPING_CONFIGURATION_INVALID');
-  return fee;
+  const ids = [...new Set(normalizedItems.map((item) => item.productId))];
+  const rows = await reader.all(`SELECT id, price, status FROM products WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+  const products = new Map(rows.map((row) => [String(row.id), row]));
+  return normalizedItems.reduce((sum, item) => {
+    const product = products.get(item.productId);
+    if (!product || String(product.status || '').toUpperCase() !== 'ACTIVE') {
+      throw new ShippingPolicyError('Uno de los productos seleccionados ya no está disponible.', 409, 'PRODUCT_UNAVAILABLE');
+    }
+    const price = Number(product.price);
+    if (!Number.isFinite(price) || price < 0) {
+      throw new ShippingPolicyError('El precio de un producto no es válido.', 500, 'PRODUCT_PRICE_INVALID');
+    }
+    return sum + price * item.quantity;
+  }, 0);
 };
 
-const getShippingQuote = async ({ department, city, now = new Date() }, repository) => {
-  const location = validateLocation({ department, city });
-  const local = location.departmentKey === normalizeLocation(LOCAL_DEPARTMENT) && LOCAL_MUNICIPALITIES.has(location.cityKey);
-  const standardCost = local ? undefined : await configuredNationalShippingCost(repository);
-  return calculateShipping({ department, city, now, standardCost });
+const getShippingQuote = async ({ country, department, city, items, merchandiseSubtotal }, repository) => {
+  const subtotal = items !== undefined
+    ? await canonicalMerchandiseSubtotal(items, repository)
+    : merchandiseSubtotal;
+  return calculateShipping({ country, department, city, merchandiseSubtotal: subtotal });
 };
 
 module.exports = {
-  BOGOTA_TIME_ZONE,
+  BASE_RATES,
   LOCAL_DEPARTMENT,
-  LOCAL_MUNICIPALITIES,
+  OTHER_DEPARTMENT_KEYS,
   POLICY_VERSION,
   ShippingPolicyError,
   normalizeLocation,
+  validateCountry,
   validateLocation,
-  bogotaTimeParts,
   calculateShipping,
-  configuredNationalShippingCost,
+  canonicalMerchandiseSubtotal,
   getShippingQuote,
 };

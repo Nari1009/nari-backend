@@ -71,7 +71,7 @@ test('checkout-critical collaborators receive the same transaction adapter', () 
   const source = fs.readFileSync(path.join(__dirname, '../src/services/orderCreation.js'), 'utf8');
   assert.match(source, /const db = repository \|\| defaultDb\(\);/);
   assert.match(source, /await db\.withTransaction\(async \(tx\) =>/);
-  assert.match(source, /getShippingQuote\(\{ department: address\.department, city: address\.city \}, tx\)/);
+  assert.match(source, /getShippingQuote\(\{[\s\S]*country: address\.country,[\s\S]*merchandiseSubtotal: subtotal,[\s\S]*\}, tx\)/);
   assert.match(source, /createReservation\(\{ orderId: id[\s\S]*?\}, tx\)/);
   assert.match(source, /createPaymentAttempt\(\{ orderId: id[\s\S]*?\}, tx\)/);
   assert.match(source, /enqueueOrderEmail\(tx, 'order_received'/);

@@ -19,7 +19,9 @@ const defaults = {
   store: { storeActive: true, showOutOfStock: true, allowOutOfStockPurchase: false, showAvailableQuantity: false, showInactiveProducts: false },
   inventory: { defaultLowStock: 3, notifyLowStock: true, notifyOutOfStock: true },
   checkout: { checkoutType: 'guest', requestPhone: true, requestNeighborhood: false, requestPostalCode: false, requestDocument: false, requestDeliveryInstructions: true, defaultCountry: 'Colombia' },
-  shipping: { shippingEnabled: true, standardCost: 0, minDays: 2, maxDays: 5, freeShippingEnabled: false, freeShippingThreshold: 0 },
+  // Shipping rates are a versioned Backend policy; only compatibility
+  // delivery timing remains configurable here.
+  shipping: { minDays: 2, maxDays: 5 },
 };
 
 const validSections = new Set(Object.keys(defaults));
@@ -152,12 +154,8 @@ const settingValidators = {
     const fields = Object.keys(defaults.shipping);
     assertKnownKeys(value, fields, 'Envíos', true);
     const result = {
-      shippingEnabled: booleanValue(value.shippingEnabled, 'shippingEnabled'),
-      standardCost: numberValue(value.standardCost, 'standardCost', { max: 100000000 }),
       minDays: numberValue(value.minDays, 'minDays', { max: 365, integer: true }),
       maxDays: numberValue(value.maxDays, 'maxDays', { max: 365, integer: true }),
-      freeShippingEnabled: booleanValue(value.freeShippingEnabled, 'freeShippingEnabled'),
-      freeShippingThreshold: numberValue(value.freeShippingThreshold, 'freeShippingThreshold', { max: 100000000 }),
     };
     if (result.minDays > result.maxDays) fail('minDays no puede superar maxDays.');
     return result;

@@ -21,7 +21,7 @@ test('typed settings reject unknown fields and invalid numbers', () => {
   assert.throws(() => validateSetting('general', { ...defaults.general, secret: 'no' }), ContractValidationError);
   assert.throws(() => validateSetting('inventory', { ...defaults.inventory, defaultLowStock: Infinity }), ContractValidationError);
   assert.throws(() => validateSetting('shipping', { ...defaults.shipping, minDays: 6, maxDays: 2 }), ContractValidationError);
-  assert.throws(() => validateSetting('shipping', { ...defaults.shipping, standardCost: -1 }), ContractValidationError);
+  assert.throws(() => validateSetting('shipping', { ...defaults.shipping, extra: true }), ContractValidationError);
   assert.throws(() => validateSetting('store', { ...defaults.store, storeActive: 'true' }), ContractValidationError);
 });
 
