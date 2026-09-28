@@ -35,7 +35,10 @@ const processCandidate = async ({ candidate, repository, expire = expireReservat
   if (asTime(reservation.expiresAt) > asTime(clock.now)) return { result: 'skipped', reason: 'reservation_not_expired' };
 
   await expire({ reservationId: reservation.id, now: clock.now }, tx);
-  return { result: 'expired' };
+  await tx.run(`UPDATE orders
+    SET status = 'Cancelado'
+    WHERE id = ? AND status = 'Pendiente'`, [candidate.orderId]);
+  return { result: 'expired', orderStatus: 'Cancelado' };
 });
 
 const processExpiredReservations = async ({ repository = defaultRepository(), limit = DEFAULT_LIMIT, expire = expireReservation, logger = console } = {}) => {
