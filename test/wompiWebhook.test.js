@@ -7,6 +7,7 @@ const { verifyWompiEvent, processWompiEvent } = require('../src/services/wompiWe
 const { buildPaymentApprovedEmail, buildPaymentDeclinedEmail } = require('../src/services/email');
 
 const SECRET = 'test_events_fixture_only';
+const PRODUCTION_SECRET = 'prod_events_fixture_only';
 
 const makeBody = ({ status = 'APPROVED', properties = ['transaction.id', 'transaction.status', 'transaction.amount_in_cents'], amount = 125000, currency = 'COP', reference = 'NARI-PAY-payment-aaaaaaaaaaaaaaaaaaaaaaaa', transactionId = 'tx-1', environment = 'test', timestamp = 1727000000 } = {}) => {
   const body = {
@@ -116,6 +117,17 @@ test('rejects malformed, unsupported, wrong-environment and invalid-checksum eve
   assert.throws(() => verifyWompiEvent({ body: makeBody({ environment: 'prod' }), secret: SECRET, environment: 'sandbox' }), /ambiente/i);
   const invalid = makeBody(); invalid.signature.checksum = '0'.repeat(64);
   assert.throws(() => verifyWompiEvent({ body: invalid, secret: SECRET, environment: 'sandbox' }), /firma/i);
+});
+
+test('accepts matching Sandbox and Production webhook environments and rejects cross-environment events', () => {
+  const productionBody = makeBody({ environment: 'prod' });
+  const productionMaterial = productionBody.signature.properties.map((property) => property.split('.').reduce((value, key) => value[key], productionBody.data)).join('') + productionBody.timestamp + PRODUCTION_SECRET;
+  productionBody.signature.checksum = crypto.createHash('sha256').update(productionMaterial).digest('hex');
+  assert.equal(verifyWompiEvent({ body: productionBody, checksumHeader: productionBody.signature.checksum, secret: PRODUCTION_SECRET, environment: 'production' }).transaction.status, 'APPROVED');
+  assert.throws(() => verifyWompiEvent({ body: productionBody, secret: PRODUCTION_SECRET, environment: 'sandbox' }), /ambiente/i);
+  const sandboxBody = makeBody();
+  assert.equal(verifyWompiEvent({ body: sandboxBody, checksumHeader: sandboxBody.signature.checksum, secret: SECRET, environment: 'sandbox' }).transaction.status, 'APPROVED');
+  assert.throws(() => verifyWompiEvent({ body: sandboxBody, secret: SECRET, environment: 'production' }), /ambiente/i);
 });
 
 test('direct CREATED to APPROVED commits reservation and commercial effects once', async () => {

@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const crypto = require('node:crypto');
 const { createIntegritySignature, wompiReferenceForPaymentId } = require('../src/services/wompiSignature');
-const { getWompiConfig } = require('../src/services/wompiConfig');
+const { getWompiConfig, getWompiEventsConfig } = require('../src/services/wompiConfig');
 const { createCheckoutAccessToken, verifyCheckoutAccessToken } = require('../src/services/checkoutAccessToken');
 const { RECOVERY_TOKEN_TTL_SECONDS, TOKEN_SCOPE, createPaymentRecoveryToken, verifyPaymentRecoveryToken } = require('../src/services/paymentRecoveryToken');
 
@@ -44,18 +44,42 @@ test('integrity signature uses exact Wompi material order and lowercase SHA-256'
   });
 });
 
-test('Sandbox configuration fails closed and never requires later API secrets', async () => {
+test('Wompi configuration is strict per environment and fails closed when disabled', async () => {
   await withEnv({ WOMPI_ENABLED: 'false', WOMPI_ENV: undefined, WOMPI_PUBLIC_KEY: undefined, WOMPI_INTEGRITY_SECRET: undefined }, async () => {
     assert.throws(() => getWompiConfig(), /no está habilitado/i);
   });
   await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'sandbox', WOMPI_PUBLIC_KEY: 'pub_test_fixture', WOMPI_INTEGRITY_SECRET: 'test_integrity_fixture' }, async () => {
     assert.deepEqual(getWompiConfig(), { environment: 'sandbox', publicKey: 'pub_test_fixture', integritySecret: 'test_integrity_fixture' });
   });
-  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'production', WOMPI_PUBLIC_KEY: 'pub_test_fixture', WOMPI_INTEGRITY_SECRET: 'test_integrity_fixture' }, async () => {
-    assert.throws(() => getWompiConfig(), /sandbox/i);
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'production', WOMPI_PUBLIC_KEY: 'pub_prod_fixture', WOMPI_INTEGRITY_SECRET: 'prod_integrity_fixture' }, async () => {
+    assert.deepEqual(getWompiConfig(), { environment: 'production', publicKey: 'pub_prod_fixture', integritySecret: 'prod_integrity_fixture' });
   });
-  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'sandbox', WOMPI_PUBLIC_KEY: 'pub_live_fixture', WOMPI_INTEGRITY_SECRET: 'test_integrity_fixture' }, async () => {
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'production', WOMPI_PUBLIC_KEY: 'pub_test_fixture', WOMPI_INTEGRITY_SECRET: 'prod_integrity_fixture' }, async () => {
     assert.throws(() => getWompiConfig(), /PUBLIC_KEY/i);
+  });
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'sandbox', WOMPI_PUBLIC_KEY: 'pub_test_fixture', WOMPI_INTEGRITY_SECRET: 'prod_integrity_fixture' }, async () => {
+    assert.throws(() => getWompiConfig(), /INTEGRITY_SECRET/i);
+  });
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'production', WOMPI_PUBLIC_KEY: 'pub_prod_fixture', WOMPI_INTEGRITY_SECRET: 'test_integrity_fixture' }, async () => {
+    assert.throws(() => getWompiConfig(), /INTEGRITY_SECRET/i);
+  });
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'invalid', WOMPI_PUBLIC_KEY: 'pub_test_fixture', WOMPI_INTEGRITY_SECRET: 'test_integrity_fixture' }, async () => {
+    assert.throws(() => getWompiConfig(), /sandbox o production/i);
+  });
+});
+
+test('Wompi events secrets are strict per environment', async () => {
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'sandbox', WOMPI_EVENTS_SECRET: 'test_events_fixture' }, async () => {
+    assert.deepEqual(getWompiEventsConfig(), { environment: 'sandbox', eventsSecret: 'test_events_fixture' });
+  });
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'production', WOMPI_EVENTS_SECRET: 'prod_events_fixture' }, async () => {
+    assert.deepEqual(getWompiEventsConfig(), { environment: 'production', eventsSecret: 'prod_events_fixture' });
+  });
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'production', WOMPI_EVENTS_SECRET: 'test_events_fixture' }, async () => {
+    assert.throws(() => getWompiEventsConfig(), /events_secret|válido/i);
+  });
+  await withEnv({ WOMPI_ENABLED: 'true', WOMPI_ENV: 'sandbox', WOMPI_EVENTS_SECRET: 'prod_events_fixture' }, async () => {
+    assert.throws(() => getWompiEventsConfig(), /events_secret|válido/i);
   });
 });
 

@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const defaultDb = () => require('../db/init');
-const { getWompiEventsConfig } = require('./wompiConfig');
+const { getWompiEventsConfig, environmentRules } = require('./wompiConfig');
 const { transitionPaymentStatus } = require('./paymentService');
 const { commitReservationSale, releaseReservation } = require('./inventoryReservation');
 const { enqueueOrderEmail } = require('./emailOutbox');
@@ -36,7 +36,8 @@ const verifyWompiEvent = ({ body, checksumHeader = null, secret, environment = '
   const transaction = requiredObject(data.transaction, 'La transacción');
   const signature = requiredObject(event.signature, 'La firma');
   if (event.event !== 'transaction.updated') throw createError('El evento Wompi no está soportado.', 400, 'WOMPI_EVENT_UNSUPPORTED');
-  if (environment !== 'sandbox' || event.environment !== 'test') throw createError('El ambiente del evento Wompi no es válido.', 400, 'WOMPI_ENVIRONMENT_INVALID');
+  const rules = environmentRules(environment);
+  if (!rules || event.environment !== rules.eventEnvironment) throw createError('El ambiente del evento Wompi no es válido.', 400, 'WOMPI_ENVIRONMENT_INVALID');
   if (!Array.isArray(signature.properties) || !signature.properties.length || typeof signature.checksum !== 'string' || !/^\w{64}$/i.test(signature.checksum)) throw createError('La firma del evento Wompi no es válida.', 401, 'WOMPI_SIGNATURE_INVALID');
   if (!Number.isSafeInteger(event.timestamp) || event.timestamp <= 0) throw createError('El timestamp del evento Wompi no es válido.', 400, 'WOMPI_PAYLOAD_INVALID');
   const material = signature.properties.map((property) => resolvePath(data, property)).join('') + String(event.timestamp) + String(secret || '');
