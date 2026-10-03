@@ -4,6 +4,12 @@ const TOKEN_VERSION = 'v1';
 const TOKEN_SCOPE = 'payment-status:read';
 // Deliberately longer than the Widget capability, but bounded to post-payment recovery.
 const RECOVERY_TOKEN_TTL_SECONDS = 48 * 60 * 60;
+const SUPPORTED_ORDER_ID_PATTERNS = Object.freeze([
+  /^NARI-\d{10,13}-[a-f0-9]{24}$/,
+  /^order-[a-f0-9]{24}$/,
+]);
+
+const isSupportedOrderId = (value) => SUPPORTED_ORDER_ID_PATTERNS.some((pattern) => pattern.test(value));
 
 const getSecret = () => {
   const secret = String(process.env.CHECKOUT_RECOVERY_SECRET || '').trim();
@@ -18,7 +24,7 @@ const createPaymentRecoveryToken = ({ orderId, paymentId, expiresAt = Math.floor
   const normalizedOrderId = String(orderId || '').trim();
   const normalizedPaymentId = String(paymentId || '').trim();
   const expiration = Number(expiresAt);
-  if (!normalizedOrderId || !normalizedPaymentId || !/^order-[a-f0-9]{24}$/.test(normalizedOrderId) || !/^payment-[a-f0-9]{24}$/.test(normalizedPaymentId) || !Number.isSafeInteger(expiration) || expiration <= Math.floor(Date.now() / 1000)) {
+  if (!normalizedOrderId || !normalizedPaymentId || !isSupportedOrderId(normalizedOrderId) || !/^payment-[a-f0-9]{24}$/.test(normalizedPaymentId) || !Number.isSafeInteger(expiration) || expiration <= Math.floor(Date.now() / 1000)) {
     throw new Error('Los datos del token de recuperación no son válidos.');
   }
   const payload = Buffer.from(JSON.stringify({ version: 1, scope: TOKEN_SCOPE, orderId: normalizedOrderId, paymentId: normalizedPaymentId, expiresAt: expiration }), 'utf8').toString('base64url');
@@ -35,11 +41,11 @@ const verifyPaymentRecoveryToken = (token) => {
     const received = Buffer.from(parts[2]);
     if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return null;
     const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
-    if (payload?.version !== 1 || payload.scope !== TOKEN_SCOPE || typeof payload.orderId !== 'string' || typeof payload.paymentId !== 'string' || !/^order-[a-f0-9]{24}$/.test(payload.orderId) || !/^payment-[a-f0-9]{24}$/.test(payload.paymentId) || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt <= Math.floor(Date.now() / 1000)) return null;
+    if (payload?.version !== 1 || payload.scope !== TOKEN_SCOPE || typeof payload.orderId !== 'string' || typeof payload.paymentId !== 'string' || !isSupportedOrderId(payload.orderId) || !/^payment-[a-f0-9]{24}$/.test(payload.paymentId) || !Number.isSafeInteger(payload.expiresAt) || payload.expiresAt <= Math.floor(Date.now() / 1000)) return null;
     return { version: payload.version, scope: payload.scope, orderId: payload.orderId, paymentId: payload.paymentId, expiresAt: payload.expiresAt };
   } catch {
     return null;
   }
 };
 
-module.exports = { RECOVERY_TOKEN_TTL_SECONDS, TOKEN_SCOPE, assertPaymentRecoverySecret, createPaymentRecoveryToken, verifyPaymentRecoveryToken };
+module.exports = { RECOVERY_TOKEN_TTL_SECONDS, TOKEN_SCOPE, assertPaymentRecoverySecret, createPaymentRecoveryToken, verifyPaymentRecoveryToken, isSupportedOrderId };
