@@ -16,7 +16,7 @@ const MAX = {
 const defaults = {
   contact: { supportEmail: '', whatsappNumber: '', whatsappMessage: 'Hola, vengo de la página de NARI y necesito ayuda.', businessPhone: '', instagram: '', tiktok: '' },
   general: { storeName: 'NARI', commercialName: '', country: 'Colombia', currency: 'COP', timezone: 'America/Bogota', language: 'Español' },
-  store: { storeActive: true, showOutOfStock: true, allowOutOfStockPurchase: false, showAvailableQuantity: false, showInactiveProducts: false },
+  store: { storeActive: true, showOutOfStock: true, allowOutOfStockPurchase: false, showAvailableQuantity: false, showInactiveProducts: false, globalDiscountEnabled: false, globalDiscountPercent: 0 },
   inventory: { defaultLowStock: 3, notifyLowStock: true, notifyOutOfStock: true },
   checkout: { checkoutType: 'guest', requestPhone: true, requestNeighborhood: false, requestPostalCode: false, requestDocument: false, requestDeliveryInstructions: true, defaultCountry: 'Colombia' },
   // Shipping rates are a versioned Backend policy; only compatibility
@@ -120,7 +120,15 @@ const settingValidators = {
     assertObject(value, 'Tienda');
     const fields = Object.keys(defaults.store);
     assertKnownKeys(value, fields, 'Tienda', true);
-    return Object.fromEntries(fields.map((field) => [field, booleanValue(value[field], field)]));
+    return {
+      storeActive: booleanValue(value.storeActive, 'storeActive'),
+      showOutOfStock: booleanValue(value.showOutOfStock, 'showOutOfStock'),
+      allowOutOfStockPurchase: booleanValue(value.allowOutOfStockPurchase, 'allowOutOfStockPurchase'),
+      showAvailableQuantity: booleanValue(value.showAvailableQuantity, 'showAvailableQuantity'),
+      showInactiveProducts: booleanValue(value.showInactiveProducts, 'showInactiveProducts'),
+      globalDiscountEnabled: booleanValue(value.globalDiscountEnabled, 'globalDiscountEnabled'),
+      globalDiscountPercent: numberValue(value.globalDiscountPercent, 'globalDiscountPercent', { max: 99, integer: true }),
+    };
   },
   inventory: (value) => {
     assertObject(value, 'Inventario');

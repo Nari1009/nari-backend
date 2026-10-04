@@ -16,6 +16,7 @@ const { commercialOrderClause, commercialOrderParams } = require('../services/co
 const { latestPaymentForOrder, paymentAttemptsForOrder } = require('../services/adminPayment');
 const { getSetting, updateSetting, validSections } = require('./settings');
 const { ContractValidationError } = require('../services/settingsContract');
+const { normalizeDiscountPercent } = require('../services/pricing');
 const router = express.Router();
 const serializeList = (value) => {
   if (Array.isArray(value)) return JSON.stringify(value);
@@ -530,7 +531,7 @@ router.delete('/customers/:id', async (req, res) => {
 router.patch('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, brand, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier } = req.body;
+    const { name, brand, price, discountPercent, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier } = req.body;
 
     const product = await get('SELECT * FROM products WHERE id = ?', [id]);
     if (!product) {
@@ -541,6 +542,8 @@ router.patch('/products/:id', async (req, res) => {
       return res.status(400).json({ error: 'Stock must be a non-negative integer' });
     }
     if (minimumStock !== undefined && (!Number.isInteger(minimumStock) || minimumStock < 0)) return res.status(400).json({ error: 'El stock mínimo debe ser un entero no negativo.' });
+    let validatedDiscountPercent;
+    try { validatedDiscountPercent = discountPercent === undefined ? undefined : normalizeDiscountPercent(discountPercent); } catch (error) { return res.status(error.status || 400).json({ error: error.message }); }
 
     const updates = [];
     const values = [];
@@ -548,6 +551,7 @@ router.patch('/products/:id', async (req, res) => {
     if (name !== undefined) { updates.push('name = ?'); values.push(name); }
     if (brand !== undefined) { updates.push('brand = ?'); values.push(brand); }
     if (price !== undefined) { updates.push('price = ?'); values.push(price); }
+    if (validatedDiscountPercent !== undefined) { updates.push('discountpercent = ?'); values.push(validatedDiscountPercent); }
     if (cost !== undefined) { updates.push('cost = ?'); values.push(cost); }
     if (stock !== undefined) { updates.push('stock = ?'); values.push(Math.max(0, stock)); }
     if (minimumStock !== undefined) { updates.push('minimumStock = ?'); values.push(minimumStock); }
@@ -634,11 +638,13 @@ router.patch('/products/:id/stock', async (req, res) => {
 });
 
 router.post('/products', async (req, res) => {
-  const { id, brand, name, price, cost, stock, minimumStock = 3, category, status = 'active', description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier } = req.body;
+  const { id, brand, name, price, discountPercent = 0, cost, stock, minimumStock = 3, category, status = 'active', description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier } = req.body;
 
   if (!id || !brand || !name || price === undefined || !category) {
     return res.status(400).json({ error: 'Missing required fields: id, brand, name, price, category' });
   }
+  let validatedDiscountPercent;
+  try { validatedDiscountPercent = normalizeDiscountPercent(discountPercent); } catch (error) { return res.status(error.status || 400).json({ error: error.message }); }
 
   const slug = `${brand}-${name}`
     .toLowerCase()
@@ -653,9 +659,9 @@ router.post('/products', async (req, res) => {
   }
 
   await run(
-    `INSERT INTO products (id, brand, name, slug, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    [id, brand, name, slug, price, cost || 0, stock || 0, Number.isInteger(minimumStock) && minimumStock >= 0 ? minimumStock : 3, category, status, description || '', sku || '', compareAtPrice ?? null, serializeList(skinTypes), serializeList(concerns), serializeList(ingredients), audience || '', skinBenefits || '', serializeList(featuredIngredients), fullIngredients || '', productInfo || '', shippingReturns || '', serializeList(benefits), serializeList(howToUse), precautions || '', serializeList(images), supplier || null]
+    `INSERT INTO products (id, brand, name, slug, price, discountpercent, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [id, brand, name, slug, price, validatedDiscountPercent, cost || 0, stock || 0, Number.isInteger(minimumStock) && minimumStock >= 0 ? minimumStock : 3, category, status, description || '', sku || '', compareAtPrice ?? null, serializeList(skinTypes), serializeList(concerns), serializeList(ingredients), audience || '', skinBenefits || '', serializeList(featuredIngredients), fullIngredients || '', productInfo || '', shippingReturns || '', serializeList(benefits), serializeList(howToUse), precautions || '', serializeList(images), supplier || null]
   );
 
   await rememberCatalogOption('brand', brand);

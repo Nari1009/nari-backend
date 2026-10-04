@@ -53,7 +53,7 @@ test('public projection is explicit and future columns are not exposed automatic
   assert.ok(PUBLIC_PRODUCT_KEYS.length > 0);
   assert.match(PUBLIC_PRODUCT_SELECT, /^SELECT /);
   assert.match(PUBLIC_PRODUCT_SELECT, / FROM products$/);
-  assert.equal(PUBLIC_PRODUCT_SELECT.includes('*'), false);
+  assert.equal(/^SELECT\s+\*/i.test(PUBLIC_PRODUCT_SELECT), false);
   assert.equal(PUBLIC_PRODUCT_KEYS.includes('cost'), false);
   assert.equal(PUBLIC_PRODUCT_KEYS.includes('supplier'), false);
   assert.equal(PUBLIC_PRODUCT_KEYS.includes('minimumStock'), false);

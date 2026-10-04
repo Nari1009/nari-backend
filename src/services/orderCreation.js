@@ -3,6 +3,7 @@ const defaultDb = () => require('../db/init');
 const { normalizeEmail } = require('./auth');
 const { enqueueOrderEmail } = require('./emailOutbox');
 const { getShippingQuote } = require('./shippingPolicy');
+const { calculateProductPricing, readGlobalDiscount } = require('./pricing');
 const { nextOrderNumber } = require('./orderNumber');
 const { createReservation } = require('./inventoryReservation');
 const { createPaymentAttempt, orderTotalInCents } = require('./paymentService');
@@ -98,21 +99,23 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
     }
 
     const productIds = [...new Set(items.map((item) => item.productId))];
-    const productRows = await tx.all(`SELECT id, name, price, cost, stock, status FROM products WHERE id IN (${productIds.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`, productIds);
+    const productRows = await tx.all(`SELECT id, name, price, discountpercent AS "discountPercent", cost, stock, status FROM products WHERE id IN (${productIds.map(() => '?').join(', ')}) ORDER BY id FOR UPDATE`, productIds);
     const productById = new Map(productRows.map((product) => [product.id, product]));
     if (productRows.length !== productIds.length || productRows.some((product) => product.status !== 'active')) throw conflictError('Uno de los productos ya no está disponible.');
     const products = items.map((item) => productById.get(item.productId));
-    const subtotal = products.reduce((sum, product, index) => sum + Number(product.price) * items[index].quantity, 0);
+    const globalDiscount = await readGlobalDiscount(tx);
+    const pricedProducts = products.map((product) => ({ ...product, pricing: calculateProductPricing({ basePrice: product.price, productDiscountPercent: product.discountPercent, globalDiscountPercent: globalDiscount.percent, globalEnabled: globalDiscount.enabled }) }));
+    const subtotal = pricedProducts.reduce((sum, product, index) => sum + product.pricing.basePrice * items[index].quantity, 0);
+    const discount = pricedProducts.reduce((sum, product, index) => sum + product.pricing.discountAmount * items[index].quantity, 0);
+    const discountedSubtotal = subtotal - discount;
     const shippingQuote = await getShippingQuote({
       country: address.country,
       department: address.department,
       city: address.city,
-      merchandiseSubtotal: subtotal,
+      merchandiseSubtotal: discountedSubtotal,
     }, tx);
     const shipping = shippingQuote.shippingTotal;
-    // R4 has no active discount system. Never trust client-supplied discounts.
-    const discount = 0;
-    const total = Math.max(0, subtotal + shipping - discount);
+    const total = Math.max(0, discountedSubtotal + shipping);
     const authenticatedCustomer = userId ? await tx.get('SELECT id, authuserid AS "authUserId", email FROM customers WHERE authuserid = ?', [userId]) : null;
     const emailCustomer = await tx.get('SELECT id, authuserid AS "authUserId", email FROM customers WHERE lower(trim(email)) = ?', [email]);
     if (authenticatedCustomer && emailCustomer && authenticatedCustomer.id !== emailCustomer.id) throw conflictError('La cuenta autenticada y el correo del checkout pertenecen a clientes distintos.');
@@ -152,14 +155,17 @@ const createOrder = async ({ payload, userId = null, repository = null }) => {
       return;
     }
 
-    for (const [index, product] of products.entries()) {
+    for (const [index, product] of pricedProducts.entries()) {
       const quantity = items[index].quantity;
-      await tx.run('INSERT INTO order_items (id, orderId, productId, productName, quantity, unitPrice, unitCost) VALUES (?, ?, ?, ?, ?, ?, ?)', [`item-${randomId()}`, id, product.id, product.name, quantity, product.price, product.cost ?? 0]);
+      await tx.run(`INSERT INTO order_items
+        (id, orderId, productId, productName, quantity, unitPrice, unitCost, baseunitprice, discountpercent, discountamount, discountsource, effectiveunitprice)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [`item-${randomId()}`, id, product.id, product.name, quantity, product.pricing.effectivePrice, product.cost ?? 0, product.pricing.basePrice, product.pricing.effectiveDiscountPercent, product.pricing.discountAmount, product.pricing.discountSource, product.pricing.effectivePrice]);
     }
     const expiresAt = new Date(Date.now() + CHECKOUT_RESERVATION_TTL_MS).toISOString();
     const reservation = await createReservation({ orderId: id, idempotencyKey: `checkout-reservation/${checkoutIdempotencyKey || id}`, expiresAt }, tx);
     const payment = await createPaymentAttempt({ orderId: id, provider: 'WOMPI', amount: orderTotalInCents(Number(total).toFixed(2)), currency: 'COP', idempotencyKey: `checkout-payment/${checkoutIdempotencyKey || id}`, expiresAt }, tx);
-    await enqueueOrderEmail(tx, 'order_received', { id, orderNumber, userId, customerEmailSnapshot: emailSnapshot, customerFirstNameSnapshot: firstNameSnapshot, customerLastNameSnapshot: lastNameSnapshot, shippingAddress: address, subtotal, discountTotal: discount, shippingTotal: shipping, shippingZone: shippingQuote.shippingZone, deliveryType: shippingQuote.deliveryType, sameDayEligible: shippingQuote.sameDayEligible, shippingPolicyVersion: shippingQuote.policyVersion, total }, products.map((product, index) => ({ productName: product.name, quantity: items[index].quantity, unitPrice: product.price })));
+    await enqueueOrderEmail(tx, 'order_received', { id, orderNumber, userId, customerEmailSnapshot: emailSnapshot, customerFirstNameSnapshot: firstNameSnapshot, customerLastNameSnapshot: lastNameSnapshot, shippingAddress: address, subtotal, discountTotal: discount, shippingTotal: shipping, shippingZone: shippingQuote.shippingZone, deliveryType: shippingQuote.deliveryType, sameDayEligible: shippingQuote.sameDayEligible, shippingPolicyVersion: shippingQuote.policyVersion, total }, pricedProducts.map((product, index) => ({ productName: product.name, quantity: items[index].quantity, unitPrice: product.pricing.effectivePrice })));
     result = { id, orderNumber, date: now, status: 'Pendiente', total, products: products.map((product) => product.name), reservationId: reservation.id, reservationStatus: reservation.status, paymentId: payment.id, paymentStatus: payment.status, paymentProvider: payment.provider, paymentAmount: payment.amount, paymentCurrency: payment.currency, paymentIdempotencyKey: payment.idempotencyKey };
   });
   if (!userId && wompiEnabled()) {
