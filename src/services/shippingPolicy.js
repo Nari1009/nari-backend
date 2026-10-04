@@ -6,6 +6,7 @@ const OTHER_DEPARTMENT_KEYS = new Set([
   'san andres, providencia y santa catalina',
   'archipielago de san andres, providencia y santa catalina',
 ]);
+const { calculateProductPricing, readGlobalDiscount } = require('./pricing');
 
 // This is NARI's provisional commercial classification, not Coordinadora's
 // official origin/destination classification.
@@ -105,18 +106,20 @@ const canonicalMerchandiseSubtotal = async (items, repository) => {
   });
   const reader = repository || require('../db/init');
   const ids = [...new Set(normalizedItems.map((item) => item.productId))];
-  const rows = await reader.all(`SELECT id, price, status FROM products WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+  const rows = await reader.all(`SELECT id, price, discountpercent AS "discountPercent", status FROM products WHERE id IN (${ids.map(() => '?').join(',')})`, ids);
+  const globalDiscount = await readGlobalDiscount(reader);
   const products = new Map(rows.map((row) => [String(row.id), row]));
   return normalizedItems.reduce((sum, item) => {
     const product = products.get(item.productId);
     if (!product || String(product.status || '').toUpperCase() !== 'ACTIVE') {
       throw new ShippingPolicyError('Uno de los productos seleccionados ya no está disponible.', 409, 'PRODUCT_UNAVAILABLE');
     }
-    const price = Number(product.price);
-    if (!Number.isFinite(price) || price < 0) {
+    try {
+      const pricing = calculateProductPricing({ basePrice: product.price, productDiscountPercent: product.discountPercent, globalDiscountPercent: globalDiscount.percent, globalEnabled: globalDiscount.enabled });
+      return sum + pricing.effectivePrice * item.quantity;
+    } catch {
       throw new ShippingPolicyError('El precio de un producto no es válido.', 500, 'PRODUCT_PRICE_INVALID');
     }
-    return sum + price * item.quantity;
   }, 0);
 };
 

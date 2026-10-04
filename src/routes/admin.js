@@ -16,6 +16,7 @@ const { commercialOrderClause, commercialOrderParams } = require('../services/co
 const { latestPaymentForOrder, paymentAttemptsForOrder } = require('../services/adminPayment');
 const { getSetting, updateSetting, validSections } = require('./settings');
 const { ContractValidationError } = require('../services/settingsContract');
+const { normalizeDiscountPercent } = require('../services/pricing');
 const {
   ProductMetadataValidationError,
   validateRoutineStep,
@@ -362,7 +363,7 @@ router.get('/customers/:id', async (req, res) => {
 router.get('/orders', async (req, res) => {
   const orders = await all(`SELECT orders.id, orders.ordernumber AS "orderNumber", orders.createdat AS date, ${adminOrderStatus} AS status, orders.deliveredat AS "deliveredAt", orders.total, orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid ORDER BY orders.createdat DESC`);
-  const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', payment: await latestPaymentForOrder({ get }, order.id), products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
+  const result = await Promise.all(orders.map(async (order) => ({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', payment: await latestPaymentForOrder({ get }, order.id), products: await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice", COALESCE(baseunitprice, unitprice) AS "baseUnitPrice", discountpercent AS "discountPercent", discountamount AS "discountAmount", discountsource AS "discountSource", unitprice AS "effectiveUnitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]) })));
   res.json(result);
 });
 
@@ -370,7 +371,7 @@ router.get('/orders/:id', async (req, res) => {
   const order = await get(`SELECT orders.id, orders.ordernumber AS "orderNumber", orders.createdat AS date, ${adminOrderStatus} AS status, orders.deliveredat AS "deliveredAt", orders.subtotal, orders.shippingtotal AS "shippingTotal", orders.discounttotal AS "discountTotal", orders.total, orders.shippingaddress AS "shippingAddress", orders.shippingzone AS "shippingZone", orders.deliverytype AS "deliveryType", orders.samedayeligible AS "sameDayEligible", orders.shippingpolicyversion AS "shippingPolicyVersion", orders.shippingprovider AS "shippingProvider", orders.trackingnumber AS "trackingNumber", orders.customeremailsnapshot AS "customerEmailSnapshot", orders.customerfirstnamesnapshot AS "customerFirstNameSnapshot", orders.customerlastnamesnapshot AS "customerLastNameSnapshot", orders.customerphonesnapshot AS "customerPhoneSnapshot", orders.documenttypesnapshot AS "documentTypeSnapshot", orders.documentnumbersnapshot AS "documentNumberSnapshot", customers.id AS "customerId", COALESCE(orders.customerfirstnamesnapshot, customers.firstname) AS "firstName", COALESCE(orders.customerlastnamesnapshot, customers.lastname) AS "lastName", COALESCE(orders.customeremailsnapshot, customers.email) AS email, COALESCE(orders.customerphonesnapshot, customers.phone) AS phone
     FROM orders LEFT JOIN customers ON customers.id = orders.customerid OR customers.authuserid = orders.userid WHERE orders.id = ?`, [req.params.id]);
   if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
-  const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
+  const products = await all('SELECT productid AS "productId", productname AS "productName", quantity, unitprice AS "unitPrice", COALESCE(baseunitprice, unitprice) AS "baseUnitPrice", discountpercent AS "discountPercent", discountamount AS "discountAmount", discountsource AS "discountSource", unitprice AS "effectiveUnitPrice" FROM order_items WHERE orderid = ? ORDER BY id', [order.id]);
   const payments = await paymentAttemptsForOrder({ all }, order.id);
   let shippingAddress = {};
   try { shippingAddress = typeof order.shippingAddress === 'string' ? JSON.parse(order.shippingAddress) : order.shippingAddress || {}; } catch { /* mantiene dirección vacía si un registro antiguo está incompleto */ }
@@ -523,7 +524,7 @@ router.delete('/customers/:id', async (req, res) => {
 router.patch('/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, brand, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets } = req.body;
+    const { name, brand, price, discountPercent, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets } = req.body;
 
     const product = await get('SELECT * FROM products WHERE id = ?', [id]);
     if (!product) {
@@ -550,6 +551,8 @@ router.patch('/products/:id', async (req, res) => {
       return res.status(400).json({ error: 'Stock must be a non-negative integer' });
     }
     if (minimumStock !== undefined && (!Number.isInteger(minimumStock) || minimumStock < 0)) return res.status(400).json({ error: 'El stock mínimo debe ser un entero no negativo.' });
+    let validatedDiscountPercent;
+    try { validatedDiscountPercent = discountPercent === undefined ? undefined : normalizeDiscountPercent(discountPercent); } catch (error) { return res.status(error.status || 400).json({ error: error.message }); }
 
     const updates = [];
     const values = [];
@@ -557,6 +560,7 @@ router.patch('/products/:id', async (req, res) => {
     if (name !== undefined) { updates.push('name = ?'); values.push(name); }
     if (brand !== undefined) { updates.push('brand = ?'); values.push(brand); }
     if (price !== undefined) { updates.push('price = ?'); values.push(price); }
+    if (validatedDiscountPercent !== undefined) { updates.push('discountpercent = ?'); values.push(validatedDiscountPercent); }
     if (cost !== undefined) { updates.push('cost = ?'); values.push(cost); }
     if (stock !== undefined) { updates.push('stock = ?'); values.push(Math.max(0, stock)); }
     if (minimumStock !== undefined) { updates.push('minimumStock = ?'); values.push(minimumStock); }
@@ -648,11 +652,13 @@ router.patch('/products/:id/stock', async (req, res) => {
 });
 
 router.post('/products', async (req, res) => {
-  const { id, brand, name, price, cost, stock, minimumStock = 3, category, status = 'active', description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets } = req.body;
+  const { id, brand, name, price, discountPercent = 0, cost, stock, minimumStock = 3, category, status = 'active', description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, supplier, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets } = req.body;
 
   if (!id || !brand || !name || price === undefined || !category) {
     return res.status(400).json({ error: 'Missing required fields: id, brand, name, price, category' });
   }
+  let validatedDiscountPercent;
+  try { validatedDiscountPercent = normalizeDiscountPercent(discountPercent); } catch (error) { return res.status(error.status || 400).json({ error: error.message }); }
 
   let validatedRoutineStep;
   let validatedSizeLabel;
@@ -683,9 +689,9 @@ router.post('/products', async (req, res) => {
   }
 
   await run(
-    `INSERT INTO products (id, brand, name, slug, price, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets, supplier, createdAt, updatedAt)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-    [id, brand, name, slug, price, cost || 0, stock || 0, Number.isInteger(minimumStock) && minimumStock >= 0 ? minimumStock : 3, category, status, description || '', sku || '', compareAtPrice ?? null, serializeList(skinTypes), serializeList(concerns), serializeList(ingredients), audience || '', skinBenefits || '', serializeList(featuredIngredients), fullIngredients || '', productInfo || '', shippingReturns || '', serializeList(benefits), serializeList(howToUse), precautions || '', serializeList(images), validatedRoutineStep ?? null, validatedSizeLabel ?? null, serializeCanonicalList(validatedSuitableSkinTypes) ?? null, serializeCanonicalList(validatedSuitableConditions) ?? null, serializeCanonicalList(validatedTargets) ?? null, supplier || null]
+    `INSERT INTO products (id, brand, name, slug, price, discountpercent, cost, stock, minimumStock, category, status, description, sku, compareAtPrice, skinTypes, concerns, ingredients, audience, skinBenefits, featuredIngredients, fullIngredients, productInfo, shippingReturns, benefits, howToUse, precautions, images, routineStep, sizeLabel, suitableSkinTypes, suitableConditions, targets, supplier, createdAt, updatedAt)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+    [id, brand, name, slug, price, validatedDiscountPercent, cost || 0, stock || 0, Number.isInteger(minimumStock) && minimumStock >= 0 ? minimumStock : 3, category, status, description || '', sku || '', compareAtPrice ?? null, serializeList(skinTypes), serializeList(concerns), serializeList(ingredients), audience || '', skinBenefits || '', serializeList(featuredIngredients), fullIngredients || '', productInfo || '', shippingReturns || '', serializeList(benefits), serializeList(howToUse), precautions || '', serializeList(images), validatedRoutineStep ?? null, validatedSizeLabel ?? null, serializeCanonicalList(validatedSuitableSkinTypes) ?? null, serializeCanonicalList(validatedSuitableConditions) ?? null, serializeCanonicalList(validatedTargets) ?? null, supplier || null]
   );
 
   await rememberCatalogOption('brand', brand);
