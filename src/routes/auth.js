@@ -1,7 +1,7 @@
 const express = require('express');
 const crypto = require('crypto');
 const { all, get, run } = require('../db/init');
-const { normalizeEmail, passwordHash, verifyPassword, publicUser, createSession, hashToken, SESSION_COOKIE } = require('../services/auth');
+const { normalizeEmail, passwordHash, verifyPassword, publicUser, createSession, hashToken, SESSION_COOKIE, sessionCookieOptions } = require('../services/auth');
 const { sendPasswordResetEmail, sendEmailVerification, sendWelcomeEmail, sendPasswordChangedEmail } = require('../services/email');
 const { VERIFICATION_TTL_MS, clientAppUrl, createEmailVerification, canResendEmailVerification } = require('../services/emailVerification');
 const { requireUser, cookieValue } = require('../middleware/clientAuth');
@@ -137,7 +137,7 @@ router.post('/logout', async (req, res, next) => {
   try {
     const raw = cookieValue(req.headers.cookie, SESSION_COOKIE);
     if (raw) await run('DELETE FROM auth_sessions WHERE id = ?', [hashToken(raw)]);
-    res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' });
+    res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
     res.status(204).end();
   } catch (error) { next(error); }
 });
@@ -174,7 +174,7 @@ router.patch('/password', requireUser, async (req, res, next) => {
     } catch (emailError) {
       console.error('Password change notification could not be sent:', emailError.message);
     }
-    res.clearCookie(SESSION_COOKIE, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', path: '/' });
+    res.clearCookie(SESSION_COOKIE, sessionCookieOptions());
     res.json({ message: 'Contraseña actualizada. Por seguridad, debes iniciar sesión nuevamente.' });
   } catch (error) { next(error); }
 });
