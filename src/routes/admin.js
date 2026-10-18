@@ -17,6 +17,8 @@ const { latestPaymentForOrder, paymentAttemptsForOrder } = require('../services/
 const { getSetting, updateSetting, validSections } = require('./settings');
 const { ContractValidationError } = require('../services/settingsContract');
 const { normalizeDiscountPercent } = require('../services/pricing');
+const { standardPackageFromEnvironment, getConfig } = require('../services/coordinadora/config');
+const { getPreparation, saveDraft, markReady, providerMap } = require('../services/logisticsPreparation');
 const {
   ProductMetadataValidationError,
   validateRoutineStep,
@@ -377,6 +379,44 @@ router.get('/orders/:id', async (req, res) => {
   try { shippingAddress = typeof order.shippingAddress === 'string' ? JSON.parse(order.shippingAddress) : order.shippingAddress || {}; } catch { /* mantiene dirección vacía si un registro antiguo está incompleto */ }
   delete order.shippingAddress;
   res.json({ ...order, customerName: order.firstName && order.lastName ? `${order.firstName} ${order.lastName}` : 'Cliente no disponible', shippingAddress, products, payments });
+});
+
+const logisticsRepository = { get, all, run, withTransaction };
+const logisticsDependencies = () => {
+  let standardPackage = null;
+  try { standardPackage = standardPackageFromEnvironment(); } catch { /* optional DEV configuration may be incomplete */ }
+  let codeMap = null;
+  try { codeMap = providerMap(getConfig()); } catch { /* provider mapping remains pending until verified */ }
+  return { standardPackage, providerCodeMap: codeMap };
+};
+
+router.get('/orders/:id/logistics', async (req, res, next) => {
+  try {
+    const order = await get('SELECT id FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    res.json(await getPreparation(logisticsRepository, req.params.id));
+  } catch (error) { next(error); }
+});
+
+router.put('/orders/:id/logistics', async (req, res) => {
+  try {
+    const order = await get('SELECT id, shippingaddress AS "shippingAddress", shippingtotal AS "shippingTotal", customerfirstnamesnapshot AS "customerFirstNameSnapshot", customerlastnamesnapshot AS "customerLastNameSnapshot", customerphonesnapshot AS "customerPhoneSnapshot" FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    res.json(await saveDraft({ repository: logisticsRepository, orderId: req.params.id, payload: req.body || {}, adminId: req.admin.id, order, ...logisticsDependencies() }));
+  } catch (error) { res.status(error.status || 500).json({ error: error.message, code: error.code }); }
+});
+
+router.post('/orders/:id/logistics/ready', async (req, res) => {
+  try { res.json(await markReady({ repository: logisticsRepository, orderId: req.params.id, adminId: req.admin.id, ...logisticsDependencies() })); }
+  catch (error) { res.status(error.status || 500).json({ error: error.message, code: error.code }); }
+});
+
+router.get('/orders/:id/logistics/history', async (req, res, next) => {
+  try {
+    const order = await get('SELECT id FROM orders WHERE id = ?', [req.params.id]);
+    if (!order) return res.status(404).json({ error: 'Pedido no encontrado.' });
+    res.json(await all(`SELECT id, preparationid AS "preparationId", orderid AS "orderId", fieldname AS "fieldName", previousvalue AS "previousValue", newvalue AS "newValue", changedat AS "changedAt", changedby AS "changedBy" FROM order_logistics_preparation_history WHERE orderid = ? ORDER BY changedat ASC, id ASC`, [req.params.id]));
+  } catch (error) { next(error); }
 });
 
 router.patch('/orders/:id/shipping', async (req, res) => {
