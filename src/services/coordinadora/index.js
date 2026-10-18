@@ -4,6 +4,7 @@ const { CoordinadoraOAuth } = require('./auth');
 const quote = require('./quote');
 const dane = require('./dane');
 const packageProfiles = require('./packageProfiles');
+const nationalShippingQuote = require('./nationalShippingQuote');
 
 module.exports = {
   ...config,
@@ -12,4 +13,5 @@ module.exports = {
   ...quote,
   ...dane,
   ...packageProfiles,
+  ...nationalShippingQuote,
 };

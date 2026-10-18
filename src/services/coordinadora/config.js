@@ -25,7 +25,15 @@ const requiredNames = [
   'COORDINADORA_PACKAGE_UBL',
 ];
 
-const optionalNames = ['COORDINADORA_ENV', 'COORDINADORA_TIMEOUT_MS', 'COORDINADORA_TOKEN_SKEW_SECONDS'];
+const optionalNames = [
+  'COORDINADORA_ENV',
+  'COORDINADORA_TIMEOUT_MS',
+  'COORDINADORA_TOKEN_SKEW_SECONDS',
+  'COORDINADORA_LOCATION_MAP_JSON',
+  'COORDINADORA_LOCATION_MAP_SOURCE',
+  'COORDINADORA_LOCATION_MAP_VERSION',
+  'COORDINADORA_ORIGIN_PROVIDER_CODE',
+];
 
 const urlValue = (value, name) => {
   const result = text(value);
@@ -34,6 +42,28 @@ const urlValue = (value, name) => {
   try { url = new URL(result); } catch { throw new CoordinadoraError(`${name} no es una URL válida.`, { code: 'COORDINADORA_CONFIG_INVALID', status: 503 }); }
   if (url.protocol !== 'https:') throw new CoordinadoraError(`${name} debe usar HTTPS.`, { code: 'COORDINADORA_CONFIG_INVALID', status: 503 });
   return url.toString().replace(/\/$/, '');
+};
+
+const standardPackageFromEnvironment = (env = process.env, { strict = false } = {}) => {
+  const names = ['COORDINADORA_PACKAGE_PROFILE_ID', 'COORDINADORA_PACKAGE_PROFILE_NAME', 'COORDINADORA_PACKAGE_LENGTH_CM', 'COORDINADORA_PACKAGE_WIDTH_CM', 'COORDINADORA_PACKAGE_HEIGHT_CM', 'COORDINADORA_PACKAGE_QUOTE_WEIGHT_KG', 'COORDINADORA_PACKAGE_UNIT'];
+  const present = names.filter((name) => text(env[name])).length;
+  if (!present) return null;
+  const missing = names.filter((name) => !text(env[name]));
+  if (missing.length) {
+    if (!strict) throw new CoordinadoraError(`Configuración incompleta del perfil estándar: ${missing.join(', ')}.`, { code: 'COORDINADORA_PACKAGE_CONFIG_INCOMPLETE', status: 503 });
+    throw new CoordinadoraError(`Configuración incompleta de Coordinadora: ${missing.join(', ')}.`, { code: 'COORDINADORA_CONFIG_INCOMPLETE', status: 503 });
+  }
+  return {
+    id: text(env.COORDINADORA_PACKAGE_PROFILE_ID),
+    name: text(env.COORDINADORA_PACKAGE_PROFILE_NAME),
+    length: Number(env.COORDINADORA_PACKAGE_LENGTH_CM),
+    width: Number(env.COORDINADORA_PACKAGE_WIDTH_CM),
+    height: Number(env.COORDINADORA_PACKAGE_HEIGHT_CM),
+    quoteWeight: Number(env.COORDINADORA_PACKAGE_QUOTE_WEIGHT_KG),
+    unit: text(env.COORDINADORA_PACKAGE_UNIT),
+    ubl: text(env.COORDINADORA_PACKAGE_UBL) || null,
+    active: text(env.COORDINADORA_PACKAGE_ACTIVE).toLowerCase() !== 'false',
+  };
 };
 
 const getConfig = (env = process.env) => {
@@ -59,20 +89,13 @@ const getConfig = (env = process.env) => {
     apiSecret: text(env.COORDINADORA_API_SECRET),
     originDane: text(env.COORDINADORA_ORIGIN_DANE),
     originProviderCode: text(env.COORDINADORA_ORIGIN_PROVIDER_CODE) || null,
-    standardPackage: {
-      id: text(env.COORDINADORA_PACKAGE_PROFILE_ID),
-      name: text(env.COORDINADORA_PACKAGE_PROFILE_NAME),
-      length: Number(env.COORDINADORA_PACKAGE_LENGTH_CM),
-      width: Number(env.COORDINADORA_PACKAGE_WIDTH_CM),
-      height: Number(env.COORDINADORA_PACKAGE_HEIGHT_CM),
-      quoteWeight: Number(env.COORDINADORA_PACKAGE_QUOTE_WEIGHT_KG),
-      unit: text(env.COORDINADORA_PACKAGE_UNIT),
-      ubl: text(env.COORDINADORA_PACKAGE_UBL),
-      active: text(env.COORDINADORA_PACKAGE_ACTIVE).toLowerCase() !== 'false',
-    },
+    locationMapJson: text(env.COORDINADORA_LOCATION_MAP_JSON) || null,
+    locationMapSource: text(env.COORDINADORA_LOCATION_MAP_SOURCE) || null,
+    locationMapVersion: text(env.COORDINADORA_LOCATION_MAP_VERSION) || null,
+    standardPackage: standardPackageFromEnvironment(env, { strict: true }),
     timeoutMs,
     tokenSkewSeconds,
   };
 };
 
-module.exports = { enabled, getConfig, requiredNames, optionalNames };
+module.exports = { enabled, getConfig, standardPackageFromEnvironment, requiredNames, optionalNames };

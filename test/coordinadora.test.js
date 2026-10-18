@@ -11,7 +11,10 @@ const {
   buildProviderPayload,
   createDaneResolver,
   createOfficialDaneResolver,
+  createProviderCodeMap,
+  providerCodeMapFromConfig,
   prepareNationalQuoteInput,
+  quoteNationalShipping,
   validatePackageProfile,
   buildStandardQuotePayload,
 } = require('../src/services/coordinadora');
@@ -203,4 +206,95 @@ test('preparación rechaza país, municipio, catálogo o valor inválidos', () =
   assert.throws(() => prepareNationalQuoteInput({ country: 'CO', department: 'Antioquia', city: 'Bello', declaredValue: -1, config, daneResolver: resolver }), (error) => error.code === 'COORDINADORA_DECLARED_VALUE_INVALID');
   assert.throws(() => createDaneResolver({ source: 'verified', version: '1', entries: [{ department: 'A', municipality: 'B', code: 'not-code' }] }), (error) => error.code === 'DANE_CATALOG_INVALID');
   assert.throws(() => createDaneResolver({ source: 'unknown source', version: '1', entries: [] }), (error) => error.code === 'DANE_CATALOG_METADATA_REQUIRED');
+});
+
+const providerMapFixture = () => createProviderCodeMap({
+  source: 'fixture de prueba Coordinadora',
+  version: 'test-1',
+  entries: [
+    { daneCode: '05088', providerCode: '05088000' },
+    { daneCode: '05001', providerCode: '05001000' },
+    { daneCode: '11001', providerCode: '11001000' },
+  ],
+});
+
+test('servicio nacional devuelve DISABLED sin invocar el adaptador', async () => {
+  let calls = 0;
+  const result = await quoteNationalShipping({ config: { enabled: false }, adapter: async () => { calls += 1; } });
+  assert.equal(result.status, 'DISABLED');
+  assert.equal(result.checkoutReady, false);
+  assert.equal(result.shippingAmount, null);
+  assert.equal(calls, 0);
+});
+
+test('servicio nacional devuelve PENDING_PROVIDER_MAPPING sin fallback de tarifas', async () => {
+  let calls = 0;
+  const result = await quoteNationalShipping({
+    input: { country: 'CO', department: 'Antioquia', city: 'Bello', declaredValue: 100000 },
+    config: getConfig(env),
+    daneResolver: createOfficialDaneResolver(),
+    adapter: async () => { calls += 1; },
+  });
+  assert.equal(result.status, 'PENDING_PROVIDER_MAPPING');
+  assert.equal(result.destination.daneCode, '05088');
+  assert.equal(result.shippingAmount, null);
+  assert.equal(result.checkoutReady, false);
+  assert.equal(calls, 0);
+  assert.equal(result.quote, null);
+});
+
+test('servicio nacional devuelve SIMULATED_SUCCESS sin habilitar checkout', async () => {
+  const fixture = { fleteFijo: 5000, fleteVariable: 1200, fleteTotal: 6200, impuestos: 0, valorEnvio: 6200, diasEntrega: 3, providerId: 'FIXTURE_QUOTE_001', timestamp: 'fixture', shippingAmount: null, checkoutReady: false, simulated: true };
+  const result = await quoteNationalShipping({
+    input: { country: 'Colombia', department: 'Antioquia', city: 'Bello', declaredValue: 100000 },
+    config: { ...getConfig(env), originProviderCode: '05088000' },
+    daneResolver: createOfficialDaneResolver(),
+    providerCodeMap: providerMapFixture(),
+    adapter: async ({ payload }) => { assert.equal(payload.origen, '05088000'); assert.equal(payload.destino, '05088000'); return fixture; },
+  });
+  assert.equal(result.status, 'SIMULATED_SUCCESS');
+  assert.equal(result.quote.fleteTotal, 6200);
+  assert.equal(result.quote.valorEnvio, 6200);
+  assert.equal(result.quote.priceSelectionPending, true);
+  assert.equal(result.shippingAmount, null);
+  assert.equal(result.checkoutReady, false);
+});
+
+test('servicio nacional distingue 400 de cobertura explícita, autenticación, rate limit y timeout', async () => {
+  const base = { input: { country: 'CO', department: 'Antioquia', city: 'Bello', declaredValue: 1 }, config: { ...getConfig(env), originProviderCode: '05088000' }, daneResolver: createOfficialDaneResolver(), providerCodeMap: providerMapFixture() };
+  const cases = [
+    [{ code: 'COORDINADORA_QUOTE_REJECTED', details: { providerMessage: 'Destino sin cobertura' }, status: 400 }, 'DESTINATION_NOT_COVERED'],
+    [{ code: 'COORDINADORA_AUTHENTICATION_ERROR', providerStatus: 401 }, 'AUTHENTICATION_ERROR'],
+    [{ code: 'COORDINADORA_RATE_LIMITED', providerStatus: 429 }, 'RATE_LIMITED'],
+    [{ code: 'COORDINADORA_TIMEOUT', status: 504 }, 'TIMEOUT'],
+    [{ code: 'COORDINADORA_MALFORMED_RESPONSE', status: 502 }, 'INVALID_PROVIDER_RESPONSE'],
+  ];
+  for (const [error, expected] of cases) {
+    const result = await quoteNationalShipping({ ...base, adapter: async () => { throw Object.assign(new Error('fixture'), error); } });
+    assert.equal(result.status, expected);
+    assert.equal(result.checkoutReady, false);
+    assert.equal(result.shippingAmount, null);
+  }
+});
+
+test('mapa de Coordinadora rechaza duplicados conflictivos y códigos vacíos', () => {
+  assert.throws(() => createProviderCodeMap({ source: 'fixture', version: '1', entries: [{ daneCode: '05088', providerCode: '1' }, { daneCode: '05088', providerCode: '2' }] }), (error) => error.code === 'PROVIDER_MAP_CONFLICT');
+  assert.throws(() => createProviderCodeMap({ source: 'fixture', version: '1', entries: [{ daneCode: '05088', providerCode: '' }] }), (error) => error.code === 'PROVIDER_MAP_INVALID');
+});
+
+test('mapa de Coordinadora puede cargarse desde configuración sin modificar el cliente', () => {
+  const map = providerCodeMapFromConfig({ locationMapJson: JSON.stringify([{ daneCode: '05088', providerCode: '05088000' }]), locationMapSource: 'fixture verificado', locationMapVersion: 'test-1' });
+  assert.equal(map.resolve('05088'), '05088000');
+});
+
+test('respuesta simulada incompleta no se convierte en cotización válida', async () => {
+  const result = await quoteNationalShipping({
+    input: { country: 'CO', department: 'Antioquia', city: 'Bello', declaredValue: 1 },
+    config: { ...getConfig(env), originProviderCode: '05088000' },
+    daneResolver: createOfficialDaneResolver(),
+    providerCodeMap: providerMapFixture(),
+    adapter: async () => ({ shippingAmount: null, checkoutReady: false }),
+  });
+  assert.equal(result.status, 'INVALID_PROVIDER_RESPONSE');
+  assert.equal(result.checkoutReady, false);
 });

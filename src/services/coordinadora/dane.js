@@ -11,6 +11,31 @@ const clean = (value) => String(value || '').trim().toLocaleLowerCase('es-CO').n
 
 const validateDaneCode = (code) => typeof code === 'string' && /^\d+$/.test(code.trim());
 
+const createProviderCodeMap = ({ entries = [], source = null, version = null } = {}) => {
+  if (!source || !version || /pending|unknown|unverified/i.test(`${source} ${version}`)) throw new DaneCatalogError('El mapa de Coordinadora requiere procedencia y versión verificables.', 'PROVIDER_MAP_METADATA_REQUIRED');
+  if (!Array.isArray(entries)) throw new DaneCatalogError('El mapa de Coordinadora no tiene un formato válido.', 'PROVIDER_MAP_INVALID');
+  const map = new Map();
+  for (const entry of entries) {
+    const daneCode = String(entry?.daneCode || '').trim();
+    const providerCode = String(entry?.providerCode || '').trim();
+    if (!validateDaneCode(daneCode) || !validateDaneCode(providerCode)) throw new DaneCatalogError('El mapa de Coordinadora contiene códigos inválidos.', 'PROVIDER_MAP_INVALID');
+    if (map.has(daneCode) && map.get(daneCode) !== providerCode) throw new DaneCatalogError('El mapa de Coordinadora contiene códigos duplicados conflictivos.', 'PROVIDER_MAP_CONFLICT');
+    map.set(daneCode, providerCode);
+  }
+  return {
+    resolve(daneCode) { return map.get(String(daneCode || '').trim()) || null; },
+    size: map.size,
+    metadata: { source, version },
+  };
+};
+
+const providerCodeMapFromConfig = (config) => {
+  if (!config?.locationMapJson) return null;
+  let entries;
+  try { entries = JSON.parse(config.locationMapJson); } catch { throw new DaneCatalogError('COORDINADORA_LOCATION_MAP_JSON no es JSON válido.', 'PROVIDER_MAP_INVALID'); }
+  return createProviderCodeMap({ entries, source: config.locationMapSource, version: config.locationMapVersion });
+};
+
 const createDaneResolver = ({ entries = [], source = null, version = null } = {}) => {
   if (!source || !version || /pending|unknown|unverified/i.test(`${source} ${version}`)) throw new DaneCatalogError('El catálogo DANE requiere procedencia y versión verificables.', 'DANE_CATALOG_METADATA_REQUIRED');
   if (!Array.isArray(entries)) throw new DaneCatalogError('El catálogo DANE no tiene un formato válido.', 'DANE_CATALOG_INVALID');
@@ -51,4 +76,4 @@ const createOfficialDaneResolver = () => {
   return createDaneResolver({ entries: catalog.entries, source: catalog.source, version: catalog.version });
 };
 
-module.exports = { DaneCatalogError, createDaneResolver, createOfficialDaneResolver, validateDaneCode };
+module.exports = { DaneCatalogError, createDaneResolver, createOfficialDaneResolver, createProviderCodeMap, providerCodeMapFromConfig, validateDaneCode };
