@@ -171,7 +171,16 @@ const isNegative = (message) => /^(no|no gracias|ahora no|mejor no)[.!\s]*$/i.te
 const isRoutineUsageQuestion = (message) => {
   const value = String(message || '');
   if (/\b(dos|ambos|ambas|juntos|juntas|combinar|compatib|la otra|el otro|con otra|con otro|dos productos)\b/i.test(value)) return false;
-  return /\b(orden|frecuencia|manana|mañana|noche|sola|cómo se usa|como se usa|puedo usar|debo aplicar|complementar|complemento|va antes|va despues|va después|antes del|antes de|despues del|despues de|después del|después de)\b/i.test(value);
+  return /\b(orden|frecuencia|manana|mañana|noche|sola|cómo uso|como uso|cómo se usa|como se usa|puedo usar|debo aplicar|complementar|complemento|va antes|va despues|va después|antes del|antes de|despues del|despues de|después del|después de)\b/i.test(value);
+};
+const pendingQuestionFromResult = (result) => {
+  if (result.mode !== 'FOLLOW_UP' || typeof result.message !== 'string') return null;
+  const value = result.message.trim();
+  if (value.length <= 240) return value;
+  const boundedQuestions = value.split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length <= 240 && /\?\s*$/.test(sentence));
+  return boundedQuestions.length ? boundedQuestions[boundedQuestions.length - 1] : null;
 };
 const isConfusionMessage = (message) => /no lo se|no lo sé|por eso te pregunto|no entiendo|no estoy seguro|no estoy segura/i.test(String(message || ''));
 const isProductClarification = (message) => {
@@ -221,12 +230,12 @@ const conversationDeltaFromResult = ({ previousState, request, result, interpret
   if (usage) {
     delta.activeIntent = 'ROUTINE_USAGE';
     delta.pendingAction = result.mode === 'FOLLOW_UP' ? 'ANSWER_USAGE' : null;
-    delta.pendingQuestion = result.mode === 'FOLLOW_UP' ? result.message : null;
+    delta.pendingQuestion = pendingQuestionFromResult(result);
     delta.focusProductIds = focusProductIds;
   } else if (result.intent === 'PRODUCT_INFO' || interpretation?.intent === 'PRODUCT_INFO') {
     delta.activeIntent = 'PRODUCT_INFO';
     delta.pendingAction = result.mode === 'FOLLOW_UP' ? 'RESOLVE_PRODUCT' : null;
-    delta.pendingQuestion = result.mode === 'FOLLOW_UP' ? result.message : null;
+    delta.pendingQuestion = pendingQuestionFromResult(result);
     delta.focusProductIds = focusProductIds;
   } else if (recommendationIds.length) {
     delta.activeIntent = 'DISCOVERY';

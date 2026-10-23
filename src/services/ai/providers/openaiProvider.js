@@ -284,6 +284,40 @@ const ROUTINE_SYSTEM_INSTRUCTIONS = [
   'Respeta los pasos obligatorios y no añadas pasos fuera del plan. No reveles cadena de pensamiento.',
 ].join(' ');
 
+const canonicalToolValue = (value) => {
+  if (Array.isArray(value)) {
+    const normalized = value.map(canonicalToolValue);
+    return normalized.every((item) => typeof item === 'string') ? normalized.sort() : normalized;
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonicalToolValue(value[key])]));
+  }
+  return value;
+};
+
+const toolCallKey = (name, args) => `${name}:${JSON.stringify(canonicalToolValue(args))}`;
+
+const fallbackAgentOutput = (conversationState, toolResults) => {
+  const products = [...toolResults].reverse().flatMap((result) => [
+    ...(Array.isArray(result?.recommendations) ? result.recommendations : []),
+    ...(Array.isArray(result?.products) ? result.products : []),
+  ]).map((item) => item?.product || item).filter((product) => product && product.availability?.purchasable !== false && product.id);
+  const selectedProductIds = [...new Set(products.map((product) => String(product.id)))].slice(0, 3);
+  const profile = {
+    skinType: conversationState?.profile?.skinType ?? null,
+    conditions: conversationState?.profile?.conditions ?? null,
+    targets: conversationState?.profile?.targets ?? null,
+    budget: conversationState?.profile?.budget ?? null,
+    routinePreference: conversationState?.profile?.routinePreference ?? null,
+    knownProducts: [],
+    unresolvedOwnedProducts: [],
+    ownedRoutineSteps: [],
+  };
+  return selectedProductIds.length
+    ? { mode: 'RECOMMENDATION', profile, updatedProfileFields: [], segments: [{ kind: 'GENERAL', productId: null, evidenceKeys: [], text: 'Encontré opciones verificadas y disponibles para que las revises.' }], selectedProductIds }
+    : { mode: 'ANSWER', profile, updatedProfileFields: [], segments: [{ kind: 'GENERAL', productId: null, evidenceKeys: [], text: 'No pude completar la búsqueda en este intento. Puedo volver a revisar el catálogo con los criterios que ya me diste.' }], selectedProductIds: [] };
+};
+
 const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = process.env.OPENAI_MODEL || 'gpt-5-mini', enabled = process.env.OPENAI_ENABLED === 'true', fetchImpl = global.fetch, timeoutMs = resolveProviderTimeout(process.env.OPENAI_TIMEOUT_MS), maxOutputTokens = AI_LIMITS.providerMaxOutputTokens } = {}) => {
   const callModel = async (messages, textFormat = { type: 'json_object' }) => {
     if (!enabled || !apiKey || typeof fetchImpl !== 'function') throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está configurado.', 503);
@@ -371,6 +405,9 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
       const toolResults = [];
       let toolCallCount = 0;
       let currentInput = initialInput;
+      const cachedToolResults = new Map();
+      let duplicateRounds = 0;
+      let finalizationOnly = false;
       while (true) {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -378,7 +415,7 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
           const response = await fetchImpl('https://api.openai.com/v1/responses', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-            body: JSON.stringify({ model, store: false, max_output_tokens: maxOutputTokens, input: currentInput, tools: tools.map((tool) => ({ ...tool, strict: true })), text: { format: AGENT_FINAL_FORMAT } }),
+            body: JSON.stringify({ model, store: false, max_output_tokens: maxOutputTokens, input: currentInput, tools: finalizationOnly ? [] : tools.map((tool) => ({ ...tool, strict: true })), text: { format: AGENT_FINAL_FORMAT } }),
             signal: controller.signal,
           });
           if (!response.ok) throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
@@ -389,16 +426,35 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
             if (typeof content !== 'string') throw new AIServiceError('INVALID_AI_RESPONSE', 'El agente no devolvió una respuesta final.', 502);
             try { return { output: JSON.parse(content), toolResults, toolCallCount }; } catch { throw new AIServiceError('INVALID_AI_RESPONSE', 'El agente devolvió un formato inválido.', 502); }
           }
-          if (toolCallCount + calls.length > maxToolCalls) throw new AIServiceError('AGENT_TOOL_LIMIT', 'El agente superó el límite de herramientas permitido.', 502);
           currentInput = [...currentInput, ...(body.output || [])];
+          if (finalizationOnly) return { output: fallbackAgentOutput(conversationState, toolResults), toolResults, toolCallCount };
+          let newToolExecuted = false;
+          let duplicateCall = false;
           for (const call of calls) {
             let args;
             try { args = JSON.parse(call.arguments || '{}'); } catch { throw new AIServiceError('AGENT_TOOL_INVALID', 'Los argumentos de la herramienta no son válidos.', 502); }
+            const key = toolCallKey(call.name, args);
+            if (cachedToolResults.has(key)) {
+              duplicateCall = true;
+              currentInput.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(cachedToolResults.get(key)) });
+              continue;
+            }
+            if (toolCallCount >= maxToolCalls) {
+              currentInput.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify({ tool: call.name, skipped: true, reason: 'Se alcanzó el presupuesto de herramientas; usa la evidencia ya recuperada.' }) });
+              finalizationOnly = true;
+              continue;
+            }
             const toolResult = await executeTool(call.name, args);
             toolCallCount += 1;
+            cachedToolResults.set(key, toolResult);
             toolResults.push(toolResult);
+            newToolExecuted = true;
             currentInput.push({ type: 'function_call_output', call_id: call.call_id, output: JSON.stringify(toolResult) });
           }
+          if (newToolExecuted) duplicateRounds = 0;
+          else if (duplicateCall) duplicateRounds += 1;
+          if (duplicateRounds >= 1) finalizationOnly = true;
+          if (finalizationOnly) currentInput.push({ role: 'user', content: 'Cierra ahora la respuesta usando únicamente la evidencia verificada ya recuperada. No solicites más herramientas.' });
         } catch (error) {
           if (error.name === 'AbortError') throw new AIServiceError('AI_TIMEOUT', 'El servicio AI tardó demasiado.', 504);
           if (error instanceof AIServiceError) throw error;

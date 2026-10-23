@@ -23,7 +23,10 @@ const list = (value, allowed, field) => {
   if (!Array.isArray(value) || value.length > 20 || value.some((item) => typeof item !== 'string' || !allowed.includes(item))) fail(`${field} no es válida.`);
   return [...new Set(value)];
 };
-const nullableText = (value, field, max = 200) => value === null ? null : text(value, field, max);
+// Optional state fields from older envelopes may be absent after JSON
+// serialization. Normalize absence to null without relaxing type or length
+// checks for values that are actually supplied.
+const nullableText = (value, field, max = 200) => value === null || value === undefined ? null : text(value, field, max);
 const nullableBoundedList = (value, field, max = MAX_ARTIFACTS) => {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length > max || value.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > MAX_ID)) fail(`${field} no es válida.`);
