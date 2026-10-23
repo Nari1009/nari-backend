@@ -142,10 +142,11 @@ test('ordering is deterministic with stable Product ID tie-breaker', async () =>
 test('candidate projection excludes private commercial fields and catalogRole', async () => {
   const result = await search([product({ id: 'safe' })]);
   const candidate = result.candidates[0];
-  assert.deepEqual(Object.keys(candidate.metadata).sort(), ['id', 'name', 'routineStep', 'sizeLabel', 'suitableConditions', 'suitableSkinTypes', 'targets'].sort());
+  assert.deepEqual(Object.keys(candidate.metadata).sort(), ['brand', 'category', 'description', 'id', 'images', 'name', 'price', 'routineStep', 'sizeLabel', 'slug', 'suitableConditions', 'suitableSkinTypes', 'targets'].sort());
   assert.equal('supplier' in candidate.metadata, false);
   assert.equal('cost' in candidate.metadata, false);
   assert.equal('catalogRole' in candidate.metadata, false);
+  assert.equal(candidate.eligibility.catalogRole, 'CATALOG');
 });
 
 test('unsupported intents do not force search; Product selection does', async () => {

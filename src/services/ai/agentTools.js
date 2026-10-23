@@ -124,7 +124,8 @@ const createAgentToolFacade = ({ candidateService, catalogDiscoveryService, prod
       const result = await candidateService.search({ intent: 'PRODUCT_SELECTION', profile, requestedRoutineStep: step || null, excludeProductIds: step ? (exclusionByStep.get(step) || []) : exclusions });
       const candidates = result.candidates.filter((candidate) => {
         const product = candidate.metadata || {};
-        return isRecommendationEligibleProduct(product)
+        const eligibility = candidate.eligibility || product;
+        return isRecommendationEligibleProduct(eligibility)
           && (!step || product.routineStep === step || product.routineStep === null || product.routineStep === undefined)
           && !exclusions.includes(String(candidate.productId));
       }).slice(0, limit);

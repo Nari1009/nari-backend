@@ -7,6 +7,7 @@ const deterministicRecommendationReason = ({ candidate, profile = {} } = {}) => 
   const step = candidate?.metadata?.routineStep;
   const parts = [];
   if (matched.has('ROUTINE_STEP') && step) parts.push(`encaja con el paso de ${customerRoutineStepLabel(step)}`);
+  if (matched.has('ROUTINE_TEXT') && step) parts.push(`su nombre o descripción sugiere el paso de ${customerRoutineStepLabel(step)}`);
   if (matched.has('SKIN_TYPE') && profile.skinType) parts.push(`es compatible con piel ${SKIN_LABELS[profile.skinType] || 'de tu tipo'}`);
   if (matched.has('CONDITION')) parts.push('coincide con una condición que mencionaste');
   if (matched.has('TARGET')) parts.push('se alinea con uno de tus objetivos');

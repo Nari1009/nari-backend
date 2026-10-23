@@ -8,6 +8,25 @@ const profile = { skinType: 'COMBINATION', conditions: [], targets: [], budget: 
 const row = (id, routineStep) => ({ id, name: id, slug: id, price: 100, images: '[]', routineStep, catalogRole: 'CATALOG', status: 'active', stock: 5, suitableSkinTypes: ['COMBINATION'], suitableConditions: [], targets: [] });
 const candidate = (id, routineStep) => ({ productId: id, score: 60, confidence: 'HIGH', matchedCriteria: ['ROUTINE_STEP', 'SKIN_TYPE'], metadata: row(id, routineStep) });
 
+test('TurnPlan can surface a commercially eligible text-inferred candidate with incomplete metadata', async () => {
+  const incomplete = { id: 'purchase-somi-18', brand: 'Dr. Althea', name: 'Dr. Althea 345 Relief Cream', category: 'Crema hidratante', description: 'Relief cream', slug: 'dr-althea-345', price: 119900, images: '[]', routineStep: null, catalogRole: 'CATALOG', status: 'active', stock: 10, suitableSkinTypes: null, suitableConditions: null, targets: null };
+  const service = createAIService({
+    stateTransport: true,
+    stateSecret: SECRET,
+    turnPlanSelectionFlow: true,
+    provider: {
+      async interpretConversation() { return interpretation(); },
+      async reasonAmongCandidates({ candidates }) { return { mode: 'RECOMMENDATION', message: 'Encontré una opción disponible para revisar.', selectedProductIds: [candidates[0].id], reasons: [{ productId: candidates[0].id, reason: 'Su nombre y descripción sugieren que es una crema hidratante.' }], profile }; },
+    },
+    productResolver: { async resolveReferences() { return { status: 'NOT_FOUND', products: [] }; } },
+    candidateService: require('../src/services/ai/candidates/candidateService').createCandidateService({ repository: { async findEligibleProducts() { return [incomplete]; } } }),
+    finalProductRepository: { async findCurrentEligibleProducts(ids) { return ids.includes(incomplete.id) ? [incomplete] : []; } },
+  });
+  const result = await service.advise({ message: '¿Qué hidratante me recomiendas?' });
+  assert.deepEqual(result.recommendations.map((item) => item.product.id), [incomplete.id]);
+  assert.equal(result.recommendations[0].product.price, 119900);
+});
+
 const createHarness = ({ interpretation, candidatesByStep, selectedProductId, rows, referenceResult = { status: 'NOT_FOUND', products: [] } } = {}) => {
   const searches = [];
   const provider = {

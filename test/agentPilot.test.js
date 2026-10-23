@@ -52,6 +52,40 @@ const createHarness = ({ rows = [product('p-a'), product('p-b'), product('p-c')]
   return { rows, productResolver, toolFacade: createAgentToolFacade({ candidateService, catalogDiscoveryService, productResolver }) };
 };
 
+test('real candidate scoring keeps an eligible cream with incomplete metadata for agent recommendations', async () => {
+  const { createCandidateService } = require('../src/services/ai/candidates/candidateService');
+  const candidateService = createCandidateService({ repository: {
+    async findEligibleProducts() {
+      return [{
+        id: 'purchase-somi-18',
+        brand: 'Dr. Althea',
+        name: 'Dr. Althea 345 Relief Cream',
+        category: 'Crema hidratante',
+        description: 'Relief cream',
+        price: 119900,
+        status: 'active',
+        stock: 10,
+        catalogRole: 'CATALOG',
+        routineStep: null,
+        suitableSkinTypes: null,
+        suitableConditions: null,
+        targets: null,
+      }];
+    },
+  } });
+  const toolFacade = createAgentToolFacade({
+    candidateService,
+    catalogDiscoveryService: { async discover() { return { catalogProducts: [], recommendations: [] }; } },
+    productResolver: { async resolveReferences() { return { status: 'RESOLVED', products: [] }; } },
+  });
+  const result = await toolFacade.execute('search_catalog', {
+    mode: 'RECOMMENDATION', routineSteps: ['MOISTURIZER'], skinTypes: ['OILY'], conditions: ['ACNE_PRONE'], targets: ['HYDRATION'],
+    limit: 5, referenceProductIds: [], profile: { skinType: 'OILY', conditions: ['ACNE_PRONE'], targets: ['HYDRATION'], budget: '$250.000 COP', routinePreference: 'simple' }, brand: null,
+  }, { state: createEmptyConversationState() });
+  assert.deepEqual(result.products.map((item) => item.id), ['purchase-somi-18']);
+  assert.equal(result.products[0].product.price, 119900);
+});
+
 const agentOutput = ({ profileValue = { ...profile }, selectedProductIds = [], segments = [{ kind: 'GENERAL', productId: null, evidenceKeys: [], text: 'Puedo ayudarte con eso.' }], mode = 'ANSWER', updatedProfileFields = [] } = {}) => ({ mode, profile: profileValue, updatedProfileFields, segments, selectedProductIds });
 
 test('search_catalog only returns eligible canonical Products and derives exclusions', async () => {

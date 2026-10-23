@@ -13,6 +13,24 @@ const CANDIDATE_WEIGHTS = Object.freeze({
 });
 
 const CONFIDENCE_ORDER = Object.freeze({ HIGH: 3, MEDIUM: 2, LOW: 1 });
+const ROUTINE_TERMS = Object.freeze({
+  MOISTURIZER: ['moisturizer', 'cream', 'crema', 'hidratante', 'lotion', 'locion', 'emulsion'],
+  SERUM: ['serum', 'ampoule', 'ampolla', 'essence', 'esencia'],
+  CLEANSER: ['cleanser', 'limpiador', 'cleansing', 'cleaning'],
+  SUNSCREEN: ['sunscreen', 'sun serum', 'protector solar', 'spf'],
+  TONER: ['toner', 'tonico'],
+  ESSENCE: ['essence', 'esencia'],
+});
+
+const normalizeText = (value) => String(value || '')
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .toLowerCase();
+
+const hasRoutineTextSignal = (product, routineStep) => {
+  const text = normalizeText([product.brand, product.name, product.category, product.description].filter(Boolean).join(' '));
+  return (ROUTINE_TERMS[routineStep] || []).some((term) => text.includes(normalizeText(term)));
+};
 
 const parseCanonicalList = (value) => {
   const normalized = normalizeMetadataList(value);
@@ -41,9 +59,14 @@ const scoreCandidate = ({ product, requestedRoutineStep, profile }) => {
     if (product.routineStep === requestedRoutineStep) {
       score += CANDIDATE_WEIGHTS.routineStepMatch;
       matchedCriteria.push('ROUTINE_STEP');
-    } else if (product.routineStep === null || product.routineStep === undefined) {
-      addUnknown(unknownCriteria, 'ROUTINE_STEP');
-      score -= CANDIDATE_WEIGHTS.unknownPenalty;
+    } else if (product.routineStep === null || product.routineStep === undefined || product.routineStep === '') {
+      if (hasRoutineTextSignal(product, requestedRoutineStep)) {
+        score += 18;
+        matchedCriteria.push('ROUTINE_TEXT');
+      } else {
+        addUnknown(unknownCriteria, 'ROUTINE_STEP');
+        score -= CANDIDATE_WEIGHTS.unknownPenalty;
+      }
     } else {
       conflicts.push('ROUTINE_STEP');
       return null;
@@ -117,9 +140,20 @@ const scoreCandidate = ({ product, requestedRoutineStep, profile }) => {
     unknownCriteria,
     neutralCriteria,
     conflicts,
+    eligibility: {
+      catalogRole: product.catalogRole,
+      status: product.status,
+      stock: product.stock,
+    },
     metadata: {
       id: product.id,
+      brand: product.brand ?? null,
       name: product.name,
+      category: product.category ?? null,
+      description: product.description ?? null,
+      slug: product.slug ?? null,
+      images: product.images ?? null,
+      price: product.price ?? null,
       routineStep: product.routineStep ?? null,
       sizeLabel: product.sizeLabel ?? null,
       suitableSkinTypes: parseCanonicalList(product.suitableSkinTypes),

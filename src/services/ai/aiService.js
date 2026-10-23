@@ -42,6 +42,11 @@ const publicReasoningResponse = ({ intent, reasoning, recommendations = [] }) =>
   recommendations,
 });
 
+const candidateSupportsRequestedStep = (candidate, product, requestedSteps) => (
+  requestedSteps.includes(product.routineStep)
+  || (product.routineStep == null && candidate?.matchedCriteria?.includes('ROUTINE_TEXT'))
+);
+
 const buildReferenceContext = async (request, finalProductRepository, productResolver = null) => {
   if (!finalProductRepository?.findCurrentEligibleProducts && !productResolver) return { recentRecommendations: [], recentRoutine: [], recentProductReferences: [] };
   const references = [...(request.context?.recentRecommendations || []), ...(request.context?.recentRoutine || []), ...(request.context?.recentProductReferences || [])];
@@ -383,13 +388,13 @@ const createProductSelectionTurnPlanFlow = ({ provider, candidateService, finalP
     const eligibleById = new Map(selectedRows.filter(isRecommendationEligibleProduct).map((product) => [String(product.id), product]));
     const excludedIds = new Set(plan.excludedProductIds.map(String));
     const selected = reasoning.selectedProductIds.map((id) => eligibleById.get(String(id))).filter(Boolean);
+    const candidateById = new Map(uniqueCandidates.map((candidate) => [String(candidate.productId), candidate]));
     if (selected.some((product) => excludedIds.has(String(product.id)))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI seleccionó un producto excluido.', 502);
-    if (steps.length && selected.some((product) => !steps.includes(product.routineStep))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI seleccionó un producto para un paso distinto.', 502);
+    if (steps.length && selected.some((product) => !candidateSupportsRequestedStep(candidateById.get(String(product.id)), product, steps))) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI seleccionó un producto para un paso distinto.', 502);
     if (!selected.length) {
       turnPlanDiagnostics('final-validation-empty', plan, { candidateCount: uniqueCandidates.length });
       return safeSelectionResponse({ interpretation: effectiveInterpretation, message: 'Los productos seleccionados ya no están disponibles para confirmación.' });
     }
-    const candidateById = new Map(uniqueCandidates.map((candidate) => [String(candidate.productId), candidate]));
     const recommendations = toPublicRecommendations({
       selectedProducts: selected,
       reasons: selected.map((product) => ({ productId: product.id, reason: deterministicRecommendationReason({ candidate: candidateById.get(String(product.id)), profile: preExecutionState.profile }) })),
