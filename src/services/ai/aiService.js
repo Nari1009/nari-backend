@@ -165,6 +165,83 @@ const safeSelectionResponse = ({ interpretation, message, mode = 'ANSWER' }) => 
 
 const emptyOwnershipDelta = () => ({ addVerifiedProducts: [], addUnresolvedItems: [], addOwnedRoutineSteps: [], removeVerifiedProductIds: [], removeUnresolvedLabels: [], removeOwnedRoutineSteps: [] });
 
+const isAffirmative = (message) => /^(si|sí|ok|vale|claro|dale|de acuerdo|por favor|me parece bien)[.!\s]*$/i.test(String(message || '').trim());
+const isNegative = (message) => /^(no|no gracias|ahora no|mejor no)[.!\s]*$/i.test(String(message || '').trim());
+const isRoutineUsageQuestion = (message) => {
+  const value = String(message || '');
+  if (/\b(dos|ambos|ambas|juntos|juntas|combinar|compatib|la otra|el otro|con otra|con otro|dos productos)\b/i.test(value)) return false;
+  return /\b(orden|frecuencia|manana|mañana|noche|sola|cómo se usa|como se usa|puedo usar|debo aplicar|complementar|complemento|va antes|va despues|va después|antes del|antes de|despues del|despues de|después del|después de)\b/i.test(value);
+};
+const isConfusionMessage = (message) => /no lo se|no lo sé|por eso te pregunto|no entiendo|no estoy seguro|no estoy segura/i.test(String(message || ''));
+const isProductClarification = (message) => {
+  const value = String(message || '').trim();
+  return value.length >= 8 && !/[?¿]/.test(value) && !isConfusionMessage(value) && /skin\s*1004|madagascar centella|tone brightening|hyalu[- ]?cica|capsule ampoule|spf\s*\d/i.test(value);
+};
+
+const refineConversationInterpretation = (interpretation, { message, previousState }) => {
+  const pending = previousState.conversation?.pendingAction;
+  const usageTurn = isRoutineUsageQuestion(message) || pending === 'ANSWER_USAGE' || pending === 'ROUTINE_ORDER';
+  const productFollowUpIntent = ['PRODUCT_INFO', 'COMPARE', 'COMPATIBILITY'].includes(interpretation.intent);
+  if (!usageTurn && !(productFollowUpIntent && isProductClarification(message))) return interpretation;
+  const references = interpretation.referencePhrases?.length
+    ? interpretation.referencePhrases
+    : interpretation.productReferences?.length
+      ? interpretation.productReferences
+      : isProductClarification(message) ? [message] : ['ese producto'];
+  return {
+    ...interpretation,
+    intent: 'PRODUCT_INFO',
+    mode: 'ANSWER',
+    nextAction: 'ANSWER',
+    relationToPrevious: 'FOLLOW_UP',
+    referencePhrases: references,
+    productReferences: references,
+  };
+};
+
+const pendingAlternativeInterpretation = (state) => {
+  const pending = state.conversation?.pendingAlternative || {};
+  const steps = pending.routineSteps || [];
+  return {
+    intent: 'PRODUCT_SELECTION', mode: 'RECOMMENDATION', nextAction: 'RECOMMEND', scope: 'IN_SCOPE',
+    message: 'Buscaré una alternativa disponible para ti.', profile: state.profile,
+    productReferences: [], referencePhrases: [], requestedRoutineStep: steps.length === 1 ? steps[0] : null,
+    requestedSteps: steps, relationToPrevious: 'ALTERNATIVE', ownershipDelta: {},
+    discoveryCriteria: { routineSteps: steps, brand: null, skinTypes: pending.skinTypes?.length ? pending.skinTypes : null, conditions: pending.conditions?.length ? pending.conditions : null, targets: pending.targets?.length ? pending.targets : null, useProfile: true, browseScope: 'FILTERED' },
+  };
+};
+
+const conversationDeltaFromResult = ({ previousState, request, result, interpretation = null }) => {
+  const referenceIds = (result.__referenceArtifacts || []).map((item) => String(item.productId)).slice(0, 3);
+  const recommendationIds = (result.recommendations || []).map((item) => item?.product?.id).filter(Boolean).map(String).slice(0, 3);
+  const focusProductIds = [...new Set([...recommendationIds, ...referenceIds, ...(previousState.conversation?.focusProductIds || [])])].slice(0, 3);
+  const usage = isRoutineUsageQuestion(request.message) || previousState.conversation?.pendingAction === 'ANSWER_USAGE' || previousState.conversation?.pendingAction === 'ROUTINE_ORDER';
+  const delta = result.__conversationDelta ? { ...result.__conversationDelta } : {};
+  if (usage) {
+    delta.activeIntent = 'ROUTINE_USAGE';
+    delta.pendingAction = result.mode === 'FOLLOW_UP' ? 'ANSWER_USAGE' : null;
+    delta.pendingQuestion = result.mode === 'FOLLOW_UP' ? result.message : null;
+    delta.focusProductIds = focusProductIds;
+  } else if (result.intent === 'PRODUCT_INFO' || interpretation?.intent === 'PRODUCT_INFO') {
+    delta.activeIntent = 'PRODUCT_INFO';
+    delta.pendingAction = result.mode === 'FOLLOW_UP' ? 'RESOLVE_PRODUCT' : null;
+    delta.pendingQuestion = result.mode === 'FOLLOW_UP' ? result.message : null;
+    delta.focusProductIds = focusProductIds;
+  } else if (recommendationIds.length) {
+    delta.activeIntent = 'DISCOVERY';
+    delta.pendingAction = null;
+    delta.pendingQuestion = null;
+    delta.pendingAlternative = null;
+    delta.focusProductIds = recommendationIds;
+  }
+  if (isAffirmative(request.message) || isNegative(request.message)) {
+    delta.pendingAction = null;
+    delta.pendingQuestion = null;
+    if (isNegative(request.message)) delta.pendingAlternative = null;
+  }
+  return delta;
+};
+
 const resolveOwnershipDelta = async ({ interpretation, state, resolver }) => {
   const declared = interpretation.ownershipDelta || {};
   const delta = emptyOwnershipDelta();
@@ -623,8 +700,8 @@ const createCatalogDiscoveryTurnPlanFlow = ({ catalogDiscoveryService }) => asyn
   if (plan.action !== 'CATALOG_DISCOVERY') return { intent: interpretation.intent, mode: 'FOLLOW_UP', message: interpretation.message, profile: effectiveProfile, catalogProducts: [], recommendations: [] };
   const result = await catalogDiscoveryService.discover({ intent: interpretation.intent, profile: effectiveProfile, requestedRoutineStep: interpretation.requestedRoutineStep, criteria: plan.discoveryCriteria, turnPlan: plan });
   turnPlanDiagnostics('catalog-discovery-completed', plan, { ...result.__discoveryOutcome });
-  const { __discoveryOutcome, ...publicResult } = result;
-  return { ...publicResult, profile: effectiveProfile };
+  const { __discoveryOutcome, __conversationDelta, ...publicResult } = result;
+  return { ...publicResult, profile: effectiveProfile, __conversationDelta };
 };
 
 const createAIService = ({ provider = createOpenAIProvider(), candidateService = null, finalProductRepository = null, routineService = null, point10Service = null, catalogDiscoveryService = null, productInfoService = null, compareService = null, compatibilityService = null, stateTransport = false, stateSecret = undefined, turnPlanSelectionFlow = false, turnPlanRoutineFlow = false, turnPlanProductInfoFlow = false, turnPlanCompareFlow = false, turnPlanCompatibilityFlow = false, turnPlanBudgetFlow = false, productResolver = null, agentEnabled = false, agentToolFacade = null } = {}) => {
@@ -781,11 +858,17 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
         : createEmptyConversationState();
       const safetyResponse = assessSafety(request);
       let result;
+      const pendingAlternative = previousState.conversation?.pendingAction === 'CONFIRM_ALTERNATIVE';
+      const confirmedAlternative = pendingAlternative && isAffirmative(request.message);
       if (safetyResponse) {
         result = { ...safetyResponse, recommendations: [] };
       } else if (agentEnabled) {
-        if (!agentTurn) throw new AIServiceError('AGENT_NOT_CONFIGURED', 'El agente AI no está configurado.', 503);
-        result = await agentTurn.advise({ request, state: previousState });
+        if (confirmedAlternative && productSelectionTurnPlan) {
+          result = await productSelectionTurnPlan({ request, previousState, safeContext: await stateReferenceContext(previousState, finalProductRepository), interpretation: pendingAlternativeInterpretation(previousState) });
+        } else {
+          if (!agentTurn) throw new AIServiceError('AGENT_NOT_CONFIGURED', 'El agente AI no está configurado.', 503);
+          result = await agentTurn.advise({ request, state: previousState });
+        }
       } else {
         const safeContext = await stateReferenceContext(previousState, finalProductRepository);
         let interpretation;
@@ -802,6 +885,8 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
           if (error instanceof AIServiceError) throw error;
           throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
         }
+        if (confirmedAlternative && productSelectionTurnPlan) interpretation = pendingAlternativeInterpretation(previousState);
+        else interpretation = refineConversationInterpretation(interpretation, { message: request.message, previousState });
         if (productSelectionTurnPlan && interpretation.scope !== 'OUT_OF_SCOPE' && interpretation.intent === 'PRODUCT_SELECTION') {
           result = await productSelectionTurnPlan({ request, previousState, safeContext, interpretation });
         } else if (buildRoutineTurnPlan && interpretation.scope !== 'OUT_OF_SCOPE' && interpretation.intent === 'BUILD_ROUTINE') {
@@ -822,7 +907,7 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
           result = await adviseLegacy(input, { interpretation, safeContext });
         }
       }
-      const { __ownershipDelta, __missingEvidence, __referenceArtifacts, __agentProfileDelta, __agentToolCalls, ...publicResult } = result;
+      const { __ownershipDelta, __missingEvidence, __referenceArtifacts, __agentProfileDelta, __agentToolCalls, __conversationDelta, ...publicResult } = result;
       if (process.env.AI_TURNPLAN_DEBUG === 'true' && __agentToolCalls !== undefined) {
         console.info('AI agent diagnostic', { flow: 'AGENT_PILOT', toolCallCount: __agentToolCalls, finalMode: publicResult.mode, referenceCount: __referenceArtifacts?.length || 0 });
       }
@@ -830,6 +915,7 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
         profileDelta: profileDeltaFromValidatedResult(previousState.profile, publicResult.profile),
         ownershipDelta: __ownershipDelta || ownershipEvidenceFromValidatedResult(publicResult.profile),
         artifactEvidence: artifactEvidenceFromValidatedResult(publicResult, __referenceArtifacts || []),
+        conversationDelta: { ...conversationDeltaFromResult({ previousState, request, result: { ...publicResult, __referenceArtifacts, __conversationDelta }, interpretation: null }), ...(__conversationDelta || {}) },
       });
       return { ...publicResult, conversationState: createStateEnvelope(nextState, stateSecret) };
     },

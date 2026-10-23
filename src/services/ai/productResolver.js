@@ -31,6 +31,41 @@ const toReference = (value) => {
   return result;
 };
 
+const STOP_WORDS = new Set(['de', 'del', 'la', 'el', 'los', 'las', 'con', 'para', 'por', 'and', 'the', 'ml', 'oz']);
+const tokens = (value) => normalizeReference(value).split(' ').filter((token) => token && !STOP_WORDS.has(token) && !/^\d+(?:ml|g|oz)?$/.test(token));
+const distance = (left, right) => {
+  const row = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= left.length; i += 1) {
+    let previous = row[0];
+    row[0] = i;
+    for (let j = 1; j <= right.length; j += 1) {
+      const current = row[j];
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, previous + (left[i - 1] === right[j - 1] ? 0 : 1));
+      previous = current;
+    }
+  }
+  return row[right.length];
+};
+const tokenMatches = (referenceTokens, productTokens) => productTokens.filter((productToken) => referenceTokens.some((referenceToken) => referenceToken === productToken || (productToken.length >= 5 && referenceToken.length >= 5 && distance(productToken, referenceToken) <= 1)));
+const productMatchScore = (reference, product) => {
+  const normalized = normalizeReference(reference);
+  const name = normalizeReference(product.name);
+  const slug = normalizeReference(product.slug);
+  const brand = normalizeReference(product.brand);
+  if (name === normalized || slug === normalized) return 1000;
+  if (`${brand} ${name}`.trim() === normalized) return 950;
+  if (normalized.length >= 3 && (name.includes(normalized) || slug.includes(normalized) || normalized.includes(name))) return 800;
+  const referenceTokens = tokens(reference);
+  const productTokens = [...new Set([...tokens(product.brand), ...tokens(product.name)])];
+  const matched = tokenMatches(referenceTokens, productTokens);
+  const nameTokens = tokens(product.name);
+  const matchedName = tokenMatches(referenceTokens, nameTokens);
+  if (matched.length >= 2 && matchedName.length === nameTokens.length) return 700 + matched.length;
+  if (brand && referenceTokens.includes(brand) && matchedName.length >= 1) return 650 + matchedName.length;
+  if (matchedName.length >= 2 && matchedName.length >= Math.ceil(nameTokens.length * 0.75)) return 600 + matchedName.length;
+  return 0;
+};
+
 const createProductResolverRepository = ({ query } = {}) => ({
   async findCatalogProducts() {
     const execute = query || ((sql, params) => require('../../db/init').all(sql, params));
@@ -54,13 +89,17 @@ const resolveOne = (reference, products) => {
   if (exact.length > 1) return { status: 'AMBIGUOUS', reference, products: exact };
 
   if (GENERIC_PRODUCT_REFERENCES.has(normalized)) return { status: 'AMBIGUOUS', reference, products: [] };
-  const boundedMatches = orderedProducts.filter((product) => {
-    const name = normalizeReference(product.name);
-    const slug = normalizeReference(product.slug);
-    return normalized.length >= 3 && (name.includes(normalized) || slug.includes(normalized) || normalized.includes(name));
-  });
-  if (boundedMatches.length === 1) return { status: 'RESOLVED', reference, product: boundedMatches[0] };
-  if (boundedMatches.length > 1) return { status: 'AMBIGUOUS', reference, products: boundedMatches };
+  const brandMatches = orderedProducts.filter((product) => normalizeReference(product.brand) === normalized);
+  if (brandMatches.length > 1) return { status: 'AMBIGUOUS', reference, products: brandMatches };
+  if (brandMatches.length === 1) return { status: 'RESOLVED', reference, product: brandMatches[0] };
+  const scoredMatches = orderedProducts.map((product) => ({ product, score: productMatchScore(reference, product) })).filter((match) => match.score > 0).sort((left, right) => right.score - left.score || String(left.product.id).localeCompare(String(right.product.id)));
+  if (scoredMatches.length === 1) return { status: 'RESOLVED', reference, product: scoredMatches[0].product };
+  if (scoredMatches.length > 1) {
+    const topScore = scoredMatches[0].score;
+    const topMatches = scoredMatches.filter((match) => match.score === topScore).map((match) => match.product);
+    if (topMatches.length === 1) return { status: 'RESOLVED', reference, product: topMatches[0] };
+    return { status: 'AMBIGUOUS', reference, products: topMatches };
+  }
   return { status: 'NOT_FOUND', reference };
 };
 

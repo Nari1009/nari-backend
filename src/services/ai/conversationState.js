@@ -9,6 +9,8 @@ const MAX_UNRESOLVED = 8;
 const MAX_ID = 120;
 const PROFILE_KEYS = ['skinType', 'conditions', 'targets', 'budget', 'routinePreference'];
 const RELATION_STEPS = new Set(ROUTINE_STEPS);
+const CONVERSATION_INTENTS = new Set(['NONE', 'PRODUCT_INFO', 'ROUTINE_USAGE', 'ALTERNATIVE_SEARCH', 'COMPARE', 'COMPATIBILITY', 'DISCOVERY']);
+const PENDING_ACTIONS = new Set(['NONE', 'CONFIRM_ALTERNATIVE', 'RESOLVE_PRODUCT', 'ANSWER_USAGE', 'ROUTINE_ORDER']);
 const fail = (message, code = 'INVALID_CONVERSATION_STATE', status = 400) => { throw new AIServiceError(code, message, status); };
 
 const ownKeys = (value) => Object.keys(value);
@@ -22,6 +24,11 @@ const list = (value, allowed, field) => {
   return [...new Set(value)];
 };
 const nullableText = (value, field, max = 200) => value === null ? null : text(value, field, max);
+const nullableBoundedList = (value, field, max = MAX_ARTIFACTS) => {
+  if (value === null) return null;
+  if (!Array.isArray(value) || value.length > max || value.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > MAX_ID)) fail(`${field} no es válida.`);
+  return [...new Set(value.map((item) => item.trim()))];
+};
 
 const validateProfileState = (profile) => {
   if (!profile || typeof profile !== 'object' || Array.isArray(profile) || ownKeys(profile).some((key) => !PROFILE_KEYS.includes(key)) || ownKeys(profile).length !== PROFILE_KEYS.length) fail('El perfil de conversación no es válido.');
@@ -57,7 +64,7 @@ const uniqueReferences = (items, field) => {
 
 const validateConversationState = (state) => {
   if (!state || typeof state !== 'object' || Array.isArray(state)) fail('El estado de conversación no es válido.');
-  const allowed = ['version', 'revision', 'profile', 'ownership', 'artifacts'];
+  const allowed = ['version', 'revision', 'profile', 'ownership', 'artifacts', 'conversation'];
   if (ownKeys(state).some((key) => !allowed.includes(key))) fail('El estado de conversación contiene campos no permitidos.');
   if (state.version !== STATE_VERSION || !Number.isInteger(state.revision) || state.revision < 0) fail('La versión del estado de conversación no es válida.');
   const profile = validateProfileState(state.profile);
@@ -75,10 +82,11 @@ const validateConversationState = (state) => {
   const recentRoutine = artifacts.recentRoutine.map((item) => ({ ...validateReference(item, 'artifacts.recentRoutine', true), period: item.period === null ? null : text(item.period, 'artifacts.recentRoutine.period', 20) }));
   if (recentRoutine.some((item) => item.period !== null && !['MORNING', 'EVENING'].includes(item.period))) fail('El periodo de la rutina reciente no es válido.');
   const recentProductReferences = uniqueReferences(artifacts.recentProductReferences || [], 'artifacts.recentProductReferences');
-  return { version: STATE_VERSION, revision: state.revision, profile, ownership: { verifiedProducts, unresolvedItems, ownedRoutineSteps }, artifacts: { recentRecommendations, recentRoutine, recentProductReferences } };
+  const conversation = validateConversationContext(state.conversation || {});
+  return { version: STATE_VERSION, revision: state.revision, profile, ownership: { verifiedProducts, unresolvedItems, ownedRoutineSteps }, artifacts: { recentRecommendations, recentRoutine, recentProductReferences }, conversation };
 };
 
-const createEmptyConversationState = ({ revision = 0 } = {}) => validateConversationState({ version: STATE_VERSION, revision, profile: { skinType: null, conditions: null, targets: null, budget: null, routinePreference: null }, ownership: { verifiedProducts: [], unresolvedItems: [], ownedRoutineSteps: [] }, artifacts: { recentRecommendations: [], recentRoutine: [], recentProductReferences: [] } });
+const createEmptyConversationState = ({ revision = 0 } = {}) => validateConversationState({ version: STATE_VERSION, revision, profile: { skinType: null, conditions: null, targets: null, budget: null, routinePreference: null }, ownership: { verifiedProducts: [], unresolvedItems: [], ownedRoutineSteps: [] }, artifacts: { recentRecommendations: [], recentRoutine: [], recentProductReferences: [] }, conversation: { activeIntent: null, pendingAction: null, pendingQuestion: null, focusProductIds: [], pendingAlternative: null } });
 
 const validateProfileDelta = (delta = {}) => {
   if (!delta || typeof delta !== 'object' || Array.isArray(delta) || ownKeys(delta).some((key) => !PROFILE_KEYS.includes(key))) fail('El cambio de perfil no es válido.');
@@ -129,17 +137,41 @@ const validateArtifactEvidence = (evidence = {}) => {
   return { recentRecommendations, recentRoutine: normalizedRoutine, recentProductReferences };
 };
 
+const validatePendingAlternative = (value) => {
+  if (value === null) return null;
+  if (!value || typeof value !== 'object' || Array.isArray(value) || ownKeys(value).some((key) => !['routineSteps', 'excludedProductIds', 'targets', 'conditions', 'skinTypes'].includes(key))) fail('La alternativa pendiente no es válida.');
+  const routineSteps = list(value.routineSteps || [], ROUTINE_STEPS, 'conversation.pendingAlternative.routineSteps') || [];
+  const excludedProductIds = nullableBoundedList(value.excludedProductIds || [], 'conversation.pendingAlternative.excludedProductIds') || [];
+  const targets = list(value.targets || [], CONCERN_GOALS, 'conversation.pendingAlternative.targets') || [];
+  const conditions = list(value.conditions || [], SKIN_CONDITIONS, 'conversation.pendingAlternative.conditions') || [];
+  const skinTypes = list(value.skinTypes || [], BASE_SKIN_TYPES, 'conversation.pendingAlternative.skinTypes') || [];
+  return { routineSteps, excludedProductIds, targets, conditions, skinTypes };
+};
+
+const validateConversationContext = (value = {}) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || ownKeys(value).some((key) => !['activeIntent', 'pendingAction', 'pendingQuestion', 'focusProductIds', 'pendingAlternative'].includes(key))) fail('El contexto conversacional no es válido.');
+  const normalized = { activeIntent: null, pendingAction: null, pendingQuestion: null, focusProductIds: [], pendingAlternative: null, ...value };
+  const activeIntent = normalized.activeIntent === null ? null : text(normalized.activeIntent, 'conversation.activeIntent', 40);
+  if (activeIntent !== null && !CONVERSATION_INTENTS.has(activeIntent)) fail('La intención conversacional no es válida.');
+  const pendingAction = normalized.pendingAction === null ? null : text(normalized.pendingAction, 'conversation.pendingAction', 40);
+  if (pendingAction !== null && !PENDING_ACTIONS.has(pendingAction)) fail('La acción conversacional pendiente no es válida.');
+  const pendingQuestion = nullableText(normalized.pendingQuestion, 'conversation.pendingQuestion', 240);
+  const focusProductIds = nullableBoundedList(normalized.focusProductIds || [], 'conversation.focusProductIds', 3) || [];
+  return { activeIntent, pendingAction, pendingQuestion, focusProductIds, pendingAlternative: validatePendingAlternative(normalized.pendingAlternative ?? null) };
+};
+
 // An absent field means "no update". A present null is an explicit domain
 // value (for example, clearing an unresolved profile field).
 const mergeField = (previous, delta, key) => Object.prototype.hasOwnProperty.call(delta, key) ? delta[key] : previous[key];
 const appendUnique = (current, incoming) => [...current, ...incoming].filter((item, index, all) => all.findIndex((candidate) => `${candidate.productId}|${candidate.routineStep || ''}|${candidate.period || ''}` === `${item.productId}|${item.routineStep || ''}|${item.period || ''}`) === index).slice(-MAX_ARTIFACTS);
 const prioritizeUnique = (current, incoming) => [...incoming, ...current].filter((item, index, all) => all.findIndex((candidate) => `${candidate.productId}|${candidate.routineStep || ''}|${candidate.period || ''}` === `${item.productId}|${item.routineStep || ''}|${item.period || ''}`) === index).slice(0, MAX_ARTIFACTS);
 
-const reduceConversationState = (previous, { profileDelta = {}, ownershipDelta = {}, artifactEvidence = {} } = {}) => {
+const reduceConversationState = (previous, { profileDelta = {}, ownershipDelta = {}, artifactEvidence = {}, conversationDelta = {} } = {}) => {
   const base = validateConversationState(previous || createEmptyConversationState());
   const delta = validateProfileDelta(profileDelta);
   const ownership = validateOwnershipDelta(ownershipDelta);
   const evidence = validateArtifactEvidence(artifactEvidence);
+  const conversation = validateConversationContext({ ...base.conversation, ...conversationDelta });
   const profile = Object.fromEntries(PROFILE_KEYS.map((key) => [key, mergeField(base.profile, delta, key)]));
   const removeVerified = new Set(ownership.removeVerifiedProductIds.map(String));
   const removeLabels = new Set(ownership.removeUnresolvedLabels.map((label) => label.toLowerCase()));
@@ -158,7 +190,7 @@ const reduceConversationState = (previous, { profileDelta = {}, ownershipDelta =
     recentRoutine: appendUnique(base.artifacts.recentRoutine, evidence.recentRoutine),
     recentProductReferences: evidence.recentProductReferences.length ? prioritizeUnique(base.artifacts.recentProductReferences, evidence.recentProductReferences) : base.artifacts.recentProductReferences,
   };
-  return validateConversationState({ version: STATE_VERSION, revision: base.revision + 1, profile, ownership: nextOwnership, artifacts: nextArtifacts });
+  return validateConversationState({ version: STATE_VERSION, revision: base.revision + 1, profile, ownership: nextOwnership, artifacts: nextArtifacts, conversation });
 };
 
 const isNewerConversationState = (current, incoming) => {
@@ -173,6 +205,11 @@ const secretFrom = (secret) => {
   if (typeof value !== 'string' || value.length < 32) fail('La firma del estado AI no está configurada.', 'AI_STATE_AUTH_NOT_CONFIGURED', 503);
   return value;
 };
+const legacyState = (state) => {
+  const validated = validateConversationState(state);
+  const { conversation, ...withoutConversation } = validated;
+  return withoutConversation;
+};
 const signState = (state, secret) => crypto.createHmac('sha256', secretFrom(secret)).update(JSON.stringify(canonicalize(validateConversationState(state)))).digest('base64url');
 const createStateEnvelope = (state, secret) => { const validated = validateConversationState(state); return { state: validated, signature: signState(validated, secret) }; };
 const verifyStateEnvelope = (envelope, secret) => {
@@ -181,7 +218,11 @@ const verifyStateEnvelope = (envelope, secret) => {
   const expected = signState(state, secret);
   const actual = Buffer.from(envelope.signature);
   const expectedBuffer = Buffer.from(expected);
-  if (actual.length !== expectedBuffer.length || !crypto.timingSafeEqual(actual, expectedBuffer)) fail('El estado AI firmado no pudo verificarse.');
+  const legacyExpected = crypto.createHmac('sha256', secretFrom(secret)).update(JSON.stringify(canonicalize(legacyState(state)))).digest('base64url');
+  const legacyBuffer = Buffer.from(legacyExpected);
+  const matchesCurrent = actual.length === expectedBuffer.length && crypto.timingSafeEqual(actual, expectedBuffer);
+  const matchesLegacy = actual.length === legacyBuffer.length && crypto.timingSafeEqual(actual, legacyBuffer);
+  if (!matchesCurrent && !matchesLegacy) fail('El estado AI firmado no pudo verificarse.');
   return state;
 };
 

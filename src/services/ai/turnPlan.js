@@ -42,6 +42,8 @@ const stepsFrom = (interpretation, message) => {
   if (/limpiador|limpieza|jabon|cleanser/.test(textValue)) inferred.push('CLEANSER');
   if (/hidratante|moisturizer/.test(textValue)) inferred.push('MOISTURIZER');
   if (/protector|bloqueador|sunscreen/.test(textValue)) inferred.push('SUNSCREEN');
+  if (/serum|sérum|ampolla|ampoule|tratamiento/.test(textValue)) inferred.push('SERUM');
+  if (/tonico|tónico|toner/.test(textValue)) inferred.push('TONER');
   return [...new Set([...declared, ...fromSingle, ...inferred].filter((step) => ROUTINE_STEPS.includes(step)))];
 };
 

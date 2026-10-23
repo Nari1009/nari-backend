@@ -95,6 +95,7 @@ const createAgentService = ({ provider, toolFacade, finalProductRepository = nul
       const message = segments.map((segment) => segment.text).join(' ').trim();
       if (!message) fail('La respuesta del agente no contiene texto.');
       const lastTool = result.toolResults[result.toolResults.length - 1];
+      const emptyBrandSearch = [...result.toolResults].reverse().find((toolResult) => toolResult?.tool === 'search_catalog' && toolResult.mode === 'DISCOVERY' && toolResult.resultCount === 0 && toolResult.requestedBrand);
       const intent = lastTool?.tool === 'get_product_information'
         ? 'PRODUCT_INFO'
         : lastTool?.mode === 'DISCOVERY'
@@ -110,6 +111,12 @@ const createAgentService = ({ provider, toolFacade, finalProductRepository = nul
         recommendations,
         __agentProfileDelta: Object.fromEntries((output.updatedProfileFields || []).map((field) => [field, profile[field]])),
         __referenceArtifacts: [...new Map(referenceArtifacts.map((item) => [item.productId, item])).values()].slice(0, 8),
+        __conversationDelta: emptyBrandSearch ? {
+          activeIntent: 'ALTERNATIVE_SEARCH',
+          pendingAction: 'CONFIRM_ALTERNATIVE',
+          pendingQuestion: '¿Quieres que busque alternativas disponibles de NARI?',
+          pendingAlternative: { routineSteps: emptyBrandSearch.requestedRoutineSteps || [], excludedProductIds: [], targets: emptyBrandSearch.requestedTargets || [], conditions: emptyBrandSearch.requestedConditions || [], skinTypes: emptyBrandSearch.requestedSkinTypes || [] },
+        } : null,
         __agentToolCalls: result.toolCallCount || 0,
       };
     },

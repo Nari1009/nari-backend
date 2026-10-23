@@ -217,6 +217,8 @@ const AGENT_SYSTEM_INSTRUCTIONS = [
   'Para recomendar o explorar Products usa search_catalog. Para explicar Products ya identificados usa get_product_information.',
   'Las referencias como el segundo, ese, esos u otros se resuelven usando el contexto y los resultados de herramientas; no pidas nombres si la referencia es clara.',
   'Si una persona responde una pregunta que tú hiciste, continúa la conversación con ese contexto.',
+  'Si preguntan si un solo producto se puede usar solo, cómo se usa, con qué paso se complementa o si va antes/después del hidratante, trátalo como uso individual/orden de rutina. No exijas dos Products ni lo conviertas en comparación o compatibilidad.',
+  'Si existe una intención pendiente de buscar alternativas y la persona responde afirmativamente, ejecuta esa búsqueda; no cierres con una respuesta genérica.',
   'La educación general puede aparecer en segmentos GENERAL. Los hechos de un Product deben aparecer únicamente en PRODUCT_FACT y citar evidenceKeys presentes en la herramienta.',
   'No conviertas NULL o listas vacías de metadata en afirmaciones positivas. No diagnostiques, no prescribas y no aconsejes cambiar medicamentos.',
   'Devuelve únicamente el JSON solicitado. Usa updatedProfileFields solo para datos establecidos en este turno; conserva el resto del perfil recibido.',
@@ -360,7 +362,7 @@ const createOpenAIProvider = ({ apiKey = process.env.OPENAI_API_KEY, model = pro
       const initialInput = [
         { role: 'system', content: AGENT_SYSTEM_INSTRUCTIONS },
         ...history.map((item) => ({ role: item.role, content: item.content })),
-        { role: 'user', content: JSON.stringify({ conversationState: { profile: conversationState?.profile || null, ownership: conversationState?.ownership || null, focus: conversationState?.artifacts?.recentProductReferences || [] } }) },
+        { role: 'user', content: JSON.stringify({ conversationState: { profile: conversationState?.profile || null, ownership: conversationState?.ownership || null, focus: { recentRecommendations: conversationState?.artifacts?.recentRecommendations || [], recentRoutine: conversationState?.artifacts?.recentRoutine || [], recentProductReferences: conversationState?.artifacts?.recentProductReferences || [], conversation: conversationState?.conversation || null } } }) },
         { role: 'user', content: message },
       ];
       const toolResults = [];

@@ -50,6 +50,12 @@ const createCatalogDiscoveryService = ({ repository } = {}) => ({
       catalogProducts,
       recommendations: toPublicRecommendations({ selectedProducts: filtered }),
       __referenceArtifacts: filtered.slice(0, 8).map((product) => ({ productId: String(product.id), routineStep: product.routineStep || null })),
+      __conversationDelta: !filtered.length && requestedBrand ? {
+        activeIntent: 'ALTERNATIVE_SEARCH',
+        pendingAction: 'CONFIRM_ALTERNATIVE',
+        pendingQuestion: '¿Quieres que busque alternativas disponibles de NARI?',
+        pendingAlternative: { routineSteps, excludedProductIds: [], targets: explicitTargets, conditions: explicitConditions, skinTypes: explicitSkinTypes },
+      } : null,
       __discoveryOutcome: { filterCount: [routineSteps.length, requestedBrand, explicitSkinTypes.length, explicitConditions.length, explicitTargets.length].filter(Boolean).length, routineStepFilter: routineSteps.length ? routineSteps : [], brandFilterPresent: Boolean(requestedBrand), skinFilterCount: explicitSkinTypes.length, conditionFilterCount: explicitConditions.length, targetFilterCount: explicitTargets.length, eligibleRowsBeforeFilters: products.length, resultCount: filtered.length, emptyResult: filtered.length === 0, turnPlanAction: turnPlan?.action || 'CATALOG_DISCOVERY' },
     };
   },

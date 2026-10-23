@@ -6,6 +6,7 @@ const STEP_ALIASES = Object.freeze({
   hidratante: 'MOISTURIZER', moisturizer: 'MOISTURIZER', crema: 'MOISTURIZER',
   protector: 'SUNSCREEN', 'protector solar': 'SUNSCREEN', bloqueador: 'SUNSCREEN',
   serum: 'SERUM', sérum: 'SERUM', tonico: 'TONER', tónico: 'TONER',
+  ampolla: 'SERUM', ampoule: 'SERUM', tratamiento: 'SERUM',
 });
 
 const normalizePhrase = (value) => normalizeReference(value).replace(/\b(el|la|los|las|que|me|recomendaste|recomendado|producto|productos)\b/g, ' ').replace(/\s+/g, ' ').trim();
@@ -24,6 +25,7 @@ const createConversationReferenceResolver = ({ productResolver } = {}) => {
 
   const resolveArtifactPhrase = (phrase, state) => {
     const normalized = normalizePhrase(phrase);
+    const contextualDescriptor = /\b(el|la|los|las|ese|esa|este|esta|recomend|mencion|anterior|que)\b/i.test(String(phrase));
     const artifacts = recentArtifacts(state);
     if (!artifacts.length) return { status: 'NOT_FOUND', reference: phrase, productIds: [] };
 
@@ -34,9 +36,15 @@ const createConversationReferenceResolver = ({ productResolver } = {}) => {
     else if (/\bsegundo\b/.test(normalized)) matches = artifacts.slice(1, 2);
     else if (/\b(dos|ambos|ambas|entre estos|estos|estas|esos|esas|todos|todas)\b/.test(normalized)) matches = artifacts;
     else {
-      const step = STEP_ALIASES[normalized];
+      const descriptor = contextualDescriptor ? Object.keys(STEP_ALIASES).find((alias) => normalized === alias || normalized.startsWith(`${alias} `)) : null;
+      const step = descriptor ? STEP_ALIASES[descriptor] : null;
       if (step) matches = artifacts.filter((item) => item.routineStep === step);
-      else if (/\b(ese|esa|el que|la que|recomendaste)\b/.test(normalized)) matches = artifacts.slice(-1);
+      else if (/\b(ese|esa|este|esta|el que|la que|recomendaste|mencionaste|anterior)\b/.test(normalized)) matches = artifacts.slice(-1);
+      else if (/\b(ultimo|ultima|reciente)\b/.test(normalized)) matches = artifacts.slice(0, 1);
+    }
+    if (!matches.length && /\b(ese|esa|este|esta|lo|la|producto|ampolla|serum|crema|protector)\b/.test(normalized)) {
+      const focusIds = state?.conversation?.focusProductIds || [];
+      matches = focusIds.map((productId) => ({ productId, source: 'focus', routineStep: null }));
     }
     const productIds = unique(matches.map((item) => item.productId).filter(Boolean));
     const externalItems = matches.filter((item) => item.source === 'external').map((item) => ({ label: item.label, routineStep: item.routineStep || null }));
