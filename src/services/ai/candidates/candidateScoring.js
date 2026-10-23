@@ -1,5 +1,6 @@
 const { isRecommendationEligibleProduct } = require('./catalogEligibility');
 const { parseBudget, budgetRank } = require('../budget');
+const { normalizeMetadataList } = require('../catalogMetadata');
 
 const CANDIDATE_LIMIT = 5;
 const MIN_CANDIDATE_SCORE = 10;
@@ -14,15 +15,8 @@ const CANDIDATE_WEIGHTS = Object.freeze({
 const CONFIDENCE_ORDER = Object.freeze({ HIGH: 3, MEDIUM: 2, LOW: 1 });
 
 const parseCanonicalList = (value) => {
-  if (value === undefined || value === null) return null;
-  if (Array.isArray(value)) return [...value];
-  if (typeof value !== 'string' || !value.trim()) return null;
-  try {
-    const parsed = JSON.parse(value);
-    return parsed === null ? null : Array.isArray(parsed) ? parsed : null;
-  } catch {
-    return null;
-  }
+  const normalized = normalizeMetadataList(value);
+  return normalized.known ? normalized.values : null;
 };
 
 const addUnknown = (unknownCriteria, criterion) => {

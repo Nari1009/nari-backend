@@ -66,7 +66,7 @@ test('discovery repository uses storefront eligibility and canonical physical fi
   assert.match(received.sql, /status = 'active'/i);
   assert.match(received.sql, /stock > 0/i);
   assert.match(received.sql, /suitableskintypes AS "suitableSkinTypes"/i);
-  assert.deepEqual(received.params, ['SUNSCREEN', '%SKIN1004%', 12]);
+  assert.deepEqual(received.params, ['%SKIN1004%', 12]);
 });
 
 test('discovery results are stored as references, not recommendations in signed state', async () => {

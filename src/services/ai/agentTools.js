@@ -67,7 +67,7 @@ const safeCandidate = (candidate) => {
 
 };
 
-const createAgentToolFacade = ({ candidateService, catalogDiscoveryService, productResolver } = {}) => {
+const createAgentToolFacade = ({ candidateService, catalogDiscoveryService, productResolver, productResearchService = null } = {}) => {
   if (!candidateService || !catalogDiscoveryService || !productResolver) throw new TypeError('Los servicios de herramientas AI son obligatorios.');
 
   const resolveCanonicalIds = async (ids) => {
@@ -125,7 +125,7 @@ const createAgentToolFacade = ({ candidateService, catalogDiscoveryService, prod
       const candidates = result.candidates.filter((candidate) => {
         const product = candidate.metadata || {};
         return isRecommendationEligibleProduct(product)
-          && (!step || product.routineStep === step)
+          && (!step || product.routineStep === step || product.routineStep === null || product.routineStep === undefined)
           && !exclusions.includes(String(candidate.productId));
       }).slice(0, limit);
       groups[step || '__general'] = candidates;
@@ -164,14 +164,24 @@ const createAgentToolFacade = ({ candidateService, catalogDiscoveryService, prod
     };
   };
 
+  const researchProduct = async (raw) => {
+    if (!productResearchService || typeof productResearchService.researchProduct !== 'function') fail('La investigación de productos no está disponible.');
+    exactObject(raw, ['productId'], 'research_product');
+    const ids = boundedIds([raw.productId], 'productId', 1);
+    const result = await productResearchService.researchProduct(ids[0], { needs: 'RECOMMENDATION' });
+    return { tool: 'research_product', ...result };
+  };
+
   return {
     definitions: [
       { type: 'function', name: 'search_catalog', description: 'Busca Products reales de NARI para descubrir, recomendar o encontrar alternativas.', parameters: { type: 'object', additionalProperties: false, properties: { mode: { type: 'string', enum: TOOL_MODES }, routineSteps: { type: 'array', items: { type: 'string', enum: TOOL_STEPS }, maxItems: TOOL_STEPS.length }, skinTypes: { anyOf: [{ type: 'array', items: { type: 'string', enum: BASE_SKIN_TYPES }, maxItems: 4 }, { type: 'null' }] }, conditions: { anyOf: [{ type: 'array', items: { type: 'string', enum: SKIN_CONDITIONS }, maxItems: 20 }, { type: 'null' }] }, targets: { anyOf: [{ type: 'array', items: { type: 'string', enum: CONCERN_GOALS }, maxItems: 20 }, { type: 'null' }] }, limit: { type: 'integer', minimum: 1, maximum: MAX_TOOL_RESULTS }, referenceProductIds: { type: 'array', items: { type: 'string', maxLength: AI_LIMITS.contextProductId }, maxItems: MAX_TOOL_PRODUCT_IDS }, profile: { anyOf: [{ type: 'object', additionalProperties: false, properties: { skinType: { anyOf: [{ type: 'string', enum: BASE_SKIN_TYPES }, { type: 'null' }] }, conditions: { anyOf: [{ type: 'array', items: { type: 'string', enum: SKIN_CONDITIONS } }, { type: 'null' }] }, targets: { anyOf: [{ type: 'array', items: { type: 'string', enum: CONCERN_GOALS } }, { type: 'null' }] }, budget: { anyOf: [{ type: 'string', maxLength: 200 }, { type: 'null' }] }, routinePreference: { anyOf: [{ type: 'string', maxLength: 200 }, { type: 'null' }] } }, required: ['skinType', 'conditions', 'targets', 'budget', 'routinePreference'] }, { type: 'null' }] }, brand: { anyOf: [{ type: 'string', maxLength: 120 }, { type: 'null' }] } }, required: ['mode', 'routineSteps', 'skinTypes', 'conditions', 'targets', 'limit', 'referenceProductIds', 'profile', 'brand'] } },
       { type: 'function', name: 'get_product_information', description: 'Obtiene información canónica de Products de NARI ya identificados o de una referencia textual inequívoca.', parameters: { type: 'object', additionalProperties: false, properties: { productIds: { type: 'array', items: { type: 'string', maxLength: AI_LIMITS.contextProductId }, maxItems: 3 }, productQuery: { anyOf: [{ type: 'string', maxLength: AI_LIMITS.productReference }, { type: 'null' }] } }, required: ['productIds', 'productQuery'] } },
+      ...(productResearchService ? [{ type: 'function', name: 'research_product', description: 'Solicita evidencia cosmética externa controlada para un Product real de NARI cuando el Backend no tiene información suficiente. Nunca recibe URLs.', parameters: { type: 'object', additionalProperties: false, properties: { productId: { type: 'string', maxLength: AI_LIMITS.contextProductId } }, required: ['productId'] } }] : []),
     ],
     async execute(name, args, context) {
       if (name === 'search_catalog') return searchCatalog(args, context);
       if (name === 'get_product_information') return getProductInformation(args, context);
+      if (name === 'research_product') return researchProduct(args, context);
       fail('La herramienta solicitada no existe.');
     },
   };

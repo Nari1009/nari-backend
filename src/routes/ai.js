@@ -14,6 +14,9 @@ const { createProductInfoService } = require('../services/ai/productInfoService'
 const { createCompareService } = require('../services/ai/compareService');
 const { createCompatibilityService } = require('../services/ai/compatibilityService');
 const { createAgentToolFacade } = require('../services/ai/agentTools');
+const { createProductResearchService } = require('../services/ai/productResearchService');
+const { createProductResearchRepository } = require('../services/ai/productResearchRepository');
+const { pool } = require('../db/init');
 
 const router = express.Router();
 const candidateService = createCandidateService();
@@ -21,8 +24,14 @@ const finalProductRepository = createFinalProductRepository();
 const productResolver = createProductResolver();
 const point10Service = createPoint10Service({ resolver: productResolver, candidateService, finalProductRepository });
 const catalogDiscoveryService = createCatalogDiscoveryService({ repository: createCatalogDiscoveryRepository() });
-const productInfoService = createProductInfoService({ resolver: productResolver, finalProductRepository });
-const agentToolFacade = createAgentToolFacade({ candidateService, catalogDiscoveryService, productResolver });
+// External product research remains disabled until an approved provider is injected.
+// The service still exposes the bounded, verifiable contract for DEV fixtures/tests.
+// The persistent cache is additive and remains inert until its DEV migration exists.
+// External research is still disabled because no provider is injected here.
+const productResearchCache = createProductResearchRepository({ query: (text, params) => pool.query(text, params) });
+const productResearchService = createProductResearchService({ resolver: productResolver, finalProductRepository, cache: productResearchCache, maxCandidates: 1 });
+const productInfoService = createProductInfoService({ resolver: productResolver, finalProductRepository, productResearchService });
+const agentToolFacade = createAgentToolFacade({ candidateService, catalogDiscoveryService, productResolver, productResearchService });
 const service = createAIService({
   candidateService,
   finalProductRepository,

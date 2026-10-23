@@ -64,8 +64,8 @@ test('broad catalog discovery returns bounded DB-backed public Products without 
 test('category catalog discovery filters by canonical routine step and does not invoke recommendation reasoning', async () => {
   let reasoned = false;
   const repository = createCatalogDiscoveryRepository({ query: async (sql, params) => {
-    assert.match(sql, /routinestep = \?/i);
-    assert.deepEqual(params, ['SUNSCREEN', 12]);
+    assert.doesNotMatch(sql, /routinestep = \?/i);
+    assert.deepEqual(params, [12]);
     return [product('spf', 'SUNSCREEN')];
   } });
   const service = createAIService({

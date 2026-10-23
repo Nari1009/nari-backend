@@ -70,6 +70,12 @@ test('search_catalog keeps exclusions step-scoped', async () => {
   assert.deepEqual(result.products.map((item) => item.id), ['moisturizer']);
 });
 
+test('recommendation search keeps a commercially eligible product with unknown routine step', async () => {
+  const { toolFacade } = createHarness({ rows: [product('unknown-cream', { name: 'Relief Cream', routineStep: null, suitableSkinTypes: null, suitableConditions: null, targets: null })] });
+  const result = await toolFacade.execute('search_catalog', { mode: 'RECOMMENDATION', routineSteps: ['MOISTURIZER'], skinTypes: ['OILY'], conditions: null, targets: null, limit: 5, referenceProductIds: [], profile: null, brand: null }, { state: createEmptyConversationState() });
+  assert.deepEqual(result.products.map((item) => item.id), ['unknown-cream']);
+});
+
 test('get_product_information can inspect unavailable Products without making them purchasable', async () => {
   const { toolFacade } = createHarness({ rows: [product('p-off', { stock: 0 })] });
   const result = await toolFacade.execute('get_product_information', { productIds: ['p-off'], productQuery: null }, { state: createEmptyConversationState() });

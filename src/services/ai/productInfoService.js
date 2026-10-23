@@ -53,7 +53,7 @@ const assertProductInfoMessage = (message, products) => {
 
 const followUp = (interpretation, message) => ({ intent: interpretation.intent, mode: 'FOLLOW_UP', message, profile: interpretation.profile, recommendations: [] });
 
-const createProductInfoService = ({ resolver, finalProductRepository } = {}) => ({
+const createProductInfoService = ({ resolver, finalProductRepository, productResearchService = null } = {}) => ({
   supports(intent) { return intent === 'PRODUCT_INFO'; },
 
   async handle({ request, interpretation, provider, resolvedProducts = null, turnPlan = null, conversationState = null }) {
@@ -71,10 +71,26 @@ const createProductInfoService = ({ resolver, finalProductRepository } = {}) => 
     }
     if (!products.length) return followUp(interpretation, '¿Puedes indicarme qué producto quieres consultar?');
     if (typeof provider.reasonProductInfo !== 'function') throw new AIServiceError('AI_UNAVAILABLE', 'El servicio AI no está disponible.', 503);
-    const evidence = products.map(toProductInfoEvidence);
+    const research = productResearchService
+      ? await productResearchService.researchCandidates(products.map((product) => product.id), { needs: 'PRODUCT_INFO' })
+      : { results: [] };
+    const researchById = new Map(research.results.map((item) => [String(item.productId || item.product?.id), item]));
+    const evidenceProducts = products.map((product) => {
+      const result = researchById.get(String(product.id));
+      const facts = result?.evidence?.facts || {};
+      return { ...product, ...facts };
+    });
+    const evidence = evidenceProducts.map((product, index) => ({
+      ...toProductInfoEvidence(product),
+      research: {
+        status: research.results[index]?.status || 'NOT_REQUESTED',
+        source: research.results[index]?.evidence?.source || null,
+        confidence: research.results[index]?.evidence?.confidence || 'UNKNOWN',
+      },
+    }));
     const output = await provider.reasonProductInfo({ request, interpretation, turnPlan, conversationState, evidence, products: products.map((product) => toProviderCandidate({ productId: product.id, metadata: product })) });
     if (!output || typeof output !== 'object' || !['ANSWER', 'RECOMMENDATION'].includes(output.mode) || typeof output.message !== 'string' || !output.message.trim()) throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI de información de producto no es válida.', 502);
-    const message = assertProductInfoMessage(output.message.trim(), products);
+    const message = assertProductInfoMessage(output.message.trim(), evidenceProducts);
     if (output.mode === 'RECOMMENDATION' && conversationState?.profile?.skinType && products.some((product) => Array.isArray(product.suitableSkinTypes) && product.suitableSkinTypes.length > 0 && !product.suitableSkinTypes.includes(conversationState.profile.skinType))) {
       throw new AIServiceError('INVALID_AI_RESPONSE', 'La respuesta AI recomienda un producto incompatible con el perfil validado.', 502);
     }

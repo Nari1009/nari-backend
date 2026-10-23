@@ -75,3 +75,32 @@ test('exact product lookup remains independent from needs discovery', async () =
   assert.equal(result.status, 'RESOLVED');
   assert.equal(result.products[0].price, 119900);
 });
+
+test('commercially eligible cream with missing cosmetic metadata remains a candidate', async () => {
+  const service = createCatalogDiscoveryService({ repository: { async findPublicCatalogProducts() {
+    return [product({ id: 'purchase-somi-18', routineStep: null, suitableSkinTypes: null, suitableConditions: null, targets: null, price: 119900, stock: 10 })];
+  } } });
+  const result = await service.discover({
+    intent: 'DISCOVERY', profile, criteria: {
+      routineSteps: ['MOISTURIZER'], brand: null, skinTypes: ['DRY'], conditions: ['SENSITIVE'], targets: ['HYDRATION'], useProfile: false, browseScope: 'FILTERED',
+    },
+  });
+  assert.equal(result.searchQuality, 'INFERRED');
+  assert.deepEqual(result.catalogProducts.map((item) => item.id), ['purchase-somi-18']);
+  assert.equal(result.recommendations[0].product.price, 119900);
+});
+
+test('explicitly incompatible routine remains excluded while unknown metadata is not treated as a match', async () => {
+  const service = createCatalogDiscoveryService({ repository: { async findPublicCatalogProducts() {
+    return [
+      product({ id: 'serum', name: 'Calming Serum', routineStep: 'SERUM', suitableSkinTypes: null, suitableConditions: null, targets: null }),
+      product({ id: 'cream-json', routineStep: null, name: 'Relief Cream', suitableSkinTypes: '["DRY"]', suitableConditions: 'invalid-json', targets: '[]' }),
+      product({ id: 'inactive', status: 'inactive', routineStep: null, name: 'Inactive Cream' }),
+      product({ id: 'empty', stock: 0, routineStep: null, name: 'Empty Cream' }),
+    ];
+  } } });
+  const result = await service.discover({
+    intent: 'DISCOVERY', profile, criteria: { routineSteps: ['MOISTURIZER'], brand: null, skinTypes: ['DRY'], conditions: [], targets: [], useProfile: false },
+  });
+  assert.deepEqual(result.catalogProducts.map((item) => item.id), ['cream-json']);
+});

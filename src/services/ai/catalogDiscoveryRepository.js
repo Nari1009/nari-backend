@@ -1,10 +1,10 @@
 const CATALOG_DISCOVERY_SELECT = `
-  SELECT id, brand, name, slug, price, images,
+  SELECT id, brand, name, slug, category, description, price, images,
          routinestep AS "routineStep",
          sizelabel AS "sizeLabel",
          suitableskintypes AS "suitableSkinTypes",
          suitableconditions AS "suitableConditions",
-         targets,
+         targets, catalogrole AS "catalogRole",
          status, stock
   FROM products
   WHERE catalogrole = 'CATALOG'
@@ -16,10 +16,8 @@ const createCatalogDiscoveryRepository = ({ query } = {}) => ({
     const execute = query || ((sql, params) => require('../../db/init').all(sql, params));
     const params = [];
     let sql = CATALOG_DISCOVERY_SELECT;
-    if (routineStep) {
-      sql += ' AND routinestep = ?';
-      params.push(routineStep);
-    }
+    // routineStep is a ranking hint, not a commercial eligibility filter.
+    // Products with incomplete cosmetic metadata must remain discoverable.
     if (brand) {
       sql += ' AND LOWER(brand) LIKE LOWER(?)';
       params.push(`%${brand}%`);
