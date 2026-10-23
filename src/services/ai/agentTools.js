@@ -116,7 +116,7 @@ const createAgentToolFacade = ({ candidateService, catalogDiscoveryService, prod
         product: item.product,
         availability: { purchasable: true },
       }));
-      return { tool: 'search_catalog', mode: raw.mode, products, recommendations, referenceProductIds, excludedProductIds: [], resultCount: Math.min(result.catalogProducts.length, limit), missingSteps: [], requestedBrand: raw.brand || null, requestedRoutineSteps: routineSteps, requestedSkinTypes: skinTypes || [], requestedConditions: conditions || [], requestedTargets: targets || [] };
+      return { tool: 'search_catalog', mode: raw.mode, products, recommendations, searchQuality: result.searchQuality || 'EXACT', referenceProductIds, excludedProductIds: [], resultCount: Math.min(result.catalogProducts.length, limit), missingSteps: [], requestedBrand: raw.brand || null, requestedRoutineSteps: routineSteps, requestedSkinTypes: skinTypes || [], requestedConditions: conditions || [], requestedTargets: targets || [] };
     }
     const groups = {};
     const all = [];

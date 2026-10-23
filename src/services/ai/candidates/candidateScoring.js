@@ -1,4 +1,5 @@
 const { isRecommendationEligibleProduct } = require('./catalogEligibility');
+const { parseBudget, budgetRank } = require('../budget');
 
 const CANDIDATE_LIMIT = 5;
 const MIN_CANDIDATE_SCORE = 10;
@@ -39,6 +40,7 @@ const scoreCandidate = ({ product, requestedRoutineStep, profile }) => {
   const unknownCriteria = [];
   const neutralCriteria = [];
   const conflicts = [];
+  const budget = parseBudget(profile.budget);
   let score = 0;
 
   if (requestedRoutineStep) {
@@ -114,6 +116,7 @@ const scoreCandidate = ({ product, requestedRoutineStep, profile }) => {
   return {
     productId: product.id,
     price: Number(product.price),
+    budgetFit: budgetRank(product.price, budget),
     score,
     confidence,
     matchedCriteria,
@@ -135,6 +138,7 @@ const scoreCandidate = ({ product, requestedRoutineStep, profile }) => {
 const compareCandidates = (left, right) => (
   right.score - left.score
   || CONFIDENCE_ORDER[right.confidence] - CONFIDENCE_ORDER[left.confidence]
+  || left.budgetFit - right.budgetFit
   || String(left.productId).localeCompare(String(right.productId))
 );
 

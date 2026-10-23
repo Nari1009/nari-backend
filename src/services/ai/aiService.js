@@ -19,6 +19,7 @@ const {
 const { compileTurnPlan, relationFallback } = require('./turnPlan');
 const { createConversationReferenceResolver } = require('./conversationReferenceResolver');
 const { createAgentService } = require('./agentService');
+const { classifyDomain, domainRefusal } = require('./domainGuard');
 
 // These intents are owned by the signed-state TurnPlan router whenever the
 // live transport is enabled.  A missing flow is a configuration defect, not
@@ -710,6 +711,8 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
     // The signed transport envelope is Backend state, never provider input.
     delete request.conversationState;
     assertNoPrivilegedInstruction(request);
+    const domain = classifyDomain({ message: request.message, history: request.history, context: request.context });
+    if (domain.status === 'OUT_OF_SCOPE') return { ...domainRefusal(), profile: createEmptyConversationState().profile };
     const safetyResponse = assessSafety(request);
     if (safetyResponse) return { ...safetyResponse, recommendations: [] };
     let output;
@@ -856,11 +859,14 @@ const createAIService = ({ provider = createOpenAIProvider(), candidateService =
       const previousState = request.conversationState
         ? await revalidateStateArtifacts(verifyStateEnvelope(request.conversationState, stateSecret), finalProductRepository)
         : createEmptyConversationState();
+      const domain = classifyDomain({ message: request.message, history: request.history, state: previousState, context: request.context });
       const safetyResponse = assessSafety(request);
       let result;
       const pendingAlternative = previousState.conversation?.pendingAction === 'CONFIRM_ALTERNATIVE';
       const confirmedAlternative = pendingAlternative && isAffirmative(request.message);
-      if (safetyResponse) {
+      if (domain.status === 'OUT_OF_SCOPE') {
+        result = { ...domainRefusal(), profile: previousState.profile };
+      } else if (safetyResponse) {
         result = { ...safetyResponse, recommendations: [] };
       } else if (agentEnabled) {
         if (confirmedAlternative && productSelectionTurnPlan) {
