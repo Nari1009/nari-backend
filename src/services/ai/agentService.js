@@ -7,6 +7,7 @@ const { toPublicRecommendations } = require('./recommendationProjection');
 const AGENT_TOOL_CALL_LIMIT = 2;
 const CLAIM_KEYS = new Set(['productId', 'name', 'brand', 'routineStep', 'sizeLabel', 'suitableSkinTypes', 'suitableConditions', 'targets', 'availability', 'price']);
 const fail = (message) => { throw new AIServiceError('INVALID_AI_RESPONSE', message, 502); };
+const INSUFFICIENT_PRODUCT_EVIDENCE_MESSAGE = 'Encontré una opción disponible, pero algunos detalles específicos del producto no están confirmados.';
 
 const validateAgentSegments = (segments, evidenceById) => {
   if (!Array.isArray(segments) || segments.length > 8) fail('La respuesta del agente no contiene segmentos válidos.');
@@ -21,9 +22,12 @@ const validateAgentSegments = (segments, evidenceById) => {
     if (typeof segment.productId !== 'string' || !Array.isArray(segment.evidenceKeys) || !segment.evidenceKeys.length || segment.evidenceKeys.some((key) => !CLAIM_KEYS.has(key))) fail('El segmento de Product no está fundamentado.');
     const evidence = evidenceById.get(segment.productId);
     if (!evidence) fail('La respuesta del agente introdujo un Product no verificado.');
-    for (const key of segment.evidenceKeys) {
+    const hasInsufficientEvidence = segment.evidenceKeys.some((key) => {
       const value = evidence[key];
-      if (value === null || value === undefined || (Array.isArray(value) && value.length === 0)) fail('La respuesta del agente usa evidencia de Product insuficiente.');
+      return value === null || value === undefined || (Array.isArray(value) && value.length === 0);
+    });
+    if (hasInsufficientEvidence) {
+      return { kind: 'GENERAL', productId: null, evidenceKeys: [], text: INSUFFICIENT_PRODUCT_EVIDENCE_MESSAGE };
     }
     return { kind: segment.kind, productId: segment.productId, evidenceKeys: [...new Set(segment.evidenceKeys)], text: segment.text.trim() };
   });

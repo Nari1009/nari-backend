@@ -155,12 +155,47 @@ test('agent cannot select a Product that was not returned by a tool', async () =
   await assert.rejects(() => createAgentService({ provider, toolFacade }).advise({ request: { message: 'recomiéndame algo', history: [] }, state: createEmptyConversationState() }), (error) => error.code === 'INVALID_AI_RESPONSE');
 });
 
-test('agent product claims cannot cite NULL or empty canonical evidence', async () => {
+test('agent degrades Product claims with NULL canonical evidence without claiming compatibility', async () => {
   const { toolFacade } = createHarness({ rows: [product('p-unknown', { suitableSkinTypes: null })] });
   const provider = {
     async runAgentTurn({ executeTool }) {
       const toolResult = await executeTool('get_product_information', { productIds: ['p-unknown'], productQuery: null });
       return { toolCallCount: 1, toolResults: [toolResult], output: agentOutput({ segments: [{ kind: 'PRODUCT_FACT', productId: 'p-unknown', evidenceKeys: ['suitableSkinTypes'], text: 'Es ideal para piel grasa.' }] }) };
+    },
+  };
+  const result = await createAgentService({ provider, toolFacade }).advise({ request: { message: '¿me sirve?', history: [] }, state: createEmptyConversationState() });
+  assert.deepEqual(result.recommendations, []);
+  assert.match(result.message, /detalles específicos.*no están confirmados/i);
+  assert.doesNotMatch(result.message, /ideal para piel grasa/i);
+});
+
+test('agent degrades a text-inferred Product claim with incomplete evidence without losing the verified recommendation', async () => {
+  const { createCandidateService } = require('../src/services/ai/candidates/candidateService');
+  const incomplete = {
+    id: 'purchase-somi-18', brand: 'Dr. Althea', name: 'Dr. Althea 345 Relief Cream', category: 'Crema hidratante', description: 'Relief cream',
+    slug: 'dr-althea-345', price: 119900, images: '[]', routineStep: null, status: 'active', stock: 10, catalogRole: 'CATALOG',
+    suitableSkinTypes: null, suitableConditions: null, targets: null,
+  };
+  const candidateService = createCandidateService({ repository: { async findEligibleProducts() { return [incomplete]; } } });
+  const productResolver = { async resolveReferences() { return { status: 'RESOLVED', products: [] }; } };
+  const toolFacade = createAgentToolFacade({ candidateService, catalogDiscoveryService: { async discover() { return { catalogProducts: [], recommendations: [] }; } }, productResolver });
+  const provider = {
+    async runAgentTurn({ executeTool }) {
+      const toolResult = await executeTool('search_catalog', { mode: 'RECOMMENDATION', routineSteps: ['MOISTURIZER'], skinTypes: ['OILY'], conditions: null, targets: ['HYDRATION'], limit: 5, referenceProductIds: [], profile: null, brand: null });
+      return { toolCallCount: 1, toolResults: [toolResult], output: agentOutput({ mode: 'RECOMMENDATION', selectedProductIds: [incomplete.id], segments: [{ kind: 'PRODUCT_FACT', productId: incomplete.id, evidenceKeys: ['routineStep'], text: 'Es un hidratante ideal para piel grasa.' }] }) };
+    },
+  };
+  const result = await createAgentService({ provider, toolFacade, finalProductRepository: { async findCurrentEligibleProducts() { return [incomplete]; } } }).advise({ request: { message: 'Recomiéndame un hidratante.', history: [] }, state: createEmptyConversationState() });
+  assert.deepEqual(result.recommendations.map((item) => item.product.id), [incomplete.id]);
+  assert.match(result.message, /detalles específicos.*no están confirmados/i);
+  assert.doesNotMatch(result.message, /ideal para piel grasa/i);
+});
+
+test('agent still rejects a Product reference absent from tool evidence', async () => {
+  const { toolFacade } = createHarness();
+  const provider = {
+    async runAgentTurn() {
+      return { toolCallCount: 1, toolResults: [{ tool: 'search_catalog', products: [] }], output: agentOutput({ segments: [{ kind: 'PRODUCT_FACT', productId: 'not-returned', evidenceKeys: ['name'], text: 'Producto.' }] }) };
     },
   };
   await assert.rejects(() => createAgentService({ provider, toolFacade }).advise({ request: { message: '¿me sirve?', history: [] }, state: createEmptyConversationState() }), (error) => error.code === 'INVALID_AI_RESPONSE');
