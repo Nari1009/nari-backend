@@ -1,8 +1,11 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createEmptyConversationState } = require('../src/services/ai/conversationState');
+const { createAIService } = require('../src/services/ai/aiService');
 const { createAgentToolFacade } = require('../src/services/ai/agentTools');
 const { createAgentService } = require('../src/services/ai/agentService');
+
+const STATE_SECRET = 'r11-agent-follow-up-test-secret-32';
 
 const profile = {
   skinType: null,
@@ -199,6 +202,53 @@ test('agent still rejects a Product reference absent from tool evidence', async 
     },
   };
   await assert.rejects(() => createAgentService({ provider, toolFacade }).advise({ request: { message: '¿me sirve?', history: [] }, state: createEmptyConversationState() }), (error) => error.code === 'INVALID_AI_RESPONSE');
+});
+
+test('agent explains two prior recommendations across turns without creating a new selection', async () => {
+  const rows = [
+    product('cleanser', { name: 'Anua Heartleaf Quercetinol Pore Deep Cleansing Foam', routineStep: 'CLEANSER', suitableSkinTypes: ['OILY'], suitableConditions: ['ACNE_PRONE'] }),
+    product('sunscreen', { name: 'Round Lab Birch Juice Moisturizing Sunscreen', routineStep: 'SUNSCREEN', suitableSkinTypes: ['OILY'], suitableConditions: [] }),
+  ];
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const candidateService = { async search() { return { searched: true, candidates: rows.map((row) => ({ productId: row.id, score: 80, metadata: row })) }; } };
+  const productResolver = { async resolveReferences(ids) { const products = ids.map((id) => byId.get(String(id))).filter(Boolean); return products.length === ids.length ? { status: 'RESOLVED', products } : { status: 'NOT_FOUND', products: [] }; } };
+  const toolFacade = createAgentToolFacade({ candidateService, catalogDiscoveryService: { async discover() { return { catalogProducts: [], recommendations: [] }; } }, productResolver });
+  let turn = 0;
+  const provider = {
+    async runAgentTurn({ executeTool }) {
+      if (turn++ === 0) {
+        const toolResult = await executeTool('search_catalog', { mode: 'RECOMMENDATION', routineSteps: ['CLEANSER', 'SUNSCREEN'], skinTypes: ['OILY'], conditions: ['ACNE_PRONE'], targets: null, limit: 5, referenceProductIds: [], profile: null, brand: null });
+        return { toolCallCount: 1, toolResults: [toolResult], output: agentOutput({ mode: 'RECOMMENDATION', selectedProductIds: rows.map((row) => row.id), segments: rows.map((row) => ({ kind: 'PRODUCT_FACT', productId: row.id, evidenceKeys: ['name', 'suitableSkinTypes'], text: row.name })) }) };
+      }
+      const toolResult = await executeTool('get_product_information', { productIds: rows.map((row) => row.id), productQuery: null });
+      return { toolCallCount: 1, toolResults: [toolResult], output: agentOutput({ mode: 'ANSWER', selectedProductIds: rows.map((row) => row.id), segments: rows.map((row) => ({ kind: 'PRODUCT_FACT', productId: row.id, evidenceKeys: ['name', 'suitableSkinTypes'], text: `${row.name} encaja con lo que me contaste por la información verificada.` })) }) };
+    },
+  };
+  const service = createAIService({
+    provider,
+    candidateService,
+    finalProductRepository: { async findCurrentEligibleProducts(ids) { return ids.map((id) => byId.get(String(id))).filter(Boolean); } },
+    agentEnabled: true,
+    agentToolFacade: toolFacade,
+    stateTransport: true,
+    stateSecret: STATE_SECRET,
+  });
+  const first = await service.advise({ message: 'Recomiéndame un limpiador y un protector solar.', conversationState: undefined });
+  const second = await service.advise({ message: '¿Por qué me recomiendas esos dos productos específicamente para mi piel grasa y mis granitos?', conversationState: first.conversationState });
+  assert.equal(second.mode, 'ANSWER');
+  assert.deepEqual(second.recommendations, []);
+  assert.match(second.message, /encaja con lo que me contaste/i);
+});
+
+test('agent rejects a new Product selection disguised as an explanation', async () => {
+  const { toolFacade } = createHarness();
+  const provider = {
+    async runAgentTurn({ executeTool }) {
+      const toolResult = await executeTool('get_product_information', { productIds: ['p-a'], productQuery: null });
+      return { toolCallCount: 1, toolResults: [toolResult], output: agentOutput({ mode: 'ANSWER', selectedProductIds: ['p-b'], segments: [{ kind: 'PRODUCT_FACT', productId: 'p-a', evidenceKeys: ['name'], text: 'Producto conocido.' }] }) };
+    },
+  };
+  await assert.rejects(() => createAgentService({ provider, toolFacade }).advise({ request: { message: '¿Por qué?', history: [] }, state: createEmptyConversationState() }), (error) => error.code === 'INVALID_AI_RESPONSE');
 });
 
 test('general skincare guidance remains possible without Product evidence', async () => {

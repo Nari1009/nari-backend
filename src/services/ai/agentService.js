@@ -9,6 +9,13 @@ const CLAIM_KEYS = new Set(['productId', 'name', 'brand', 'routineStep', 'sizeLa
 const fail = (message) => { throw new AIServiceError('INVALID_AI_RESPONSE', message, 502); };
 const INSUFFICIENT_PRODUCT_EVIDENCE_MESSAGE = 'Encontré una opción disponible, pero algunos detalles específicos del producto no están confirmados.';
 
+const priorContextProductIds = (state = {}) => new Set([
+  ...(state.artifacts?.recentRecommendations || []),
+  ...(state.artifacts?.recentRoutine || []),
+  ...(state.artifacts?.recentProductReferences || []),
+  ...((state.conversation?.focusProductIds || []).map((productId) => ({ productId }))),
+].map((item) => String(item.productId)).filter(Boolean));
+
 const validateAgentSegments = (segments, evidenceById) => {
   if (!Array.isArray(segments) || segments.length > 8) fail('La respuesta del agente no contiene segmentos válidos.');
   return segments.map((segment) => {
@@ -82,7 +89,13 @@ const createAgentService = ({ provider, toolFacade, finalProductRepository = nul
         }
       }
       const segments = validateAgentSegments(output.segments, evidenceById);
-      const selectedIds = Array.isArray(output.selectedProductIds) ? [...new Set(output.selectedProductIds.map(String))] : [];
+      let selectedIds = Array.isArray(output.selectedProductIds) ? [...new Set(output.selectedProductIds.map(String))] : [];
+      const productFactIds = new Set(segments.filter((segment) => segment.kind === 'PRODUCT_FACT').map((segment) => segment.productId));
+      const canNormalizeExplanationSelection = output.mode !== 'RECOMMENDATION'
+        && selectedIds.length > 0
+        && selectedIds.every((id) => priorContextProductIds(state).has(id))
+        && selectedIds.every((id) => productFactIds.has(id));
+      if (canNormalizeExplanationSelection) selectedIds = [];
       if (selectedIds.length > 3 || selectedIds.some((id) => !purchasableById.has(id))) fail('La respuesta del agente seleccionó un Product no elegible.');
       if (output.mode === 'RECOMMENDATION' && !selectedIds.length) fail('La respuesta del agente no seleccionó Products.');
       if (output.mode !== 'RECOMMENDATION' && selectedIds.length) fail('Solo una recomendación puede seleccionar Products.');
